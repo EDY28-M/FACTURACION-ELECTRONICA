@@ -97,13 +97,13 @@
     </thead>
     <tbody>
     <tr>
-        <td>Razón Social: {{ $document->dispatcher->name }}</td>
-        <td>RUC: {{ $document->dispatcher->number }}</td>
+        <td>Razón Social: {{ optional($document->dispatcher)->name }}</td>
+        <td>RUC: {{ optional($document->dispatcher)->number }}</td>
     </tr>
     <tbody>
     <tr>
         <td>Número de placa del vehículo: {{ $document->license_plate }}</td>
-        <td>Conductor: {{ $document->driver->number }}</td>
+        <td>Conductor: {{ optional($document->driver)->number }}</td>
     </tr>
 </table>
 <table class="full-width border-box mt-10 mb-10">
@@ -142,5 +142,6 @@
         <td>{{ $document->observations }}</td>
     </tr>
 </table>
+@include('partials.gre_dispatch_qr')
 </body>
 </html>

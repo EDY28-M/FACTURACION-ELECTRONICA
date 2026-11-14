@@ -4,8 +4,8 @@
     //$path_style = app_path('CoreFacturalo'.DIRECTORY_SEPARATOR.'Templates'.DIRECTORY_SEPARATOR.'pdf'.DIRECTORY_SEPARATOR.'style.css');
 
     $document_number = $document->series.'-'.str_pad($document->number, 8, '0', STR_PAD_LEFT);
-    $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::findOrFail($document->driver->identity_document_type_id);
-    $document_type_dispatcher = App\Models\Tenant\Catalogs\IdentityDocumentType::findOrFail($document->dispatcher->identity_document_type_id);
+    $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->driver)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
+    $document_type_dispatcher = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->dispatcher)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
 
 @endphp
 <html>
@@ -128,17 +128,17 @@
     <tbody>
         <tr>
             <td class="border-box">Placa: {{ $document->license_plate }}</td>
-            {{-- @if($document->driver->license) --}}
-            <td class="border-box">Licencia: {{ $document->driver->license }}</td>
+            {{-- @if(optional($document->driver)->license) --}}
+            <td class="border-box">Licencia: {{ optional($document->driver)->license }}</td>
             {{-- @else --}}
              {{-- @endif --}}
-            <td class="border-box">Empresa: {{ $document->dispatcher->name }}</td>
+            <td class="border-box">Empresa: {{ optional($document->dispatcher)->name }}</td>
         </tr>
         <tr>
             <td class="border-box">Placa semirremolque: {{ $document->secondary_license_plates ? $document->secondary_license_plates->semitrailer:''}}</td>
             {{-- <td class="border-box">Marca:</td> --}}
-            <td class="border-box">Conductor: {{ $document_type_driver->description }} {{ $document->driver->number }}</td>
-            <td class="border-box">{{ $document_type_dispatcher->description }}: {{ $document->dispatcher->number }}</td>
+            <td class="border-box">Conductor: {{ $document_type_driver->description }} {{ optional($document->driver)->number }}</td>
+            <td class="border-box">{{ $document_type_dispatcher->description }}: {{ optional($document->dispatcher)->number }}</td>
         </tr>
     </tbody>
 </table>
@@ -245,5 +245,6 @@
 </table>
 
 
+@include('partials.gre_dispatch_qr')
 </body>
 </html>

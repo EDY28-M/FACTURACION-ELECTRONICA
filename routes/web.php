@@ -287,6 +287,8 @@ if ($hostname) {
 			Route::post('dispatches', 'Tenant\DispatchController@store');
 			Route::get('dispatches/record/{id}', 'Tenant\DispatchController@record');
 			Route::post('dispatches/email', 'Tenant\DispatchController@email');
+			Route::post('dispatches/send/{id}', 'Tenant\DispatchController@send');
+			Route::post('dispatches/status/{id}', 'Tenant\DispatchController@status');
             Route::get('dispatches/generate/{sale_note}', 'Tenant\DispatchController@generate');
             Route::get('dispatches/record/{id}/tables', 'Tenant\DispatchController@generateDocumentTables');
             Route::post('dispatches/record/{id}/set-document-id', 'Tenant\DispatchController@setDocumentId');

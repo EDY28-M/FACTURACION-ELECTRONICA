@@ -4,7 +4,7 @@
     //$path_style = app_path('CoreFacturalo'.DIRECTORY_SEPARATOR.'Templates'.DIRECTORY_SEPARATOR.'pdf'.DIRECTORY_SEPARATOR.'style.css');
 
     $document_number = $document->series.'-'.str_pad($document->number, 8, '0', STR_PAD_LEFT);
-    $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::findOrFail($document->driver->identity_document_type_id);
+    $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->driver)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
     $configuration = \App\Models\Tenant\Configuration::first();
 @endphp
 <html>
@@ -96,13 +96,13 @@
     </thead>
     <tbody>
     <tr>
-        <td>Nombre y/o razón social: {{ $document->dispatcher->name }}</td>
-        <td>{{ $document_type_driver->description }}: {{ $document->dispatcher->number }}</td>
+        <td>Nombre y/o razón social: {{ optional($document->dispatcher)->name }}</td>
+        <td>{{ $document_type_driver->description }}: {{ optional($document->dispatcher)->number }}</td>
     </tr>
     <tbody>
     <tr>
         <td>Número de placa del vehículo: {{ $document->license_plate }}</td>
-        <td>Conductor: {{ $document->driver->number }}</td>
+        <td>Conductor: {{ optional($document->driver)->number }}</td>
     </tr>
 </table>
 <table class="full-width border-box mt-10 mb-10">
@@ -154,5 +154,6 @@
 </table>
 @endif
 
+@include('partials.gre_dispatch_qr')
 </body>
 </html>

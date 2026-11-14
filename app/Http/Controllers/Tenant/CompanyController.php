@@ -37,6 +37,12 @@ class CompanyController extends Controller
         $id = $request->input('id');
         $company = Company::find($id);
         $company->fill($request->all());
+
+        // Write-only: an empty value keeps the stored (encrypted) secret.
+        if (filled($request->input('gre_client_secret'))) {
+            $company->setGreClientSecret($request->input('gre_client_secret'));
+        }
+
         $company->save();
 
         return [

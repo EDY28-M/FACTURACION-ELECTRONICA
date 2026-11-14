@@ -40,6 +40,11 @@ class ActionInput
             return $configuration->send_auto && $send_xml_signed;
         }
 
+        if ($inputs['type'] === 'dispatch') {
+            // Dispatches honor the explicit opt-out; the guide stays "Registrado" and can be sent later.
+            return (bool) $send_xml_signed;
+        }
+
         return true;
     }
 

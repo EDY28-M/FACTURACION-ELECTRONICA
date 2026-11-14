@@ -31,6 +31,7 @@ class DispatchTransform
             'packages_number' => Functions::valueKeyInArray($inputs, 'numero_de_bultos'),
             'container_number' => Functions::valueKeyInArray($inputs, 'numero_de_contenedor'),
             'license_plate' => Functions::valueKeyInArray($inputs, 'numero_de_placa'),
+            'secondary_license_plates' => self::secondaryLicensePlates($inputs),
             'origin' => self::origin($inputs),
             'delivery' => self::delivery($inputs),
             'dispatcher' => self::dispatcher($inputs),
@@ -40,6 +41,13 @@ class DispatchTransform
             'actions' => ActionTransform::transform($inputs),
 
         ];
+    }
+
+    private static function secondaryLicensePlates($inputs)
+    {
+        $semitrailer = Functions::valueKeyInArray($inputs, 'numero_de_placa_semirremolque');
+
+        return $semitrailer ? ['semitrailer' => $semitrailer] : null;
     }
 
     private static function origin($inputs)
@@ -77,6 +85,7 @@ class DispatchTransform
                 'identity_document_type_id' => $dispatcher['codigo_tipo_documento_identidad'],
                 'number' => $dispatcher['numero_documento'],
                 'name' => $dispatcher['apellidos_y_nombres_o_razon_social'],
+                'mtc_number' => Functions::valueKeyInArray($dispatcher, 'numero_registro_mtc'),
             ];
         }
         return null;
@@ -90,7 +99,10 @@ class DispatchTransform
 
             return [
                 'identity_document_type_id' => $driver['codigo_tipo_documento_identidad'],
-                'number' => $driver['numero_documento']
+                'number' => $driver['numero_documento'],
+                'license' => Functions::valueKeyInArray($driver, 'licencia'),
+                'first_name' => Functions::valueKeyInArray($driver, 'nombres'),
+                'family_name' => Functions::valueKeyInArray($driver, 'apellidos'),
             ];
         }
         return null;

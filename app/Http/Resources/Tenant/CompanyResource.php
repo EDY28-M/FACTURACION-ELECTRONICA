@@ -36,6 +36,8 @@ class CompanyResource extends JsonResource
             'config_system_env' => (bool)$configuration->config_system_env,
             'img_firm' => $this->img_firm,
             'favicon' => $this->favicon,
+            'gre_client_id' => $this->gre_client_id,
+            'has_gre_client_secret' => $this->hasGreClientSecret(),
         ];
     }
 }

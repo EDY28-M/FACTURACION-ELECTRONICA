@@ -76,11 +76,20 @@ class DispatchInput
         ];
     }
 
+    /**
+     * The web form sends [department, province, district] (the district code is the 6-digit ubigeo),
+     * the API sends the ubigeo as a string.
+     */
+    private static function ubigeo($location_id)
+    {
+        return is_array($location_id) ? end($location_id) : $location_id;
+    }
+
     private static function origin($inputs)
     {
         if(array_key_exists('origin', $inputs)) {
             $origin = $inputs['origin'];
-            $location_id = $origin['location_id'][2] == '0' ? $origin['location_id'] : $origin['location_id'][2];
+            $location_id = self::ubigeo($origin['location_id']);
             $address = $origin['address'];
 
             return [
@@ -95,7 +104,7 @@ class DispatchInput
     {
         if(array_key_exists('delivery', $inputs)) {
             $delivery = $inputs['delivery'];
-            $location_id = $delivery['location_id'][2] == '0' ? $delivery['location_id'] : $delivery['location_id'][2];
+            $location_id = self::ubigeo($delivery['location_id']);
             $address = $delivery['address'];
 
             return [
@@ -108,16 +117,18 @@ class DispatchInput
 
     private static function dispatcher($inputs)
     {
-        if(array_key_exists('dispatcher', $inputs)) {
+        if(!empty($inputs['dispatcher']) && is_array($inputs['dispatcher'])) {
             $dispatcher = $inputs['dispatcher'];
-            $identity_document_type_id = $dispatcher['identity_document_type_id'];
+            $identity_document_type_id = isset($dispatcher['identity_document_type_id']) ? $dispatcher['identity_document_type_id'] : null;
             $number = ( isset($dispatcher['number']) ) ? $dispatcher['number'] : null ; // $dispatcher['number'];
             $name = ( isset($dispatcher['name']) ) ? $dispatcher['name'] : null ; //$dispatcher['name'];
+            $mtc_number = isset($dispatcher['mtc_number']) ? $dispatcher['mtc_number'] : null;
 
             return  [
                 'identity_document_type_id' => $identity_document_type_id,
                 'number' => $number,
                 'name' => $name,
+                'mtc_number' => $mtc_number,
             ];
         }
         return null;
@@ -125,16 +136,20 @@ class DispatchInput
 
     private static function driver($inputs)
     {
-        if(array_key_exists('driver', $inputs)) {
+        if(!empty($inputs['driver']) && is_array($inputs['driver'])) {
             $driver = $inputs['driver'];
-            $identity_document_type_id = $driver['identity_document_type_id'];
+            $identity_document_type_id = isset($driver['identity_document_type_id']) ? $driver['identity_document_type_id'] : null;
             $number =  ( isset($driver['number']) ) ? $driver['number'] : null ; //$driver['number'];
             $license =  (isset($driver['license'])) ? $driver['license'] : null ;
+            $first_name = isset($driver['first_name']) ? $driver['first_name'] : null;
+            $family_name = isset($driver['family_name']) ? $driver['family_name'] : null;
 
             return [
                 'identity_document_type_id' => $identity_document_type_id,
                 'number' => $number,
                 'license' => $license,
+                'first_name' => $first_name,
+                'family_name' => $family_name,
             ];
         }
         return null;
@@ -174,7 +189,7 @@ class DispatchInput
         if(array_key_exists('secondary_license_plates', $inputs)) {
 
             $secondary_license_plates = $inputs['secondary_license_plates'];
-            $semitrailer = $secondary_license_plates['semitrailer'];
+            $semitrailer = isset($secondary_license_plates['semitrailer']) ? $secondary_license_plates['semitrailer'] : null;
 
             return [
                 'semitrailer' => $semitrailer,

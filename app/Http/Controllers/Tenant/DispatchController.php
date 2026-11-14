@@ -12,6 +12,7 @@ use App\Models\Tenant\Dispatch;
 use App\Models\Tenant\Document;
 use App\Models\Tenant\SaleNote;
 use App\CoreFacturalo\Facturalo;
+use App\CoreFacturalo\WS\Gre\GreDispatchService;
 use App\Models\Tenant\Quotation;
 use Illuminate\Support\Facades\DB;
 use Modules\Order\Models\OrderNote;
@@ -102,40 +103,64 @@ class DispatchController extends Controller
 
 	public function store(DispatchRequest $request)
 	{
-		if ($request->series[0] == 'T') {
-			$fact = DB::connection('tenant')->transaction(function () use ($request) {
-				$facturalo = new Facturalo();
-				$facturalo->save($request->all());
+		$isElectronic = $request->series[0] == 'T';
+
+		$fact = DB::connection('tenant')->transaction(function () use ($request, $isElectronic) {
+			$facturalo = new Facturalo();
+			$facturalo->save($request->all());
+
+			if ($isElectronic) {
 				$facturalo->createXmlUnsigned();
 				$facturalo->signXmlUnsigned();
-				$facturalo->createPdf();
-				$facturalo->senderXmlSignedBill();
+				$facturalo->updateHash();
+			}
 
-				return $facturalo;
-			});
+			$facturalo->createPdf();
 
-			$document = $fact->getDocument();
-			// $response = $fact->getResponse();
-		} else {
-			$fact = DB::connection('tenant')->transaction(function () use ($request) {
-				$facturalo = new Facturalo();
-				$facturalo->save($request->all());
-				$facturalo->createPdf();
+			return $facturalo;
+		});
 
-				return $facturalo;
-			});
+		$document = $fact->getDocument();
+		$message = "Se creó la guía de remisión {$document->series}-{$document->number}.";
+		$sunat = null;
 
-			$document = $fact->getDocument();
-			// $response = $fact->getResponse();
+		// Sending happens after commit: a SUNAT/network failure must not roll back the saved guide.
+		if ($isElectronic && $request->input('actions.send_xml_signed', true)) {
+			$sunat = (new GreDispatchService())->send($document);
+			$message .= ' '.$sunat['message'];
+			$document = Dispatch::find($document->id);
 		}
 
 		return [
 			'success' => true,
-			'message' => "Se creo la guía de remisión {$document->series}-{$document->number}",
+			'message' => $message,
 			'data'    => [
 				'id' => $document->id,
+				'sunat' => $sunat,
 			],
 		];
+	}
+
+	/**
+	 * Sends (or re-sends) a registered guide to SUNAT through the GRE REST API.
+	 */
+	public function send($id)
+	{
+		$dispatch = Dispatch::findOrFail($id);
+		$result = (new GreDispatchService())->send($dispatch);
+
+		return $result + ['data' => ['id' => $dispatch->id]];
+	}
+
+	/**
+	 * Queries the SUNAT ticket of a sent guide.
+	 */
+	public function status($id)
+	{
+		$dispatch = Dispatch::findOrFail($id);
+		$result = (new GreDispatchService())->status($dispatch);
+
+		return $result + ['data' => ['id' => $dispatch->id]];
 	}
 
 	/**

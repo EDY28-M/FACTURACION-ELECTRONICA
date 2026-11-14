@@ -31,6 +31,15 @@ class CompanyRequest extends FormRequest
             'soap_type_id' => [
                 'nullable'
             ],
+            'gre_client_id' => [
+                'nullable',
+                'max:100',
+            ],
+            'gre_client_secret' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
             'soap_username' => [
                 'required_if:soap_type_id,"02"',
                 'required_if:soap_send_id,"02"'

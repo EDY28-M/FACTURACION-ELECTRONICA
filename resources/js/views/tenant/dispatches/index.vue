@@ -30,6 +30,8 @@
                         <td>{{ row.number }}</td>
                         <td>
                             <span class="badge bg-secondary text-white" :class="{'bg-secondary': (row.state_type_id === '01'), 'bg-info': (row.state_type_id === '03'), 'bg-success': (row.state_type_id === '05'), 'bg-secondary': (row.state_type_id === '07'), 'bg-dark': (row.state_type_id === '09')}">{{row.state_type_description}}</span>
+                            <br v-if="row.sunat_message && ['01', '09'].includes(row.state_type_id)">
+                            <small class="text-muted" v-if="row.sunat_message && ['01', '09'].includes(row.state_type_id)">{{ row.sunat_message }}</small>
                         </td>
                         <td class="text-center">{{ row.date_of_shipping }}</td>
                         <td class="text-center">
@@ -39,6 +41,12 @@
                         </td>
                         <td class="text-center">
                             <button v-if="!row.reference_document_id" type="button" class="btn waves-effect waves-light btn-xs btn-info" @click.prevent="onGenerateDocument(row.id)">Generar comprobante</button>
+                            <button v-if="row.state_type_id === '01' && row.series && row.series[0] === 'T'" type="button" class="btn waves-effect waves-light btn-xs btn-primary" :disabled="loadingId === row.id" @click.prevent="sendToSunat(row.id)">
+                                <i class="fa fa-spinner fa-spin" v-if="loadingId === row.id"></i> Enviar a SUNAT
+                            </button>
+                            <button v-if="row.state_type_id === '03' && row.ticket" type="button" class="btn waves-effect waves-light btn-xs btn-warning" :disabled="loadingId === row.id" @click.prevent="checkStatus(row.id)">
+                                <i class="fa fa-spinner fa-spin" v-if="loadingId === row.id"></i> Consultar estado
+                            </button>
                             <button type="button" class="btn waves-effect waves-light btn-xs btn-info" @click.prevent="clickOptions(row.id)">Opciones</button>
                         </td>
                     </tr>
@@ -74,9 +82,37 @@
                 recordId: null,
                 showDialogGenerateDocument: false,
                 showModalGenerateCPE: false,
+                loadingId: null,
             }
         },
         methods: {
+            sendToSunat(id) {
+                this.callSunat(`/${this.resource}/send/${id}`, id)
+            },
+            checkStatus(id) {
+                this.callSunat(`/${this.resource}/status/${id}`, id)
+            },
+            callSunat(url, id) {
+                this.loadingId = id
+                this.$http.post(url)
+                    .then(response => {
+                        const data = response.data
+                        this.$message({
+                            message: data.message,
+                            type: data.success ? 'success' : 'warning',
+                            duration: 10000,
+                            showClose: true
+                        })
+                        this.$eventHub.$emit('reloadData')
+                    })
+                    .catch(error => {
+                        const message = (error.response && error.response.data && error.response.data.message) || 'No se pudo completar la operación.'
+                        this.$message.error(message)
+                    })
+                    .then(() => {
+                        this.loadingId = null
+                    })
+            },
             onGenerateDocument(dispatchId) {
                 this.recordId = dispatchId;
                 this.showDialogGenerateDocument = true;

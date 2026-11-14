@@ -4,8 +4,8 @@
     //$path_style = app_path('CoreFacturalo'.DIRECTORY_SEPARATOR.'Templates'.DIRECTORY_SEPARATOR.'pdf'.DIRECTORY_SEPARATOR.'style.css');
 
     $document_number = $document->series.'-'.str_pad($document->number, 8, '0', STR_PAD_LEFT);
-    $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::findOrFail($document->driver->identity_document_type_id);
-    $document_type_dispatcher = App\Models\Tenant\Catalogs\IdentityDocumentType::findOrFail($document->dispatcher->identity_document_type_id);
+    $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->driver)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
+    $document_type_dispatcher = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->dispatcher)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
 
     $allowed_items = 90;
     $quantity_items = $document->items()->count();
@@ -141,13 +141,13 @@
                     <td style="text-decoration: underline;" colspan="2"><strong>UNIDAD DE TRANSPORTE - CONDUCTOR</td>
                 </tr>
                 <tr>
-                    <td><strong>N° Doc:</strong> {{ $document->driver->identity_document_type_id }}: {{ $document->driver->number }}</td>
+                    <td><strong>N° Doc:</strong> {{ $document->driver->identity_document_type_id }}: {{ optional($document->driver)->number }}</td>
                 </tr>
                 <tr>
                     <td><strong>Placa N°:</strong> {{ $document->license_plate }}</td>
                 </tr>
                 <tr>
-                    <td><strong>N° Licencia:</strong> {{ $document->driver->license }}</td>
+                    <td><strong>N° Licencia:</strong> {{ optional($document->driver)->license }}</td>
                 </tr>
             </table>
         </td>
@@ -159,14 +159,14 @@
                     <td style="text-decoration: underline;" colspan="2"><strong>EMPRESA DE TRANSPORTE</strong></td>
                 </tr>
                 <tr>
-                    <td><strong>Transportista:</strong> {{ $document->dispatcher->name }}</td>
+                    <td><strong>Transportista:</strong> {{ optional($document->dispatcher)->name }}</td>
                 </tr>
                 <tr>
-                    <td><strong>{{ $document_type_dispatcher->description }}:</strong> {{ $document->dispatcher->number }}</td>
+                    <td><strong>{{ $document_type_dispatcher->description }}:</strong> {{ optional($document->dispatcher)->number }}</td>
                 </tr>
                 <tr>
                     <td></td>
-                    {{-- <td>Dirección: {{ $document->driver->license }}</td> --}}
+                    {{-- <td>Dirección: {{ optional($document->driver)->license }}</td> --}}
                 </tr>
             </table>
         </td>
@@ -302,5 +302,6 @@
     </tr>
 </table>
 
+@include('partials.gre_dispatch_qr')
 </body>
 </html>

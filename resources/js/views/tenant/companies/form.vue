@@ -187,6 +187,32 @@
                                 </div>
                             </div>
                         </div>
+                    <template v-if="form.soap_type_id == '02'">
+                        <div class="row">
+                            <div class="col-md-12 mt-2">
+                                <h4 class="border-bottom">Credenciales API SUNAT (GRE)</h4>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group" :class="{'has-danger': errors.gre_client_id}">
+                                    <label class="control-label">Client ID</label>
+                                    <el-input v-model="form.gre_client_id" :maxlength="100"></el-input>
+                                    <div class="sub-title text-muted"><small>Credenciales API generadas en SUNAT Operaciones en Línea (Menú SOL).</small></div>
+                                    <small class="form-control-feedback" v-if="errors.gre_client_id" v-text="errors.gre_client_id[0]"></small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group" :class="{'has-danger': errors.gre_client_secret}">
+                                    <label class="control-label">Client Secret</label>
+                                    <el-input v-model="form.gre_client_secret" type="password" :maxlength="255" autocomplete="new-password"
+                                              :placeholder="form.has_gre_client_secret ? 'Configurado (dejar vacío para mantener)' : ''"></el-input>
+                                    <div class="sub-title text-muted" v-if="form.has_gre_client_secret"><small>Configurado</small></div>
+                                    <small class="form-control-feedback" v-if="errors.gre_client_secret" v-text="errors.gre_client_secret[0]"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                     </div>
                     <div class="form-actions text-right pt-2">
                         <el-button type="primary" native-type="submit" :loading="loading_submit">Guardar</el-button>
@@ -223,6 +249,7 @@
                 .then(response => {
                     if (response.data !== '') {
                         this.form = response.data.data
+                        this.$set(this.form, 'gre_client_secret', null)
                     }
                 })
         },
@@ -248,7 +275,10 @@
                     operation_amazonia: false,
                     toggle: false,
                     config_system_env: false,
-                    img_firm: null
+                    img_firm: null,
+                    gre_client_id: null,
+                    gre_client_secret: null,
+                    has_gre_client_secret: false,
 
                 }
             },
@@ -258,6 +288,10 @@
                     .then(response => {
                         if (response.data.success) {
                             this.$message.success(response.data.message)
+                            if (this.form.gre_client_secret) {
+                                this.form.has_gre_client_secret = true
+                                this.form.gre_client_secret = null
+                            }
                         } else {
                             this.$message.error(response.data.message)
                         }

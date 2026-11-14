@@ -2,6 +2,8 @@
 namespace App\Http\Controllers\Tenant\Api;
 
 use App\CoreFacturalo\Facturalo;
+use App\CoreFacturalo\WS\Gre\GreDispatchService;
+use App\Models\Tenant\Dispatch;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,15 +28,31 @@ class DispatchController extends Controller
             $facturalo->save($request->all());
             $facturalo->createXmlUnsigned();
             $facturalo->signXmlUnsigned();
+            $facturalo->updateHash();
             $facturalo->createPdf();
             $facturalo->sendEmail();
-            $facturalo->senderXmlSignedBill();
 
             return $facturalo;
         });
 
         $document = $fact->getDocument();
-        $response = $fact->getResponse();
+
+        // Sending happens after commit: a SUNAT/network failure must not roll back the saved guide.
+        if ($request->input('actions.send_xml_signed', true)) {
+            $sunat = (new GreDispatchService())->send($document);
+        } else {
+            $sunat = ['sent' => false, 'skipped' => true, 'message' => 'Guía registrada sin enviar a SUNAT (send_xml_signed desactivado).'];
+        }
+        $document = Dispatch::find($document->id);
+        $response = [
+            'sent' => $sunat['sent'],
+            'code' => optional($document->soap_shipping_response)->code,
+            'description' => $sunat['message'],
+            'notes' => [],
+            'ticket' => $document->ticket,
+            'state_type_id' => $document->state_type_id,
+            'skipped' => $sunat['skipped'],
+        ];
 
         return [
             'success' => true,
@@ -48,7 +66,7 @@ class DispatchController extends Controller
                 'pdf' => $document->download_external_pdf,
                 'cdr' => $document->download_external_cdr,
             ],
-            'response' => array_except($response, 'sent')
+            'response' => $response
         ];
     }
 }

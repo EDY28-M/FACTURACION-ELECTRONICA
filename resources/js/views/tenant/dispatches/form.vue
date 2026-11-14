@@ -237,6 +237,7 @@
                         </div>
                     </div>
                     <hr>
+                    <template v-if="form.transport_mode_type_id === '01'">
                     <h4>Datos transportista</h4>
                     <div class="row">
                         <div class="col-lg-4">
@@ -262,7 +263,15 @@
                                 <small class="form-control-feedback" v-if="errors['dispatcher.name']" v-text="errors['dispatcher.name'][0]"></small>
                             </div>
                         </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label class="control-label">N° registro MTC</label>
+                                <el-input v-model="form.dispatcher.mtc_number" :maxlength="20" placeholder="N° registro MTC..."></el-input>
+                            </div>
+                        </div>
                     </div>
+                    </template>
+                    <template v-if="form.transport_mode_type_id === '02'">
                     <h4>Datos conductor</h4>
                     <div class="row">
                         <div class="col-lg-4">
@@ -300,7 +309,22 @@
                                 <el-input v-model="form.secondary_license_plates.semitrailer" ></el-input>
                             </div>
                         </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.first_name']}">
+                                <label class="control-label">Nombres del conductor</label>
+                                <el-input v-model="form.driver.first_name" :maxlength="100" placeholder="Nombres..."></el-input>
+                                <small class="form-control-feedback" v-if="errors['driver.first_name']" v-text="errors['driver.first_name'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.family_name']}">
+                                <label class="control-label">Apellidos del conductor</label>
+                                <el-input v-model="form.driver.family_name" :maxlength="100" placeholder="Apellidos..."></el-input>
+                                <small class="form-control-feedback" v-if="errors['driver.family_name']" v-text="errors['driver.family_name'][0]"></small>
+                            </div>
+                        </div>
                     </div>
+                    </template>
                 </div>
                 <hr>
                 <div class="col-md-12">
@@ -461,8 +485,8 @@
                 this.form.origin.address = (!this.document.establishment.address || this.document.establishment.address == '-') ? this.dispatch.origin.address:this.document.establishment.address
                 this.form.delivery.address = (!this.document.customer.address || this.document.customer.address == '-') ?  this.dispatch.delivery.address:this.document.customer.address
             
-                this.form.dispatcher = this.dispatch.dispatcher
-                this.form.driver = this.dispatch.driver
+                this.form.dispatcher = Object.assign({mtc_number: null}, this.dispatch.dispatcher)
+                this.form.driver = Object.assign({license: null, first_name: null, family_name: null}, this.dispatch.driver)
                 this.form.license_plate = this.dispatch.license_plate
 
                 if(this.dispatch.secondary_license_plates){
@@ -502,11 +526,14 @@
                     container_number: null,
                     license_plate: null,
                     dispatcher: {
-                        identity_document_type_id: null
+                        identity_document_type_id: null,
+                        mtc_number: null,
                     },
                     driver: {
                         identity_document_type_id: null,
                         license: null,
+                        first_name: null,
+                        family_name: null,
                     },
                     delivery: {
                         country_id: 'PE',
@@ -614,7 +641,14 @@
                 this.$http.post(`/${this.resource}`, this.form).then(response => {
                         if (response.data.success) {
 
-                            // this.$message.success(response.data.message)
+                            if (response.data.data.sunat) {
+                                this.$message({
+                                    message: response.data.data.sunat.message,
+                                    type: response.data.data.sunat.success ? 'success' : 'warning',
+                                    duration: 10000,
+                                    showClose: true
+                                })
+                            }
                             // location.href = '/dispatches'
                             this.recordId = response.data.data.id
                             this.showDialogOptions = true

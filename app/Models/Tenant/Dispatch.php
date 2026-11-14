@@ -62,6 +62,9 @@ class Dispatch extends ModelTenant
         'secondary_license_plates',
         'reference_sale_note_id',
         'soap_shipping_response',
+        'ticket',
+        'qr',
+        'sunat_qr_url',
     ];
 
     protected $casts = [
