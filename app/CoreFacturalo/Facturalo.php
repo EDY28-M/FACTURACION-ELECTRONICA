@@ -21,6 +21,7 @@ use App\Models\Tenant\Configuration;
 use Illuminate\Support\Facades\Mail;
 use Modules\Finance\Traits\FinanceTrait;
 use App\CoreFacturalo\WS\Client\WsClient;
+use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
 use App\CoreFacturalo\Helpers\Xml\XmlHash;
 use App\CoreFacturalo\WS\Signed\XmlSigned;
 use App\CoreFacturalo\Helpers\Xml\XmlFormat;
@@ -95,10 +96,15 @@ class Facturalo
         return $this->response;
     }
 
-    public function save($inputs)
+    public function save($inputs, $skipSendDeadlineCheck = false)
     {
         $this->actions = array_key_exists('actions', $inputs)?$inputs['actions']:[];
         $this->type = $inputs['type'];
+
+        // $skipSendDeadlineCheck is set only by trusted server-side flows (offline sync), never from request data.
+        if (!$skipSendDeadlineCheck) {
+            $this->assertIssueDateWithinSendDeadline($inputs);
+        }
 
         switch ($this->type) {
             case 'debit':
@@ -578,8 +584,48 @@ class Facturalo
 
     }
 
+    /**
+     * RS 003-2023/SUNAT: a factura (or linked note) can no longer be issued with a date whose
+     * send deadline has already expired.
+     */
+    private function assertIssueDateWithinSendDeadline(array $inputs)
+    {
+        if (!in_array($this->type, ['invoice', 'credit', 'debit'], true) || empty($inputs['date_of_issue'])) {
+            return;
+        }
+
+        $affected = null;
+        if (in_array($this->type, ['credit', 'debit'], true)) {
+            $affected = (($inputs['group_id'] ?? null) === '01') ? '01' : '03';
+        }
+
+        if (SendDeadline::appliesTo($inputs['document_type_id'] ?? null, $inputs['series'] ?? null, $affected)
+            && SendDeadline::isExpired($inputs['date_of_issue'])) {
+            throw new Exception(SendDeadline::creationMessage($inputs['date_of_issue']));
+        }
+    }
+
+    /**
+     * Never call SUNAT/OSE for a factura (or linked note) whose send deadline already expired.
+     */
+    private function assertSendDeadline()
+    {
+        $document = $this->document;
+
+        if (!$document instanceof Document
+            || !in_array($document->state_type_id, [self::REGISTERED, self::SENT], true)
+            || !SendDeadline::appliesToDocument($document)
+            || !SendDeadline::isExpired($document->date_of_issue)) {
+            return;
+        }
+
+        throw new Exception(SendDeadline::message($document->date_of_issue));
+    }
+
     public function onlySenderXmlSignedBill()
     {
+        $this->assertSendDeadline();
+
         $res = $this->senderXmlSigned();
         if($res->isSuccess()) {
             $cdrResponse = $res->getCdrResponse();
@@ -977,6 +1023,18 @@ class Facturalo
         switch ($this->type) {
             case 'invoice':
                 $document = Document::find($id);
+
+                // RS 003-2023/SUNAT: re-dating a factura/linked note must respect the send deadline.
+                $newDate = $inputs['date_of_issue'] ?? null;
+                if ($newDate && substr((string) $newDate, 0, 10) !== $document->date_of_issue->format('Y-m-d')) {
+                    $this->assertIssueDateWithinSendDeadline([
+                        'document_type_id' => $document->document_type_id,
+                        'series' => $document->series,
+                        'group_id' => $document->group_id,
+                        'date_of_issue' => $newDate,
+                    ]);
+                }
+
                 $document->fill($inputs);
                 $document->save();
 

@@ -98,7 +98,9 @@ class DocumentController extends Controller
     {
         $fact = DB::connection('tenant')->transaction(function () use ($request) {
             $facturalo = new Facturalo();
-            $facturalo->save($request->all());
+            // Offline sync: the document was issued earlier, so skip the creation deadline check
+            // (sending it to SUNAT is still blocked by the send guard).
+            $facturalo->save($request->all(), true);
 
             return $facturalo;
         });

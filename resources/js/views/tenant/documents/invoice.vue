@@ -150,7 +150,7 @@
                                 <div class="form-group" :class="{'has-danger': errors.date_of_issue}">
                                     <!--<label class="control-label">Fecha de emisión</label>-->
                                     <label class="control-label">Fec. Emisión</label>
-                                    <el-date-picker v-model="form.date_of_issue" type="date" value-format="yyyy-MM-dd" :clearable="false" @change="changeDateOfIssue" :picker-options="datEmision" :readonly="readonly_date_of_due"></el-date-picker>
+                                    <el-date-picker v-model="form.date_of_issue" type="date" value-format="yyyy-MM-dd" :clearable="false" @change="changeDateOfIssue" :picker-options="issueDateOptions" :readonly="readonly_date_of_due"></el-date-picker>
                                     <small class="form-control-feedback" v-if="errors.date_of_issue" v-text="errors.date_of_issue[0]"></small>
                                 </div>
                             </div>
@@ -948,6 +948,21 @@
                 seller_class: 'col-lg-6 pb-2',
                 btnText: 'Generar',
                 payment_conditions: []
+            }
+        },
+        computed: {
+            // RS 003-2023/SUNAT: a factura can only be issued up to 3 calendar days back
+            // (send deadline = issue date + 3 days). Boletas keep the previous rules.
+            issueDateOptions() {
+                const base = this.datEmision || {}
+                const limited = this.form && this.form.document_type_id === '01' && !this.is_contingency
+                const minDay = moment().startOf('day').subtract(3, 'days')
+                return Object.assign({}, base, {
+                    disabledDate: (time) => {
+                        if (base.disabledDate && base.disabledDate(time)) return true
+                        return limited && moment(time).isBefore(minDay)
+                    }
+                })
             }
         },
         async created() {
@@ -1839,13 +1854,17 @@
                 this.filterSeries();
                 this.cleanCustomer();
                 this.filterCustomers();
+                this.changeDateOfIssue();
             },
             cleanCustomer(){
                 this.form.customer_id = null
             },
             changeDateOfIssue() {
               let minDate = moment().subtract(7, 'days')
-              if(moment(this.form.date_of_issue) < minDate && this.configuration.restrict_receipt_date) {
+              if(this.form.document_type_id === '01' && !this.is_contingency && moment(this.form.date_of_issue).isBefore(moment().startOf('day').subtract(3, 'days'))) {
+                this.$message.error('El plazo de envío a SUNAT para facturas es de hasta 3 días calendario después de la emisión (RS 003-2023). Selecciona una fecha vigente.');
+                this.dateValid=false
+              } else if(moment(this.form.date_of_issue) < minDate && this.configuration.restrict_receipt_date) {
                 this.$message.error('No puede seleccionar una fecha menor a 6 días.');
                 this.dateValid=false
               } else { this.dateValid = true }

@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
+use Carbon\Carbon;
 use Facades\App\Http\Controllers\Tenant\DocumentController;
 use Illuminate\Console\Command;
 use App\Traits\CommandTrait;
@@ -50,14 +52,31 @@ class SendAllSunatCommand extends Command
                 return;
             }
             
-            $documents = Document::query()
+            // RS 003-2023/SUNAT: expired facturas/linked notes can no longer be sent; leave them out.
+            $limit = Carbon::now(SendDeadline::TIMEZONE)->startOfDay()->subDays(SendDeadline::DAYS_AFTER_ISSUE)->format('Y-m-d');
+
+            $pending = Document::query()
                 ->where('group_id', '01')
                 ->where('send_server', 0)
                 ->whereIn('state_type_id', ['01','03'])
                 // ->orWhere('sunat_shipping_status', '!=', '')
-                ->where('success_sunat_shipping_status', false)
-                ->get();
-            
+                ->where('success_sunat_shipping_status', false);
+
+            $isExpiredInvoice = function ($query) use ($limit) {
+                $query->whereIn('document_type_id', ['01', '07', '08'])
+                    ->where('series', 'like', 'F%')
+                    ->where('date_of_issue', '<', $limit);
+            };
+
+            $skipped = (clone $pending)->where($isExpiredInvoice)->count();
+            if ($skipped > 0) {
+                $message = "online:send-all skipped {$skipped} expired factura(s)/linked note(s) (RS 003-2023: send deadline passed)";
+                $this->warn($message);
+                \Log::warning($message);
+            }
+
+            $documents = $pending->whereNot($isExpiredInvoice)->get();
+
             foreach ($documents as $document) {
                 try {
                     $response = DocumentController::send($document->id);

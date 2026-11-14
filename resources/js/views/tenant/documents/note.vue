@@ -89,7 +89,7 @@
                         <div class="col-md-2">
                             <div class="form-group" :class="{'has-danger': errors.date_of_issue}">
                                 <label class="control-label">Fec. Emisión</label>
-                                <el-date-picker v-model="form.date_of_issue" type="date" value-format="yyyy-MM-dd" :clearable="false" @change="changeDateOfIssue"></el-date-picker>
+                                <el-date-picker v-model="form.date_of_issue" type="date" value-format="yyyy-MM-dd" :clearable="false" :picker-options="issueDateOptions" @change="changeDateOfIssue"></el-date-picker>
                                 <small class="form-control-feedback" v-if="errors.date_of_issue" v-text="errors.date_of_issue[0]"></small>
                             </div>
                         </div>
@@ -227,6 +227,16 @@
                 operation_types: [],
                 is_contingency: false,
                 affected_documents: [],
+            }
+        },
+        computed: {
+            // RS 003-2023/SUNAT: notes linked to a factura (F series) can only be issued up to 3 calendar days back.
+            issueDateOptions() {
+                const limited = !!this.document && this.document.group_id === '01' && !this.is_contingency
+                const minDay = moment().startOf('day').subtract(3, 'days')
+                return {
+                    disabledDate: (time) => limited && moment(time).isBefore(minDay)
+                }
             }
         },
         async created() {

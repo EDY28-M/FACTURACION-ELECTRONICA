@@ -16,7 +16,7 @@
                         <th class="text-center">F. Emisión</th>
                         <th>Cliente</th>
                         <th>Comprobante</th>
-                        <th class="text-center">Días para enviar</th>
+                        <th class="text-center">Plazo SUNAT</th>
                         <th class="text-center">Enviar</th>  
                     <tr>
                     <tr slot-scope="{ index, row }">
@@ -30,7 +30,17 @@
                             <small v-if="row.affected_document" v-text="row.affected_document"></small>                            
                         </td> 
                         <td class="text-center"> 
-                            <template v-if="row.is_expiration">
+                            <template v-if="row.sunat_deadline">
+                                <el-tooltip effect="dark" placement="top" :disabled="!row.sunat_deadline.expired"
+                                    :content="row.text_tooltip">
+                                    <span class="badge text-white"
+                                        :class="row.sunat_deadline.expired ? 'bg-danger' : (row.sunat_deadline.days_left === 0 ? 'bg-warning' : 'bg-success')">
+                                        {{ row.sunat_deadline.label }}
+                                    </span>
+                                </el-tooltip>
+                                <br/><small>Hasta {{ row.sunat_deadline.last_day }}</small>
+                            </template>
+                            <template v-else-if="row.is_expiration">
                                 <span class="badge bg-danger text-white" >{{row.expiration_days}}</span>
                             </template> 
                             <template v-else>

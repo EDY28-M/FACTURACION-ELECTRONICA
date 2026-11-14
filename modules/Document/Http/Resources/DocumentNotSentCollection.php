@@ -4,6 +4,7 @@ namespace Modules\Document\Http\Resources;
 
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Carbon\Carbon;
+use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
 
 class DocumentNotSentCollection extends ResourceCollection
 {
@@ -40,6 +41,24 @@ class DocumentNotSentCollection extends ResourceCollection
                 } 
             }
 
+            // RS 003-2023/SUNAT: facturas and linked notes have their own send deadline.
+            $sunat_deadline = null;
+            if (SendDeadline::appliesToDocument($row)) {
+                $left = SendDeadline::daysLeft($row->date_of_issue);
+                $expired = $left < 0;
+                $sunat_deadline = [
+                    'expired' => $expired,
+                    'days_left' => $left,
+                    'last_day' => SendDeadline::lastDay($row->date_of_issue)->format('Y-m-d'),
+                    'label' => $expired ? 'Vencido' : ($left === 0 ? 'Vence hoy' : ($left === 1 ? 'Queda 1 día' : "Quedan {$left} días")),
+                ];
+
+                if ($expired && in_array($row->state_type_id, ['01', '03'], true)) {
+                    $btn_resend = false;
+                    $text_tooltip = SendDeadline::message($row->date_of_issue);
+                }
+            }
+
             $now = Carbon::now();
             $date_document = (new Carbon($row->date_of_issue))->addDay();
             $difference_days = 7 - $date_document->diffInDays($now);
@@ -66,6 +85,7 @@ class DocumentNotSentCollection extends ResourceCollection
                 'text_tooltip' => $text_tooltip,
                 'expiration_days' => $days_send,
                 'is_expiration' => ($difference_days <= 0) ? true:false,
+                'sunat_deadline' => $sunat_deadline,
             ];
         });
     }
