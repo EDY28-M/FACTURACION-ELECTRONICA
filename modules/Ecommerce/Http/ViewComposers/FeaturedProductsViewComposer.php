@@ -17,7 +17,7 @@ class FeaturedProductsViewComposer
 
         $view->items = Item::where([['apply_store', 1], ['internal_id','!=', null]])->get()->transform(function($row, $key) use($exchange_rate_sale){
 
-            $sale_unit_price = ($row->has_igv)? $row->sale_unit_price:$row->sale_unit_price*1.18;
+            $sale_unit_price = ($row->has_igv)? $row->sale_unit_price:$row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
 
             $carbon = new \Carbon\Carbon();
             $date = $carbon->now();

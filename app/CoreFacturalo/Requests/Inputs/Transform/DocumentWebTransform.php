@@ -128,7 +128,7 @@ class DocumentWebTransform
 
                     'codigo_tipo_afectacion_igv' => Functions::valueKeyInArray($row, 'affectation_igv_type_id'),
                     'total_base_igv' => Functions::valueKeyInArray($row, 'total_base_igv'),
-                    'porcentaje_igv' => Functions::valueKeyInArray($row, 'percentage_igv'),
+                    'porcentaje_igv' => \App\CoreFacturalo\Helpers\Igv\IgvRate::fromAmounts(Functions::valueKeyInArray($row, 'percentage_igv'), Functions::valueKeyInArray($row, 'total_igv'), Functions::valueKeyInArray($row, 'total_base_igv')),
                     'total_igv' => Functions::valueKeyInArray($row, 'total_igv'),
 
                     'codigo_tipo_sistema_isc' => Functions::valueKeyInArray($row, 'system_isc_type_id'),

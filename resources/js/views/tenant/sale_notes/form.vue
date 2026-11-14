@@ -272,6 +272,7 @@
 
         <sale-notes-form-item  :typeUser="typeUser" :showDialog.sync="showDialogAddItem"
                            :currency-type-id-active="form.currency_type_id"
+                           :date-of-issue="form.date_of_issue"
                            :exchange-rate-sale="form.exchange_rate_sale"
                            @add="addRow"></sale-notes-form-item>
 
@@ -292,7 +293,7 @@
     import PersonForm from '../persons/form.vue'
     import SaleNotesOptions from './partials/options.vue'
     import {functions, exchangeRate} from '../../../mixins/functions'
-    import {calculateRowItem} from '../../../helpers/functions'
+    import {calculateRowItem, rerateRowsByDate} from '../../../helpers/functions'
     import Logo from '../companies/logo.vue'
 
     export default {
@@ -586,6 +587,11 @@
                 this.form.customer_id = null
             },
             changeDateOfIssue() {
+                const rerated = rerateRowsByDate(this.form.items, this.form.currency_type_id, this.form.exchange_rate_sale, this.form.date_of_issue)
+                if (rerated) {
+                    this.form.items = rerated
+                    this.calculateTotal()
+                }
 
                 this.searchExchangeRateByDate(this.form.date_of_issue).then(response => {
                     this.form.exchange_rate_sale = response

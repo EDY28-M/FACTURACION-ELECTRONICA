@@ -810,6 +810,7 @@
                            :isEditItemNote="false"
                            :operation-type-id="form.operation_type_id"
                            :currency-type-id-active="form.currency_type_id"
+                           :date-of-issue="form.date_of_issue"
                            :exchange-rate-sale="form.exchange_rate_sale"
                            :typeUser="typeUser"
                            :configuration="configuration"
@@ -871,6 +872,7 @@
     import DocumentOptions from '../documents/partials/options.vue'
     import {functions, exchangeRate} from '../../../mixins/functions'
     import {calculateRowItem} from '../../../helpers/functions'
+    import {igvFromBase, needsRerate} from '../../../helpers/igv'
     import Logo from '../companies/logo.vue'
     import DocumentHotelForm from '../../../../../modules/BusinessTurn/Resources/assets/js/views/hotels/form.vue'
     import DocumentTransportForm from '../../../../../modules/BusinessTurn/Resources/assets/js/views/transports/form.vue'
@@ -1067,7 +1069,7 @@
                         return i;
                     });
                     this.form.items = itemsResponse.map(i => {
-                        return calculateRowItem(i, this.form.currency_type_id, this.form.exchange_rate_sale)
+                        return calculateRowItem(i, this.form.currency_type_id, this.form.exchange_rate_sale, this.form.date_of_issue)
                     });
                 });
             }
@@ -1191,6 +1193,7 @@
                 return items.map(i => {
                     i.unit_price_value = i.unit_value;
                     i.input_unit_price_value = i.unit_value;
+                    i.igv_rate_locked = true; // existing saved document: keep stored IGV rate
                     i.additional_information = this.onPrepareAdditionalInformation(i.additional_information);
                     return i;
                 });
@@ -1216,7 +1219,7 @@
 
                 }
 
-                this.form.prepayments[index].total = (this.form.affectation_type_prepayment == 10) ? _.round(this.form.prepayments[index].amount * 1.18, 2) : this.form.prepayments[index].amount
+                this.form.prepayments[index].total = (this.form.affectation_type_prepayment == 10) ? _.round(parseFloat(this.form.prepayments[index].amount) + igvFromBase(this.form.items, this.form.prepayments[index].amount, this.form.date_of_issue), 2) : this.form.prepayments[index].amount
 
                 this.changeTotalPrepayment()
 
@@ -1350,7 +1353,7 @@
                         this.form.total_discount =  _.round(amount,2)
                         this.form.total_taxed =  _.round(base - amount,2)
                         this.form.total_value =  _.round(base - amount,2)
-                        this.form.total_igv =  _.round(this.form.total_value * 0.18,2)
+                        this.form.total_igv =  _.round(igvFromBase(this.form.items, this.form.total_value, this.form.date_of_issue),2)
                         this.form.total_taxes =  _.round(this.form.total_igv,2)
                         this.form.total =  _.round(this.form.total_value + this.form.total_taxes,2)
 
@@ -1371,7 +1374,7 @@
                             this.form.total_discount =  _.round(amount,2)
                             this.form.total_taxed =  _.round(base - amount,2)
                             this.form.total_value =  _.round(base - amount,2)
-                            this.form.total_igv =  _.round(this.form.total_value * 0.18,2)
+                            this.form.total_igv =  _.round(igvFromBase(this.form.items, this.form.total_value, this.form.date_of_issue),2)
                             this.form.total_taxes =  _.round(this.form.total_igv,2)
                             this.form.total =  _.round(this.form.total_value + this.form.total_taxes,2)
 
@@ -1847,11 +1850,20 @@
                 this.dateValid=false
               } else { this.dateValid = true }
                 this.form.date_of_due = this.form.date_of_issue
+                this.rerateItemsByDate()
                 if (! this.isUpdate) {
                     this.searchExchangeRateByDate(this.form.date_of_issue).then(response => {
                         this.form.exchange_rate_sale = response
                     });
                 }
+            },
+            // The IGV rate depends on the issue date: re-rate rows that are not locked (existing rows
+            // of a saved document being edited keep their stored rate) and recompute the totals.
+            rerateItemsByDate() {
+                if (!this.form.items || !needsRerate(this.form.items, this.form.date_of_issue)) return
+                this.form.items = this.form.items.map(row => row.igv_rate_locked ? row :
+                    calculateRowItem(row, this.form.currency_type_id, this.form.exchange_rate_sale, this.form.date_of_issue))
+                this.calculateTotal()
             },
             assignmentDateOfPayment(){
                 this.form.payments.forEach((payment)=>{
@@ -1920,7 +1932,7 @@
                 this.currency_type = _.find(this.currency_types, {'id': this.form.currency_type_id})
                 let items = []
                 this.form.items.forEach((row) => {
-                    items.push(calculateRowItem(row, this.form.currency_type_id, this.form.exchange_rate_sale))
+                    items.push(calculateRowItem(row, this.form.currency_type_id, this.form.exchange_rate_sale, this.form.date_of_issue))
                 });
                 this.form.items = items
                 this.calculateTotal()
@@ -2036,7 +2048,7 @@
 
                     this.form.total_discount =  _.round(amount,2)
                     this.form.total_value =  _.round(base - amount,2)
-                    this.form.total_igv =  _.round(this.form.total_value * 0.18,2)
+                    this.form.total_igv =  _.round(igvFromBase(this.form.items, this.form.total_value, this.form.date_of_issue),2)
                     this.form.total_taxes =  _.round(this.form.total_igv,2)
                     this.form.total =  _.round(this.form.total_value + this.form.total_taxes,2)
 

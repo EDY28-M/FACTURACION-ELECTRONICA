@@ -515,13 +515,14 @@
             },
             calculateSummary() {
                 let subtotal = 0.00
+                let tax = 0
                 this.records.forEach(function (item) {
                     //console.log(item)
                     subtotal += parseFloat(item.sub_total)
+                    tax += parseFloat(item.sub_total) * (item.igv_general_rate ? 18 : {{ \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant() }}) / 100
                 })
 
                 this.summary.subtotal = subtotal.toFixed(2)
-                let tax = (subtotal * 0.18)
                 this.summary.tax = tax.toFixed(2)
                 this.summary.total = (subtotal + tax).toFixed(2)
                 $("#total_amount").data('total', this.summary.total);

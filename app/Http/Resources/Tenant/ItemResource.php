@@ -42,6 +42,7 @@ class ItemResource extends JsonResource
             'calculate_quantity' => (bool) $this->calculate_quantity,
             'has_igv' => (bool) $this->has_igv,
             'purchase_has_igv' => (bool) $this->purchase_has_igv,
+            'igv_general_rate' => (bool) $this->igv_general_rate,
             'has_perception' => (bool) $this->has_perception,
             'lots_enabled' => (bool) $this->lots_enabled,
             'percentage_perception' => $this->percentage_perception,

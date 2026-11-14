@@ -98,6 +98,15 @@
                                 </div>
                             </div>
 
+                            <div class="col-md-6 mt-4">
+                                <label class="control-label">Régimen IGV reducido (restaurantes y hoteles - Ley 31556)</label>
+                                <div class="form-group" :class="{'has-danger': errors.igv_reduced_regime}">
+                                    <el-switch v-model="form.igv_reduced_regime" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                                    <small class="form-text text-muted">Aplica 10.5% (8% IGV + 2.5% IPM) en 2026 y 15% en 2027 a los productos gravados, salvo los marcados como 'Tasa general'. Solo para MYPE con actividad principal de restaurante u hospedaje.</small>
+                                    <small class="form-control-feedback" v-if="errors.igv_reduced_regime" v-text="errors.igv_reduced_regime[0]"></small>
+                                </div>
+                            </div>
+
 
                             <div class="col-md-6 mt-4">
                                 <label class="control-label">Caja General seleccionada por defecto</label>
@@ -344,6 +353,7 @@
                     amount_plastic_bag_taxes: 0.1,
                     colums_grid_item: 4,
                     affectation_igv_type_id:'10',
+                    igv_reduced_regime: false,
                     terms_condition:null,
                     header_image: null,
                     legend_footer: false,
@@ -359,6 +369,7 @@
                 this.$http.post(`/${this.resource}`, this.form).then(response => {
                     if (response.data.success) {
                         this.$message.success(response.data.message);
+                        window.TENANT_IGV = {reduced_regime: !!this.form.igv_reduced_regime};
                     }
                     else {
                         this.$message.error(response.data.message);

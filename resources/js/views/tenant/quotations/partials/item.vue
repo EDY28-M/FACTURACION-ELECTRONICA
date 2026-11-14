@@ -265,12 +265,13 @@
 <script>
     import itemForm from '../../items/form.vue'
     import {calculateRowItem} from '../../../../helpers/functions'
+    import {rowIgvFactor} from '../../../../helpers/igv'
     import WarehousesDetail from './warehouses.vue'
     import ClassicEditor from '@ckeditor/ckeditor5-build-classic'
     import VueCkeditor from 'vue-ckeditor5'
 
     export default {
-        props: ['showDialog', 'currencyTypeIdActive', 'exchangeRateSale', 'recordItem'],
+        props: ['showDialog', 'currencyTypeIdActive', 'exchangeRateSale', 'dateOfIssue', 'recordItem'],
         components: {itemForm, WarehousesDetail, 'vue-ckeditor': VueCkeditor.component},
         data() {
             return {
@@ -525,7 +526,7 @@
                 if (this.validateTotalItem().total_item) return;
 
                 // this.form.item.unit_price = this.form.unit_price;
-                let unit_price = (this.form.has_igv)?this.form.unit_price:this.form.unit_price*1.18;
+                let unit_price = (this.form.has_igv)?this.form.unit_price:this.form.unit_price*rowIgvFactor(this.form, this.dateOfIssue);
 
                 // this.form.item.unit_price = this.form.unit_price
                 this.form.unit_price = unit_price;
@@ -537,7 +538,7 @@
 
                 this.form.item.presentation = this.item_unit_type;
                 this.form.affectation_igv_type = _.find(this.affectation_igv_types, {'id': this.form.affectation_igv_type_id});
-                this.row = calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale);
+                this.row = calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale, this.dateOfIssue);
                 this.row.item.name_product_pdf = this.row.name_product_pdf || '';
                 if (this.recordItem) {
                     this.row.indexi = this.recordItem.indexi

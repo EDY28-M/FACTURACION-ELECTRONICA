@@ -162,7 +162,7 @@ class DocumentInput
                     'unit_price' => $row['unit_price'],
                     'affectation_igv_type_id' => $row['affectation_igv_type_id'],
                     'total_base_igv' => $row['total_base_igv'],
-                    'percentage_igv' => $row['percentage_igv'],
+                    'percentage_igv' => \App\CoreFacturalo\Helpers\Igv\IgvRate::valueOrDefault($row['percentage_igv'] ?? null, $inputs['date_of_issue'] ?? null, (bool) $item->igv_general_rate),
                     'total_igv' => $row['total_igv'],
                     'system_isc_type_id' => $row['system_isc_type_id'],
                     'total_base_isc' => Functions::valueKeyInArray($row, 'total_base_isc', 0),

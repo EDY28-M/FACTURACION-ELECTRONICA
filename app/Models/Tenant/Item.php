@@ -67,6 +67,7 @@ class Item extends ModelTenant
         'line',
         'series_enabled',
         'purchase_has_igv',
+        'igv_general_rate',
         'web_platform_id',
         'has_plastic_bag_taxes',
         'barcode',

@@ -519,6 +519,8 @@
     import LotsGroup from './lots_group.vue'
 
     import {calculateRowItem} from '../../../../helpers/functions'
+
+    import {rowIgvFactor} from '../../../../helpers/igv'
     import WarehousesDetail from './select_warehouses.vue'
     import SelectLotsForm from './lots.vue'
 
@@ -526,7 +528,7 @@
     import VueCkeditor from 'vue-ckeditor5'
 
     export default {
-        props: ['recordItem','showDialog', 'operationTypeId', 'currencyTypeIdActive', 'exchangeRateSale', 'typeUser',
+        props: ['recordItem','showDialog', 'operationTypeId', 'currencyTypeIdActive', 'exchangeRateSale', 'dateOfIssue', 'typeUser',
                 'isEditItemNote', 'configuration', 'documentTypeId', 'noteCreditOrDebitTypeId'],
         components: {ItemForm, WarehousesDetail, LotsGroup, SelectLotsForm, 'vue-ckeditor': VueCkeditor.component},
         data() {
@@ -947,7 +949,7 @@
 
                 if (this.validateTotalItem().total_item) return;
 
-                let unit_price = (this.form.has_igv)?this.form.unit_price_value:this.form.unit_price_value*1.18;
+                let unit_price = (this.form.has_igv)?this.form.unit_price_value:this.form.unit_price_value*rowIgvFactor(this.form, this.dateOfIssue);
 
                 this.form.input_unit_price_value = this.form.unit_price_value;
 
@@ -958,7 +960,7 @@
 
                 let IdLoteSelected = this.form.IdLoteSelected
                 let document_item_id = this.form.document_item_id
-                this.row = calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale);
+                this.row = calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale, this.dateOfIssue);
 
                 let select_lots = await _.filter(this.row.item.lots, {'has_sale':true})
                 let un_select_lots = await _.filter(this.row.item.lots, {'has_sale':false})

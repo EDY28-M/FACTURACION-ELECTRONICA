@@ -318,7 +318,7 @@
 <script>
 import DocumentOptions from "@views/documents/partials/options.vue";
 import SaleNoteOptions from "@views/sale_notes/partials/options.vue";
-import { calculateRowItem } from "../../../helpers/functions";
+import { calculateRowItem, rerateDocumentRows } from "../../../helpers/functions";
 import { exchangeRate } from "../../../mixins/functions";
 import moment from "moment";
 
@@ -565,6 +565,7 @@ export default {
     },
     async submit() {
       this.assignDocument();
+      rerateDocumentRows(this.document, this.document.date_of_issue);
       this.onCalculateTotals();
 
       let validate_payment_destination = await this.validatePaymentDestination();
@@ -665,7 +666,8 @@ export default {
       return calculateRowItem(
         it,
         this.currencyTypeIdActive,
-        this.exchangeRateSale
+        this.exchangeRateSale,
+        this.document.date_of_issue
       );
     },
     assignDocument() {

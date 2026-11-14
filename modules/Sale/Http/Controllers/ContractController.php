@@ -332,6 +332,7 @@ class ContractController extends Controller
                         'purchase_unit_price' => $row->purchase_unit_price,
                         'unit_type_id' => $row->unit_type_id,
                         'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
+                        'igv_general_rate' => (bool) $row->igv_general_rate,
                         'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
                         'is_set' => (bool) $row->is_set,
                         'has_igv' => (bool) $row->has_igv,

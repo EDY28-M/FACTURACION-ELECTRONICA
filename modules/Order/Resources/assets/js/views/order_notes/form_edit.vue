@@ -193,6 +193,7 @@
         <order-note-form-item :showDialog.sync="showDialogAddItem"
                            :currency-type-id-active="form.currency_type_id"
                            :typeUser="typeUser"
+                           :date-of-issue="form.date_of_issue"
                            :exchange-rate-sale="form.exchange_rate_sale"
                            @add="addRow"></order-note-form-item>
 
@@ -379,7 +380,7 @@
                     this.form.delivery_date = dato.delivery_date
                     this.form.exchange_rate_sale = dato.exchange_rate_sale
                     this.form.description = dato.description
-                    this.form.items = dato.items
+                    this.form.items = dato.items.map(row => Object.assign(row, {igv_rate_locked: true})) // saved rows keep their IGV rate
                     this.calculateTotal()
                     //console.log(response.data)
                 })

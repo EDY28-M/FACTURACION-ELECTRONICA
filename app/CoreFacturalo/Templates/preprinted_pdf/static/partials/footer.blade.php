@@ -69,7 +69,7 @@
             <th class="border-box text-center py-1 desc">IMPORTE BRUTO</th>
             <th class="border-box text-center py-1 desc">DESCUENTOS</th>
             <th class="border-box text-center py-1 desc">TOTAL VALOR VENTA</th>
-            <th class="border-box text-center py-1 desc">I.G.V. 18%</th>
+            <th class="border-box text-center py-1 desc">I.G.V. {{ \App\CoreFacturalo\Helpers\Igv\IgvRate::format(\App\CoreFacturalo\Helpers\Igv\IgvRate::fromItems($document->items)) }}%</th>
             <th class="border-box text-center py-1 desc">TOTAL PRECIO VENTA</th>
             <th class="border-box text-center py-1 desc">PAGO A CUENTA</th>
             <th class="border-box text-center py-1 desc">NETO A PAGAR</th>

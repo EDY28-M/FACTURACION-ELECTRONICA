@@ -137,6 +137,7 @@
 <script>
 
     import DocumentOptions from '../../documents/partials/options.vue'
+    import {rerateDocumentRows} from '../../../../helpers/functions'
 
     export default {
         components: {DocumentOptions},
@@ -265,7 +266,7 @@
 
             },
             async submit() {
-                
+                rerateDocumentRows(this.document, this.document.date_of_issue);
                 if(this.generate_dispatch){
                     if(!this.dispatch_id){
                         return this.$message.error('Debe seleccionar una guía base')

@@ -294,6 +294,7 @@
 
 <script>
 import DocumentOptions from "@views/documents/partials/options.vue";
+import { rerateDocumentRows } from "@helpers/functions";
 import SaleNoteOptions from "@views/sale_notes/partials/options.vue";
 
 export default {
@@ -463,6 +464,7 @@ export default {
     },
     async submit() {
       await this.assignDocument();
+      rerateDocumentRows(this.document, this.document.date_of_issue);
 
       let validate_payment_destination = await this.validatePaymentDestination()
 

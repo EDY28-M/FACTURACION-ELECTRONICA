@@ -297,6 +297,7 @@
 
         <quotation-form-item :showDialog.sync="showDialogAddItem"
                            :currency-type-id-active="form.currency_type_id"
+                           :date-of-issue="form.date_of_issue"
                            :exchange-rate-sale="form.exchange_rate_sale"
                            :recordItem="recordItem"
                            @add="addRow"></quotation-form-item>
@@ -530,7 +531,7 @@
                     this.form.account_number = dato.account_number
                     this.form.terms_condition = dato.terms_condition
                     this.form.active_terms_condition = dato.terms_condition ? true:false
-                    this.form.items = dato.items
+                    this.form.items = dato.items.map(row => Object.assign(row, {igv_rate_locked: true})) // saved rows keep their IGV rate
                     this.form.payments = dato.payments
                     this.form.referential_information = dato.referential_information
                     this.changeCustomer()

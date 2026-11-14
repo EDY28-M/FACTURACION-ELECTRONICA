@@ -1,4 +1,8 @@
-function calculateRowItem(row_old, currency_type_id_new, exchange_rate_sale) {
+import {rowIgvPercentage, needsRerate} from './igv'
+
+// date_of_issue (optional): document issue date used to pick the IGV rate; defaults to today.
+// reducedRegime (optional): overrides the tenant flag (purchases pass false: the supplier's rate applies).
+function calculateRowItem(row_old, currency_type_id_new, exchange_rate_sale, date_of_issue = null, reducedRegime = undefined) {
     // console.log(currency_type_id_new, exchange_rate_sale)
 
     let currency_type_id_old = row_old.item.currency_type_id
@@ -64,7 +68,8 @@ function calculateRowItem(row_old, currency_type_id_new, exchange_rate_sale) {
         affectation_igv_type_id: row_old.affectation_igv_type_id,
         affectation_igv_type: row_old.affectation_igv_type,
         total_base_igv: 0,
-        percentage_igv: 18,
+        percentage_igv: rowIgvPercentage(row_old, date_of_issue, reducedRegime),
+        igv_rate_locked: !!row_old.igv_rate_locked,
         total_igv: 0,
         system_isc_type_id: null,
         total_base_isc: 0,
@@ -89,7 +94,7 @@ function calculateRowItem(row_old, currency_type_id_new, exchange_rate_sale) {
         name_product_pdf: row_old.name_product_pdf
     };
 
-    let percentage_igv = 18
+    let percentage_igv = row.percentage_igv
     let unit_value = row.unit_price
 
     if (row.affectation_igv_type_id === '10') {
@@ -248,4 +253,40 @@ function calculateRowItem(row_old, currency_type_id_new, exchange_rate_sale) {
     return row
 }
 
-export {calculateRowItem}
+// Re-rates the rows of a document that is about to be generated from another one (quotation,
+// sale note, order note, ...) using the NEW document's issue date and recomputes the simple
+// totals. Only acts when a taxed row would change rate; documents with global discounts,
+// charges or prepayments are left untouched (their totals depend on the stored rate).
+function rerateDocumentRows(doc, date_of_issue) {
+    if (!doc || !doc.items || !needsRerate(doc.items, date_of_issue)) return false
+    if ((doc.discounts && doc.discounts.length) || (doc.charges && doc.charges.length)
+        || (doc.prepayments && doc.prepayments.length)) return false
+
+    const items = doc.items.map(row => {
+        if (row.igv_rate_locked || String(row.affectation_igv_type_id) !== '10') return row
+        return calculateRowItem(row, doc.currency_type_id, doc.exchange_rate_sale, date_of_issue)
+    })
+    const sum = (ids, field) => items.filter(r => ids.includes(String(r.affectation_igv_type_id)))
+        .reduce((a, r) => a + parseFloat(r[field] || 0), 0)
+    const taxedIds = ['10', '20', '30', '40']
+    doc.items = items
+    doc.total_taxed = _.round(sum(['10'], 'total_value'), 2)
+    doc.total_exonerated = _.round(sum(['20'], 'total_value'), 2)
+    doc.total_unaffected = _.round(sum(['30'], 'total_value'), 2)
+    doc.total_exportation = _.round(sum(['40'], 'total_value'), 2)
+    doc.total_igv = _.round(sum(taxedIds, 'total_igv'), 2)
+    doc.total_taxes = doc.total_igv
+    doc.total_value = _.round(items.reduce((a, r) => a + parseFloat(r.total_value || 0), 0), 2)
+    doc.total = _.round(sum(taxedIds, 'total') + items.reduce((a, r) => a + parseFloat(r.total_plastic_bag_taxes || 0), 0), 2)
+    return true
+}
+
+// Returns re-rated rows for a form when the issue date changes the IGV rate, or null when nothing
+// changes. Locked rows (existing saved documents) are never touched.
+function rerateRowsByDate(items, currency_type_id, exchange_rate_sale, date_of_issue) {
+    if (!needsRerate(items, date_of_issue)) return null
+    return items.map(row => row.igv_rate_locked ? row :
+        calculateRowItem(row, currency_type_id, exchange_rate_sale, date_of_issue))
+}
+
+export {calculateRowItem, rerateDocumentRows, rerateRowsByDate}

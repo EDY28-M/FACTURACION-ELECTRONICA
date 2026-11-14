@@ -305,6 +305,7 @@
 </template>
 
 <script>
+import { rerateDocumentRows } from "../../../../helpers/functions";
 import DocumentOptions from "../../documents/partials/options.vue";
 import SaleNoteOptions from "../../sale_notes/partials/options.vue";
 import SeriesForm from "./series_form.vue";
@@ -475,7 +476,7 @@ export default {
 
         },
         async submit() {
-            
+            rerateDocumentRows(this.document, this.document.date_of_issue);
             let validate_items = await this.validateQuantityandSeries();
             if (!validate_items.success)
                 return this.$message.error(validate_items.message);

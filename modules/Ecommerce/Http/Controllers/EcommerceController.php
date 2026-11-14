@@ -52,7 +52,7 @@ class EcommerceController extends Controller
     {
         $row = Item::find($id);
         $exchange_rate_sale = $this->getExchangeRateSale();
-        $sale_unit_price = ($row->has_igv) ? $row->sale_unit_price : $row->sale_unit_price*1.18;
+        $sale_unit_price = ($row->has_igv) ? $row->sale_unit_price : $row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
 
         $record = (object)[
             'id' => $row->id,
@@ -65,6 +65,7 @@ class EcommerceController extends Controller
             'sale_unit_price' => ($row->currency_type_id === 'PEN') ? $sale_unit_price : ($sale_unit_price * $exchange_rate_sale),
             'currency_type_id' => $row->currency_type_id,
             'has_igv' => (bool) $row->has_igv,
+            'igv_general_rate' => (bool) $row->igv_general_rate,
             'sale_unit' => $row->sale_unit_price,
             'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
             'currency_type_symbol' => $row->currency_type->symbol,

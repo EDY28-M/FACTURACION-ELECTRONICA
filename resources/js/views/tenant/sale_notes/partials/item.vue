@@ -274,13 +274,14 @@
 
     import itemForm from '../../items/form.vue'
     import {calculateRowItem} from '../../../../helpers/functions'
+    import {rowIgvFactor} from '../../../../helpers/igv'
     import SelectLotsForm from '../../documents/partials/lots.vue'
     import LotsGroup from './lots_group.vue'
     import WarehousesDetail from '../../documents/partials/select_warehouses.vue'
 
 
     export default {
-        props: ['showDialog', 'currencyTypeIdActive', 'exchangeRateSale', 'typeUser'],
+        props: ['showDialog', 'currencyTypeIdActive', 'exchangeRateSale', 'dateOfIssue', 'typeUser'],
         components: {itemForm, SelectLotsForm, LotsGroup, WarehousesDetail},
         data() {
             return {
@@ -524,7 +525,7 @@
 
                 if(!affectation_igv_types_exonerated_unaffected.includes(this.form.affectation_igv_type_id)) {
 
-                    unit_price = (this.form.has_igv)?this.form.unit_price:this.form.unit_price*1.18;
+                    unit_price = (this.form.has_igv)?this.form.unit_price:this.form.unit_price*rowIgvFactor(this.form, this.dateOfIssue);
 
                 }
 
@@ -539,7 +540,7 @@
                 let IdLoteSelected = this.form.IdLoteSelected
 
 
-                this.row = await calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale)
+                this.row = await calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale, this.dateOfIssue)
 
                 let select_lots = await _.filter(this.row.item.lots, {'has_sale':true})
                 let un_select_lots = await _.filter(this.row.item.lots, {'has_sale':false})

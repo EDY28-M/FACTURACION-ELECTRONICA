@@ -32,6 +32,7 @@ class PosCollection extends ResourceCollection
                 'purchase_unit_price' => $row->purchase_unit_price,
                 'unit_type_id' => $row->unit_type_id,
                 'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
+                'igv_general_rate' => (bool) $row->igv_general_rate,
                 'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
                 'calculate_quantity' => (bool) $row->calculate_quantity,
                 'has_igv' => (bool) $row->has_igv,

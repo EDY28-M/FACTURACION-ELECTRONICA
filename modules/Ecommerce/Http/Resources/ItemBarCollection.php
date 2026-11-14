@@ -33,7 +33,7 @@ class ItemBarCollection extends ResourceCollection
                 
             }
 
-            $sale_unit_price = ($row->has_igv) ? $row->sale_unit_price : $row->sale_unit_price*1.18;
+            $sale_unit_price = ($row->has_igv) ? $row->sale_unit_price : $row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
 
             return [
                 'id' => $row->id,

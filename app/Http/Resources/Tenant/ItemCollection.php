@@ -54,6 +54,7 @@ class ItemCollection extends ResourceCollection
                 'currency_type_id' => $row->currency_type_id,
                 'currency_type_symbol' => $row->currency_type->symbol,
                 'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
+                'igv_general_rate' => (bool) $row->igv_general_rate,
                 'amount_sale_unit_price' => $row->sale_unit_price,
                 'calculate_quantity' => (bool) $row->calculate_quantity,
                 'has_igv' => (bool) $row->has_igv,

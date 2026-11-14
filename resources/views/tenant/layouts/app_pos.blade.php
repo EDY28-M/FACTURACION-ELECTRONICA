@@ -14,6 +14,7 @@
     {{--    <title>{{ config('app.name', 'Facturación Electrónica') }}</title>--}}
     <title>Facturación Electrónica</title>
 
+    <script>window.TENANT_IGV = {reduced_regime: {{ $vc_compact_sidebar->igv_reduced_regime ? 'true' : 'false' }}};</script>
     <!-- Scripts -->
 
     <!-- Fonts -->

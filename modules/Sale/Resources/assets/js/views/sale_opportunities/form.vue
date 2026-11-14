@@ -179,6 +179,7 @@
 
         <sale-opportunity-form-item :showDialog.sync="showDialogAddItem" 
                            :currency-type-id-active="form.currency_type_id"
+                           :date-of-issue="form.date_of_issue"
                            :exchange-rate-sale="form.exchange_rate_sale"
                            @add="addRow"></sale-opportunity-form-item>
 

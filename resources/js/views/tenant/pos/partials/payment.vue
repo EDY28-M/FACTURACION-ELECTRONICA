@@ -347,6 +347,7 @@
 
 <script>
     import Keypress from 'vue-keypress'
+    import {splitGross} from '../../../../helpers/igv'
 
     import CardBrandsForm from '../../card_brands/form.vue'
     import SaleNotesOptions from '../../sale_notes/partials/options.vue'
@@ -500,10 +501,11 @@
 
                     this.form.total =  _.round(this.form.total - amount, 2)
 
-                    this.form.total_value =  _.round(this.form.total / 1.18, 2)
+                    const split = splitGross(this.form.items, this.form.total, this.form.date_of_issue)
+                    this.form.total_value =  _.round(split.value, 2)
                     this.form.total_taxed =  this.form.total_value
 
-                    this.form.total_igv =  _.round(this.form.total_value * 0.18, 2)
+                    this.form.total_igv =  _.round(split.igv, 2)
                     this.form.total_taxes =  this.form.total_igv
 
                     this.form.discounts.push({
@@ -524,10 +526,11 @@
 
                         this.form.total =  _.round(this.form.total - amount, 2)
 
-                        this.form.total_value =  _.round(this.form.total / 1.18, 2)
+                        const split = splitGross(this.form.items, this.form.total, this.form.date_of_issue)
+                        this.form.total_value =  _.round(split.value, 2)
                         this.form.total_taxed =  this.form.total_value
 
-                        this.form.total_igv =  _.round(this.form.total_value * 0.18, 2)
+                        this.form.total_igv =  _.round(split.igv, 2)
                         this.form.total_taxes =  this.form.total_igv
 
                         this.form.discounts[index].base = base

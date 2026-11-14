@@ -33,6 +33,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script>window.TENANT_IGV = {reduced_regime: {{ $vc_compact_sidebar->igv_reduced_regime ? 'true' : 'false' }}};</script>
     <title>Facturación Electrónica</title>
 
     <link async href="{{ mix('css/app.css') }}" rel="stylesheet">

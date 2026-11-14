@@ -248,7 +248,7 @@ class DocumentController extends Controller
             $prepayment_documents = Document::whereHasPrepayment()->get()->transform(function($row) {
 
                 $total = round($row->pending_amount_prepayment, 2);
-                $amount = ($row->affectation_type_prepayment == '10') ? round($total/1.18, 2) : $total;
+                $amount = ($row->affectation_type_prepayment == '10') ? round($total / (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::fromItems($row->items) / 100), 2) : $total;
 
                 return [
                     'id' => $row->id,
@@ -304,6 +304,7 @@ class DocumentController extends Controller
                     'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
                     'calculate_quantity' => (bool) $row->calculate_quantity,
                     'has_igv' => (bool) $row->has_igv,
+                    'igv_general_rate' => (bool) $row->igv_general_rate,
                     'has_plastic_bag_taxes' => (bool) $row->has_plastic_bag_taxes,
                     'amount_plastic_bag_taxes' => $row->amount_plastic_bag_taxes,
                     'item_unit_types' => collect($row->item_unit_types)->transform(function($row) {

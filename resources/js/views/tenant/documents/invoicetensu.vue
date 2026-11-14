@@ -265,6 +265,7 @@
                            :recordItem="recordItem"
                            :operation-type-id="form.operation_type_id"
                            :currency-type-id-active="form.currency_type_id"
+                           :date-of-issue="form.date_of_issue"
                            :exchange-rate-sale="form.exchange_rate_sale"
                            :user="user"
                            @add="addRow"></document-form-item>

@@ -312,6 +312,7 @@
 import PersonForm from "../../../../../../../resources/js/views/tenant/persons/form.vue";
 import moment from "moment";
 import { calculateRowItem } from "../../../../../../../resources/js/helpers/functions";
+import { rowIgvFactor } from "../../../../../../../resources/js/helpers/igv";
 
 export default {
   components: {
@@ -383,7 +384,7 @@ export default {
           payload.quantity = this.form.duration;
           const unit_price = item.has_igv
             ? payload.unit_price_value
-            : payload.unit_price_value * 1.18;
+            : payload.unit_price_value * rowIgvFactor(payload);
           payload.input_unit_price_value = payload.unit_price_value;
           payload.unit_price = unit_price;
           payload.item.unit_price = unit_price;

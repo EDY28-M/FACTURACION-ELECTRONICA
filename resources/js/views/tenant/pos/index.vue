@@ -920,6 +920,7 @@
 <script>
 import Keypress from "vue-keypress";
 import {calculateRowItem} from "../../../helpers/functions";
+import {rowIgvFactor} from "../../../helpers/igv";
 import PaymentForm from "./partials/payment.vue";
 import ItemForm from "./partials/form.vue";
 import {functions, exchangeRate} from "../../../mixins/functions";
@@ -1539,7 +1540,7 @@ export default {
 
                 let unit_price = exist_item.item.has_igv
                     ? exist_item.item.sale_unit_price
-                    : exist_item.item.sale_unit_price * 1.18;
+                    : exist_item.item.sale_unit_price * rowIgvFactor(exist_item);
                 // exist_item.unit_price = unit_price
                 exist_item.item.unit_price = unit_price;
 
@@ -1578,7 +1579,7 @@ export default {
 
                 let unit_price = this.form_item.has_igv
                     ? this.form_item.unit_price_value
-                    : this.form_item.unit_price_value * 1.18;
+                    : this.form_item.unit_price_value * rowIgvFactor(this.form_item);
 
                 this.form_item.unit_price = unit_price;
                 this.form_item.item.unit_price = unit_price;

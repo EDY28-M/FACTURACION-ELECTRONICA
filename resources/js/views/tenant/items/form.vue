@@ -138,6 +138,12 @@
                             <small class="form-control-feedback" v-if="errors.has_igv" v-text="errors.has_igv[0]"></small>
                         </div>
                     </div>
+                    <div class="col-md-3 center-el-checkbox">
+                        <div class="form-group" :class="{'has-danger': errors.igv_general_rate}">
+                            <el-checkbox v-model="form.igv_general_rate">Tasa general de IGV (no es actividad de restaurante/hotel)</el-checkbox><br>
+                            <small class="form-control-feedback" v-if="errors.igv_general_rate" v-text="errors.igv_general_rate[0]"></small>
+                        </div>
+                    </div>
 
                     <div class="col-md-3 center-el-checkbox">
                         <div class="form-group" :class="{'has-danger': errors.has_plastic_bag_taxes}">
@@ -746,6 +752,7 @@
                     stock: 0,
                     stock_min: 1,
                     has_igv: true,
+                    igv_general_rate: false,
                     has_perception: false,
                     item_unit_types:[],
                     percentage_of_profit: 0,

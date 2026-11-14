@@ -421,6 +421,7 @@ class QuotationController extends Controller
                         'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
                         'is_set' => (bool) $row->is_set,
                         'has_igv' => (bool) $row->has_igv,
+                        'igv_general_rate' => (bool) $row->igv_general_rate,
                         'calculate_quantity' => (bool) $row->calculate_quantity,
                         'item_unit_types' => collect($row->item_unit_types)->transform(function($row) {
                             return [
@@ -488,6 +489,7 @@ class QuotationController extends Controller
                                     'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
                                     'is_set' => (bool) $row->is_set,
                                     'has_igv' => (bool) $row->has_igv,
+                                    'igv_general_rate' => (bool) $row->igv_general_rate,
                                     'calculate_quantity' => (bool) $row->calculate_quantity,
                                     'item_unit_types' => collect($row->item_unit_types)->transform(function($row) {
                                         return [
@@ -539,6 +541,7 @@ class QuotationController extends Controller
                                     'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
                                     'is_set' => (bool) $row->is_set,
                                     'has_igv' => (bool) $row->has_igv,
+                                    'igv_general_rate' => (bool) $row->igv_general_rate,
                                     'calculate_quantity' => (bool) $row->calculate_quantity,
                                     'item_unit_types' => collect($row->item_unit_types)->transform(function($row) {
                                         return [
