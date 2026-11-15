@@ -133,6 +133,14 @@ if($current_hostname) {
     
                 });
 
+                Route::prefix('sire/rvie')->group(function () {
+
+                    Route::get('', 'ReportSireRvieController@index')->name('tenant.reports.sire_rvie.index');
+                    Route::get('preview', 'ReportSireRvieController@preview')->name('tenant.reports.sire_rvie.preview');
+                    Route::get('download', 'ReportSireRvieController@download')->name('tenant.reports.sire_rvie.download');
+
+                });
+
                 Route::prefix('massive-downloads')->group(function () {
 
                     Route::get('', 'ReportMassiveDownloadController@index')->name('tenant.reports.massive-downloads.index');

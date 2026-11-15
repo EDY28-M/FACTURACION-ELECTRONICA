@@ -42,6 +42,9 @@
                     <li>
                         <a href="{{route('tenant.reports.massive-downloads.index')}}">Descarga masiva - documentos</a>
                     </li>
+                    <li>
+                        <a href="{{route('tenant.reports.sire_rvie.index')}}">SIRE - Registro de ventas (RVIE)</a>
+                    </li>
                 </ul>
             </div>
         </div>
