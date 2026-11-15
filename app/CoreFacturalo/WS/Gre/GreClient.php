@@ -38,9 +38,8 @@ class GreClient
 
     public function __construct(array $settings, ClientInterface $http = null, CacheRepository $cache = null)
     {
-        $required = ['ruc', 'token_url', 'api_url', 'client_id', 'client_secret', 'username', 'password'];
         $missing = [];
-        foreach ($required as $key) {
+        foreach ($this->requiredSettings() as $key) {
             if (empty($settings[$key])) {
                 $missing[] = $key;
             }
@@ -77,18 +76,7 @@ class GreClient
             }
         }
 
-        $url = rtrim($this->settings['token_url'], '/').'/clientessol/'.$this->settings['client_id'].'/oauth2/token/';
-
-        $response = $this->request('POST', $url, [
-            'form_params' => [
-                'grant_type' => 'password',
-                'scope' => $this->settings['scope'],
-                'client_id' => $this->settings['client_id'],
-                'client_secret' => $this->settings['client_secret'],
-                'username' => $this->settings['username'],
-                'password' => $this->settings['password'],
-            ],
-        ]);
+        $response = $this->request('POST', $this->tokenUrl(), $this->tokenRequestOptions());
 
         $status = $response->getStatusCode();
         $body = $this->decode((string) $response->getBody());
@@ -107,6 +95,33 @@ class GreClient
         $this->cache->put($key, $body['access_token'], $ttl);
 
         return $body['access_token'];
+    }
+
+    /** Settings that must be present; subclasses with a different OAuth flow override it. */
+    protected function requiredSettings()
+    {
+        return ['ruc', 'token_url', 'api_url', 'client_id', 'client_secret', 'username', 'password'];
+    }
+
+    /** Token endpoint (password grant against the "clientessol" realm by default). */
+    protected function tokenUrl()
+    {
+        return rtrim($this->settings['token_url'], '/').'/clientessol/'.$this->settings['client_id'].'/oauth2/token/';
+    }
+
+    /** Guzzle options of the token request. */
+    protected function tokenRequestOptions()
+    {
+        return [
+            'form_params' => [
+                'grant_type' => 'password',
+                'scope' => $this->settings['scope'],
+                'client_id' => $this->settings['client_id'],
+                'client_secret' => $this->settings['client_secret'],
+                'username' => $this->settings['username'],
+                'password' => $this->settings['password'],
+            ],
+        ];
     }
 
     /**
@@ -268,8 +283,8 @@ class GreClient
         return is_array($decoded) ? $decoded : [];
     }
 
-    private function tokenCacheKey()
+    protected function tokenCacheKey()
     {
-        return $this->cachePrefix.':token:'.$this->settings['ruc'].':'.$this->settings['client_id'].':'.md5($this->settings['scope']).':'.md5($this->settings['username']).':'.md5($this->settings['client_secret'].$this->settings['password']);
+        return $this->cachePrefix.':token:'.$this->settings['ruc'].':'.$this->settings['client_id'].':'.md5($this->settings['scope']).':'.md5($this->settings['username'] ?? '').':'.md5($this->settings['client_secret'].($this->settings['password'] ?? ''));
     }
 }

@@ -255,7 +255,7 @@ class RceReplacementBuilder
         return [
             'rows' => 0, 'by_type' => [], 'taxed' => 0.0, 'igv' => 0.0, 'ng' => 0.0, 'total' => 0.0,
             'warnings' => [], 'warn_count' => 0, 'errors' => [], 'err_count' => 0,
-            'voided' => 0, 'voided_ids' => [], 'converted' => 0, 'unsupported' => [], 'unsupported_count' => 0,
+            'voided' => 0, 'voided_ids' => [], 'sunat_flagged' => 0, 'sunat_flagged_ids' => [], 'converted' => 0, 'unsupported' => [], 'unsupported_count' => 0,
         ];
     }
 
@@ -287,6 +287,15 @@ class RceReplacementBuilder
         }
         if ($errors) {
             return;
+        }
+
+        // Result of the SUNAT validity check (when it was run): the document is still declared, but flagged.
+        $validation = (string) ($doc['sunat_validation_status'] ?? '');
+        if (in_array($validation, ['no_existe', 'anulado', 'no_autorizado'], true)) {
+            $state['sunat_flagged']++;
+            if (count($state['sunat_flagged_ids']) < 8) {
+                $state['sunat_flagged_ids'][] = $label.' ('.str_replace('_', ' ', $validation).')';
+            }
         }
 
         $fields = self::mapRow($doc, $ruc, $companyName, $period);
@@ -338,6 +347,9 @@ class RceReplacementBuilder
         }
         if ($state['unsupported_count']) {
             SireSupport::addMessage($state, 'warnings', sprintf('%d compra(s) con tipo de comprobante no soportado (DAM/DSI u otros) no se incluyen: %s', $state['unsupported_count'], SireSupport::preview($state['unsupported'], 8, $state['unsupported_count'])));
+        }
+        if ($state['sunat_flagged']) {
+            SireSupport::addMessage($state, 'warnings', sprintf('%d compra(s) figuran como anuladas, inexistentes o no autorizadas en la validación SUNAT: %s', $state['sunat_flagged'], SireSupport::preview($state['sunat_flagged_ids'], 8, $state['sunat_flagged'])));
         }
         if ($state['converted']) {
             SireSupport::addMessage($state, 'warnings', sprintf('%d compra(s) en moneda extranjera se informan convertidas a soles con su tipo de cambio.', $state['converted']));
@@ -392,6 +404,7 @@ class RceReplacementBuilder
             'date_of_issue' => $purchase->date_of_issue->format('Y-m-d'),
             'due_date' => $purchase->date_of_due ? $purchase->date_of_due->format('Y-m-d') : null,
             'state_type_id' => $purchase->state_type_id,
+            'sunat_validation_status' => $purchase->sunat_validation_status,
             'supplier' => [
                 'identity_document_type_id' => $supplier->identity_document_type_id ?? '',
                 'number' => $supplier->number ?? '',

@@ -74,6 +74,8 @@ class Purchase extends ModelTenant
         'date_of_issue' => 'date',
         'date_of_due' => 'date',
         'affected_date_of_issue' => 'date',
+        'sunat_validation_detail' => 'array',
+        'sunat_validated_at' => 'datetime',
     ];
 
     

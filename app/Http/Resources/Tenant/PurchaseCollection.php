@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Tenant;
 
+use App\CoreFacturalo\Services\Cpe\PurchaseValidationService;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 
 class PurchaseCollection extends ResourceCollection
@@ -44,6 +45,12 @@ class PurchaseCollection extends ResourceCollection
                 'state_type_description' => $row->state_type->description,
                 'state_type_payment_description' => $row->total_canceled ? 'Pagado':'Pendiente de pago',
                 // 'payment_method_type_description' => isset($row->purchase_payments['payment_method_type']['description'])?$row->purchase_payments['payment_method_type']['description']:'-',
+                'sunat_validation_status' => $row->sunat_validation_status,
+                'sunat_validation_label' => $row->sunat_validation_status
+                    ? (PurchaseValidationService::LABELS[$row->sunat_validation_status] ?? $row->sunat_validation_status)
+                    : null,
+                'sunat_validation_detail' => $row->sunat_validation_detail,
+                'sunat_validated_at' => $row->sunat_validated_at ? $row->sunat_validated_at->format('d/m/Y H:i') : null,
                 'created_at' => $row->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $row->updated_at->format('Y-m-d H:i:s'),
                 'payments' => $row->purchase_payments->transform(function($row, $key) {

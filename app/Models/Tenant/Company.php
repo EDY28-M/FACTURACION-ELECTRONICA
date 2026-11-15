@@ -26,9 +26,10 @@ class Company extends ModelTenant
         'img_firm',
         'gre_client_id',
         'sire_client_id',
+        'cpe_client_id',
     ];
 
-    protected $hidden = ['gre_client_secret', 'sire_client_secret'];
+    protected $hidden = ['gre_client_secret', 'sire_client_secret', 'cpe_client_secret'];
 
     /**
      * Stores the GRE API client secret encrypted. Null/empty clears it.
@@ -92,6 +93,38 @@ class Company extends ModelTenant
     public function hasSireClientSecret()
     {
         return !empty($this->attributes['sire_client_secret'] ?? null);
+    }
+
+    /**
+     * Stores the client secret of the "Consulta de validez de comprobantes" API encrypted. Null/empty clears it.
+     */
+    public function setCpeClientSecret($plain)
+    {
+        $this->attributes['cpe_client_secret'] = ($plain === null || $plain === '') ? null : encrypt($plain);
+    }
+
+    /**
+     * Returns the decrypted client secret of the validity API (backend use only).
+     */
+    public function getCpeClientSecret()
+    {
+        $value = $this->attributes['cpe_client_secret'] ?? null;
+        if (!$value) {
+            return null;
+        }
+
+        try {
+            return decrypt($value);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            throw new \App\CoreFacturalo\WS\Gre\Exceptions\GreConfigurationException(
+                'No se pudo leer el client_secret de la consulta de validez guardado; vuelve a ingresarlo en la configuración de la empresa.'
+            );
+        }
+    }
+
+    public function hasCpeClientSecret()
+    {
+        return !empty($this->attributes['cpe_client_secret'] ?? null);
     }
 
     public function identity_document_type()

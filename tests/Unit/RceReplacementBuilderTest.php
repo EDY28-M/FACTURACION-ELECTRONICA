@@ -93,6 +93,16 @@ class RceReplacementBuilderTest extends TestCase
         $this->assertSame('LE1076728374720261000080400020012.zip', B::filename('10767283747', 2026, 10, false, false, 1, 'zip'));
     }
 
+    public function test_sunat_validation_problem_adds_a_warning_but_keeps_the_row(): void
+    {
+        $r = B::buildFromDocuments([$this->doc(['sunat_validation_status' => 'anulado'])], '10767283747', 'KeraAI', 2026, 10);
+        $this->assertSame(1, $r['rows_count']);
+        $this->assertStringContainsString('validación SUNAT', implode(' ', $r['warnings']));
+
+        $ok = B::buildFromDocuments([$this->doc(['sunat_validation_status' => 'aceptado'])], '10767283747', 'KeraAI', 2026, 10);
+        $this->assertStringNotContainsString('validación SUNAT', implode(' ', $ok['warnings']));
+    }
+
     public function test_empty_period(): void
     {
         $r = B::buildFromDocuments([], '10767283747', 'KeraAI', 2026, 10);

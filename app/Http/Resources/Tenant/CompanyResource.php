@@ -40,6 +40,8 @@ class CompanyResource extends JsonResource
             'has_gre_client_secret' => $this->hasGreClientSecret(),
             'sire_client_id' => $this->sire_client_id,
             'has_sire_client_secret' => $this->hasSireClientSecret(),
+            'cpe_client_id' => $this->cpe_client_id,
+            'has_cpe_client_secret' => $this->hasCpeClientSecret(),
         ];
     }
 }

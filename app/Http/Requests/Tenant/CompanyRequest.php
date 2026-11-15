@@ -12,6 +12,19 @@ class CompanyRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation()
+    {
+        $trimmed = [];
+        foreach (['cpe_client_id', 'cpe_client_secret'] as $key) {
+            if (is_string($this->input($key))) {
+                $trimmed[$key] = trim($this->input($key));
+            }
+        }
+        if ($trimmed) {
+            $this->merge($trimmed);
+        }
+    }
+
     public function rules()
     {
         $id = $this->input('id');
@@ -45,6 +58,15 @@ class CompanyRequest extends FormRequest
                 'max:100',
             ],
             'sire_client_secret' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'cpe_client_id' => [
+                'nullable',
+                'max:100',
+            ],
+            'cpe_client_secret' => [
                 'nullable',
                 'string',
                 'max:255',

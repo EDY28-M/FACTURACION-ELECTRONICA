@@ -47,6 +47,10 @@ class CompanyController extends Controller
             $company->setSireClientSecret($request->input('sire_client_secret'));
         }
 
+        if (filled($request->input('cpe_client_secret'))) {
+            $company->setCpeClientSecret($request->input('cpe_client_secret'));
+        }
+
         $company->save();
 
         return [

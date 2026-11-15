@@ -381,6 +381,9 @@ if ($hostname) {
 			Route::post('purchases/import', 'Tenant\PurchaseController@import');
 			// Route::get('purchases/print/{external_id}/{format?}', 'Tenant\PurchaseController@toPrint');
 			Route::get('purchases/search-items', 'Tenant\PurchaseController@searchItems');
+			// SUNAT "Consulta de validez de comprobantes" for supplier documents.
+			Route::post('purchases/validate-sunat-period', 'Tenant\PurchaseSunatValidationController@validatePeriod');
+			Route::post('purchases/{id}/validate-sunat', 'Tenant\PurchaseSunatValidationController@validateOne')->where('id', '[0-9]+');
 			Route::get('purchases/search/item/{item}', 'Tenant\PurchaseController@searchItemById');
 			// Route::get('purchases/item_resource/{id}', 'Tenant\PurchaseController@itemResource');
 

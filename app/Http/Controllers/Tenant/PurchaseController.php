@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use Illuminate\Http\Request;
+use App\CoreFacturalo\Services\Cpe\PurchaseValidationService;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Person;
 use App\Models\Tenant\Catalogs\CurrencyType;
@@ -274,10 +275,15 @@ class PurchaseController extends Controller
         $purchase = DB::connection('tenant')->transaction(function () use ($request) {
 
             $doc = Purchase::firstOrNew(['id' => $request['id']]);
+            $validationBefore = $doc->exists ? PurchaseValidationService::fingerprint($doc) : null;
             $doc->fill($request->all());
             $doc->supplier = PersonInput::set($request['supplier_id']);
             $doc->group_id = ($request->document_type_id === '01') ? '01':'02';
             $doc->user_id = auth()->id();
+            // The SUNAT validation result belongs to the validated data: drop it when that data changes.
+            if ($validationBefore !== null && $validationBefore !== PurchaseValidationService::fingerprint($doc)) {
+                PurchaseValidationService::resetValidation($doc);
+            }
             $doc->save();
 
             foreach ($doc->items as $it) {

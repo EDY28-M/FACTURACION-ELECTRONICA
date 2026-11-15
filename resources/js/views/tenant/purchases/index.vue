@@ -8,6 +8,7 @@
             <div class="right-wrapper pull-right">
                 <a :href="`/${resource}/create`" class="btn btn-custom btn-sm  mt-2 mr-2"><i class="fa fa-plus-circle"></i> Nuevo</a>
                 <button   @click.prevent="clickImport()" type="button" class="btn btn-custom btn-sm  mt-2 mr-2" ><i class="fa fa-upload"></i> Importar</button>
+                <button @click.prevent="openBulkValidation()" type="button" class="btn btn-custom btn-sm mt-2 mr-2"><i class="fa fa-check-circle"></i> Validar compras del mes</button>
 
             </div>
         </div>
@@ -33,6 +34,7 @@
                         <th>Proveedor</th>
                         <th>Estado</th>
                         <th>Estado de pago</th>
+                        <th>SUNAT</th>
                         <th>Número</th>
                         <th>Productos</th>
                         <th>Pagos</th>
@@ -57,6 +59,19 @@
                         <td>{{ row.supplier_name }}<br/><small v-text="row.supplier_number"></small></td>
                         <td>{{row.state_type_description}}</td>
                         <td>{{row.state_type_payment_description}}</td>
+                        <td>
+                            <el-tooltip v-if="row.sunat_validation_status" placement="top" effect="dark">
+                                <div slot="content" style="max-width: 280px">
+                                    <div v-if="row.sunat_validation_detail && row.sunat_validation_detail.estadoRucLabel">Estado RUC: {{ row.sunat_validation_detail.estadoRucLabel }}</div>
+                                    <div v-if="row.sunat_validation_detail && row.sunat_validation_detail.condDomiRucLabel">Condición: {{ row.sunat_validation_detail.condDomiRucLabel }}</div>
+                                    <div v-if="row.sunat_validation_detail && row.sunat_validation_detail.message">{{ row.sunat_validation_detail.message }}</div>
+                                    <div v-for="(obs, i) in ((row.sunat_validation_detail && row.sunat_validation_detail.observaciones) || [])" :key="i">{{ obs }}</div>
+                                    <div>Validado: {{ row.sunat_validated_at }}</div>
+                                </div>
+                                <span class="badge" :class="sunatBadgeClass(row.sunat_validation_status)">{{ row.sunat_validation_label }}</span>
+                            </el-tooltip>
+                            <span v-else class="text-muted">&mdash;</span>
+                        </td>
                         <td>{{ row.number }}<br/>
                             <small v-text="row.document_type_description"></small><br/>
                         </td>
@@ -106,6 +121,7 @@
                             <a v-if="row.state_type_id != '11'" :href="`/${resource}/edit/${row.id}`" type="button" class="btn waves-effect waves-light btn-xs btn-info">Editar</a>
                             <button v-if="row.state_type_id != '11'" type="button" class="btn waves-effect waves-light btn-xs btn-danger" @click.prevent="clickAnulate(row.id)">Anular</button>
                             <button v-if="row.state_type_id == '11'" type="button" class="btn waves-effect waves-light btn-xs btn-danger" @click.prevent="clickDelete(row.id)">Eliminar</button>
+                            <button v-if="row.state_type_id != '11'" type="button" class="btn waves-effect waves-light btn-xs btn-secondary" :disabled="validatingId === row.id" @click.prevent="clickValidateSunat(row.id)"><i class="fa fa-spinner fa-spin" v-if="validatingId === row.id"></i> Validar en SUNAT</button>
                             <button  type="button" class="btn waves-effect waves-light btn-xs btn-primary" @click.prevent="clickOptions(row.id)">Opciones</button>
 
 
@@ -151,6 +167,26 @@
         <purchase-options :showDialog.sync="showDialogOptions"
                           :recordId="recordId"
                           :showClose="true"></purchase-options>
+
+        <el-dialog title="Validar compras del mes en SUNAT" :visible.sync="showBulkDialog" width="460px"
+                   :close-on-click-modal="false" :before-close="closeBulkDialog" append-to-body>
+            <div class="form-group">
+                <label class="control-label">Periodo</label><br/>
+                <el-date-picker v-model="bulk.period" type="month" value-format="yyyyMM" format="MM/yyyy"
+                                placeholder="Seleccione el mes" :clearable="false" :disabled="bulk.running"></el-date-picker>
+            </div>
+            <el-checkbox v-model="bulk.onlyPending" :disabled="bulk.running">Solo compras pendientes de validar</el-checkbox>
+            <div class="mt-3" v-if="bulk.started">
+                <el-progress :percentage="bulkPercentage" :status="bulk.error ? 'exception' : (bulk.running ? null : 'success')"></el-progress>
+                <div class="mt-2 text-muted"><small>Validadas: {{ bulk.processed }}<span v-if="bulk.total > 0"> de {{ bulk.total }}</span></small></div>
+                <div class="mt-1" v-if="bulkSummary"><small>{{ bulkSummary }}</small></div>
+                <div class="mt-2 text-danger" v-if="bulk.error"><small>{{ bulk.error }}</small></div>
+            </div>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="closeBulkDialog" :disabled="bulk.running">Cerrar</el-button>
+                <el-button type="primary" :loading="bulk.running" :disabled="!bulk.period" @click="runBulkValidation">Validar</el-button>
+            </span>
+        </el-dialog>
     </div>
 </template>
 
@@ -178,6 +214,18 @@
                 showDialogOptions: false,
                 showDialogPurchasePayments: false,
                 showImportDialog: false,
+                validatingId: null,
+                showBulkDialog: false,
+                bulk: {
+                    period: null,
+                    onlyPending: true,
+                    running: false,
+                    started: false,
+                    processed: 0,
+                    total: 0,
+                    byStatus: {},
+                    error: null,
+                },
                 columns: {
                     date_of_due: {
                         title: 'F. Vencimiento',
@@ -213,7 +261,107 @@
         },
         created() {
         },
+        computed: {
+            bulkPercentage() {
+                if (!this.bulk.total) {
+                    return this.bulk.running ? 0 : 100
+                }
+                return Math.min(100, Math.round(this.bulk.processed * 100 / this.bulk.total))
+            },
+            bulkSummary() {
+                const labels = {
+                    aceptado: 'Aceptado', anulado: 'Anulado', no_existe: 'No existe', autorizado: 'Autorizado',
+                    no_autorizado: 'No autorizado', no_aplica: 'No aplica', error: 'Error'
+                }
+                return Object.keys(this.bulk.byStatus)
+                    .map(key => `${labels[key] || key}: ${this.bulk.byStatus[key]}`)
+                    .join(' | ')
+            },
+        },
         methods: {
+            sunatBadgeClass(status) {
+                return {
+                    aceptado: 'badge-success',
+                    anulado: 'badge-danger',
+                    no_existe: 'badge-danger',
+                    no_autorizado: 'badge-danger',
+                    autorizado: 'badge-info',
+                }[status] || 'badge-secondary'
+            },
+            errorMessage(error) {
+                return (error.response && error.response.data && error.response.data.message)
+                    || 'No se pudo completar la operación. Intente nuevamente.'
+            },
+            clickValidateSunat(id) {
+                this.validatingId = id
+                this.$http.post(`/${this.resource}/${id}/validate-sunat`)
+                    .then(response => {
+                        this.$message[response.data.validation && response.data.validation.status === 'no_aplica' ? 'warning' : 'success'](response.data.message)
+                        this.$eventHub.$emit('reloadData')
+                    })
+                    .catch(error => this.$message.error(this.errorMessage(error)))
+                    .then(() => { this.validatingId = null })
+            },
+            openBulkValidation() {
+                if (!this.bulk.period) {
+                    const now = new Date()
+                    this.bulk.period = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+                }
+                this.showBulkDialog = true
+            },
+            closeBulkDialog() {
+                if (this.bulk.running) {
+                    return
+                }
+                this.showBulkDialog = false
+            },
+            async runBulkValidation() {
+                this.bulk.running = true
+                this.bulk.started = true
+                this.bulk.processed = 0
+                this.bulk.total = 0
+                this.bulk.byStatus = {}
+                this.bulk.error = null
+
+                let afterId = null
+                try {
+                    while (true) {
+                        const response = await this.$http.post(`/${this.resource}/validate-sunat-period`, {
+                            period: this.bulk.period,
+                            only_pending: this.bulk.onlyPending,
+                            after_id: afterId,
+                        })
+                        const data = response.data
+                        this.bulk.processed += data.processed
+                        this.bulk.total = this.bulk.processed + data.remaining
+                        Object.keys(data.by_status).forEach(key => {
+                            this.$set(this.bulk.byStatus, key, (this.bulk.byStatus[key] || 0) + data.by_status[key])
+                        })
+                        afterId = data.next_after_id
+
+                        if (data.stopped) {
+                            this.bulk.error = data.message
+                            break
+                        }
+                        if (!data.remaining || !data.processed) {
+                            break
+                        }
+                    }
+                } catch (error) {
+                    // The server reports the progress stored before the failure: keep those counters.
+                    const data = (error.response && error.response.data) || {}
+                    if (data.processed) {
+                        this.bulk.processed += data.processed
+                        Object.keys(data.by_status || {}).forEach(key => {
+                            this.$set(this.bulk.byStatus, key, (this.bulk.byStatus[key] || 0) + data.by_status[key])
+                        })
+                    }
+                    this.bulk.error = this.errorMessage(error)
+                    this.$message.error(this.bulk.error)
+                }
+                this.bulk.running = false
+                this.$eventHub.$emit('reloadData')
+            },
             clickPurchasePayment(recordId) {
                 this.recordId = recordId;
                 this.showDialogPurchasePayments = true
