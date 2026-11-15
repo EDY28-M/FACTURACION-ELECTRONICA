@@ -139,7 +139,7 @@ export default {
           formItem.item.unit_price = unit_price;
           formItem.item.presentation = {};
           formItem.affectation_igv_type = affectation_igv_code;
-          let row = calculateRowItem(formItem, "PEN", 3.393);
+          let row = calculateRowItem(formItem, "PEN", 3.393, null, false);
           row.warehouse_id = 1;
           row.warehouse_description = "Almacén Oficina Principal";
 
@@ -171,7 +171,7 @@ export default {
         formItem.item.unit_price = unit_price;
         formItem.item.presentation = {};
         formItem.affectation_igv_type = affectation_igv_code;
-        let row = calculateRowItem(formItem, "PEN", 3.393);
+        let row = calculateRowItem(formItem, "PEN", 3.393, null, false);
         row.warehouse_id = 1;
         row.warehouse_description = "Almacén Oficina Principal";
 

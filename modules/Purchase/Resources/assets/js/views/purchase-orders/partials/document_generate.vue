@@ -482,7 +482,9 @@ export default {
                   calculateRowItem(
                     row,
                     this.form.currency_type_id,
-                    this.form.exchange_rate_sale
+                    this.form.exchange_rate_sale,
+                    null,
+                    false
                   )
                 );
               });

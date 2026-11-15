@@ -305,7 +305,7 @@
                 this.form.item.unit_price = this.form.unit_price
                 this.form.item.presentation = this.item_unit_type;
                 this.form.affectation_igv_type = _.find(this.affectation_igv_types, {'id': this.form.affectation_igv_type_id})
-                this.row = await calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale)
+                this.row = await calculateRowItem(this.form, this.currencyTypeIdActive, this.exchangeRateSale, null, false)
                 this.row.fixed_asset_item_id = await this.row.item_id
                 this.initForm()
                 this.$emit('add', this.row)
