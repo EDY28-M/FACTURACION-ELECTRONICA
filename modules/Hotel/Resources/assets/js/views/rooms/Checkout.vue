@@ -160,6 +160,58 @@
               </table>
             </div>
           </div>
+          <div class="col-12" v-if="canOfferLodgingExport">
+            <div class="card border-info mb-3">
+              <div class="card-body">
+                <el-checkbox v-model="lodgingExport.enabled">
+                  Huésped no domiciliado (exportación de hospedaje - 0202)
+                </el-checkbox>
+                <small class="d-block text-muted mt-1">
+                  Operación inafecta al IGV (art. 33 de la Ley del IGV). La permanencia no
+                  puede exceder {{ maxStayDays }} días por ingreso. El establecimiento debe
+                  conservar copia del pasaporte. Solo las líneas de hospedaje se emiten como
+                  exportación; el consumo adicional mantiene su afectación.
+                </small>
+                <div class="row mt-3" v-if="lodgingExport.enabled">
+                  <div class="col-md-3">
+                    <label class="control-label">País emisor del pasaporte</label>
+                    <el-select v-model="lodgingExport.passportCountry" filterable>
+                      <el-option
+                        v-for="c in countries"
+                        :key="c.id"
+                        :value="c.id"
+                        :label="c.description"
+                      ></el-option>
+                    </el-select>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="control-label">País de residencia</label>
+                    <el-select v-model="lodgingExport.residenceCountry" filterable>
+                      <el-option
+                        v-for="c in countries"
+                        :key="c.id"
+                        :value="c.id"
+                        :label="c.description"
+                      ></el-option>
+                    </el-select>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="control-label">Fecha de ingreso al país</label>
+                    <el-date-picker
+                      v-model="lodgingExport.entryDate"
+                      type="date"
+                      value-format="yyyy-MM-dd"
+                      :clearable="false"
+                    ></el-date-picker>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="control-label">Días de permanencia</label>
+                    <el-input :value="lodgingNights" readonly></el-input>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="col-lg-3">
             <div
               class="form-group"
@@ -389,6 +441,14 @@ export default {
       type: String,
       required: true,
     },
+    countries: {
+      type: Array,
+      default: () => [],
+    },
+    lodgingExportEnabled: {
+      type: Boolean,
+      default: false,
+    },
   },
   data() {
     return {
@@ -410,7 +470,39 @@ export default {
       showDialogDocumentOptions: false,
       documentNewId: null,
       form_cash_document: {},
+      maxStayDays: 60,
+      lodgingExport: {
+        enabled: false,
+        passportCountry: null,
+        residenceCountry: null,
+        entryDate: null,
+      },
     };
+  },
+  computed: {
+    // Operation 0202 is offered only for guests identified with a passport (catalog 06 code 7).
+    canOfferLodgingExport() {
+      return (
+        this.lodgingExportEnabled &&
+        this.rent.customer &&
+        String(this.rent.customer.identity_document_type_id) === "7"
+      );
+    },
+    lodgingNights() {
+      return parseInt(this.room.item.quantity) || 0;
+    },
+    lodgingCheckIn() {
+      return moment(this.rent.input_date).format("YYYY-MM-DD");
+    },
+    // Check-out implied by the billed nights; the late checkout charge is money, not extra nights.
+    lodgingCheckOut() {
+      return moment(this.lodgingCheckIn)
+        .add(this.lodgingNights, "days")
+        .format("YYYY-MM-DD");
+    },
+    rentCheckOutDate() {
+      return moment(this.rent.output_date).format("YYYY-MM-DD");
+    },
   },
   async mounted() {
     this.initForm();
@@ -423,6 +515,7 @@ export default {
     this.onCalculatePaidAndDebts();
     this.clickAddPayment();
     this.validateIdentityDocumentType();
+    this.initLodgingExport();
     const date = moment().format("YYYY-MM-DD");
     await this.searchExchangeRateByDate(date).then((res) => {
       this.document.exchange_rate_sale = res;
@@ -441,6 +534,75 @@ export default {
     },
   },
   methods: {
+    initLodgingExport() {
+      const countryId = this.customer && this.customer.country_id;
+      const defaultCountry = this.countries.some((c) => c.id === countryId)
+        ? countryId
+        : null;
+      this.lodgingExport.passportCountry = defaultCountry;
+      this.lodgingExport.residenceCountry = defaultCountry;
+      this.lodgingExport.entryDate = this.lodgingCheckIn;
+    },
+    // Returns an error message when the 0202 data is incomplete or breaks the SUNAT rules.
+    validateLodgingExport() {
+      const data = this.lodgingExport;
+      if (!data.passportCountry || !data.residenceCountry) {
+        return "Indique el país emisor del pasaporte y el país de residencia.";
+      }
+      if (!data.entryDate) {
+        return "Indique la fecha de ingreso al país.";
+      }
+      if (data.entryDate > this.lodgingCheckIn) {
+        return "La fecha de ingreso al país no puede ser posterior al ingreso al establecimiento.";
+      }
+      if (this.rentCheckOutDate !== this.lodgingCheckOut) {
+        return "La fecha de salida de la reserva no coincide con las noches facturadas. Ajuste la estancia antes de emitir una operación 0202.";
+      }
+      const days = this.lodgingNights;
+      if (this.lodgingNights < 1) {
+        return "El número de días de permanencia debe ser al menos 1.";
+      }
+      if (this.lodgingNights > this.maxStayDays || days > this.maxStayDays) {
+        return `La permanencia no puede exceder ${this.maxStayDays} días para operaciones 0202.`;
+      }
+      return null;
+    },
+    // Re-rates the room line as export (affectation 40, no IGV) and attaches catalog 55 properties.
+    applyLodgingExport() {
+      this.document.operation_type_id = "0202";
+      // Match the room line by its position in the rent (same order as document.items).
+      const roomIndex = this.rent.items.findIndex((i) => i.type === "HAB");
+      this.document.items = this.document.items.map((it, index) => {
+        if (index !== roomIndex) {
+          return it;
+        }
+        it = { ...it };
+        it.affectation_igv_type_id = "40";
+        it.affectation_igv_type = {
+          id: "40",
+          description: "Exportación de bienes o servicios",
+          exportation: true,
+          free: false,
+        };
+        it.attributes = [
+          ["4000", "Beneficio Hospedajes-Paquete turístico: Código de país de emisión del pasaporte", { value: this.lodgingExport.passportCountry }],
+          ["4001", "Beneficio Hospedajes: Código de país de residencia del sujeto no domiciliado", { value: this.lodgingExport.residenceCountry }],
+          ["4002", "Beneficio Hospedajes: Fecha de ingreso al país", { start_date: this.lodgingExport.entryDate }],
+          ["4003", "Beneficio Hospedajes: Fecha de Ingreso al Establecimiento", { start_date: this.lodgingCheckIn }],
+          ["4004", "Beneficio Hospedajes: Fecha de Salida del Establecimiento", { end_date: this.lodgingCheckOut }],
+          ["4005", "Beneficio Hospedajes: Número de Días de Permanencia", { duration: this.lodgingNights }],
+        ].map(([attribute_type_id, description, extra]) => ({
+          attribute_type_id,
+          description,
+          value: null,
+          start_date: null,
+          end_date: null,
+          duration: null,
+          ...extra,
+        }));
+        return calculateRowItem(it, "PEN", 3);
+      });
+    },
     validateIdentityDocumentType() {
       let identity_document_types = ["0", "1"];
       let customer = this.document.customer;
@@ -502,7 +664,18 @@ export default {
       };
     },
     async onGoToInvoice() {
+      // Always start from the stored rows: a previous attempt may have re-rated the room line.
+      this.document.items = this.rent.items.map((i) => i.item);
       this.onUpdateItemsWithExtras();
+      if (this.canOfferLodgingExport && this.lodgingExport.enabled) {
+        const lodgingError = this.validateLodgingExport();
+        if (lodgingError) {
+          return this.$message.error(lodgingError);
+        }
+        this.applyLodgingExport();
+      } else {
+        this.document.operation_type_id = "0101";
+      }
       this.onCalculateTotals();
       let validate_payment_destination = this.validatePaymentDestination();
 
@@ -667,6 +840,9 @@ export default {
 
         if (row.affectation_igv_type_id === "10") {
           total_taxed += parseFloat(row.total_value);
+        }
+        if (row.affectation_igv_type_id === "40") {
+          total_exportation += parseFloat(row.total_value);
         }
         if (["10", "20", "30", "40"].indexOf(row.affectation_igv_type_id) < 0) {
           total_free += parseFloat(row.total_value);

@@ -13,7 +13,9 @@ use App\Models\Tenant\Establishment;
 use Modules\Hotel\Models\HotelRentItem;
 use App\Models\Tenant\PaymentMethodType;
 use Modules\Finance\Traits\FinanceTrait;
+use App\Models\Tenant\Catalogs\Country;
 use App\Models\Tenant\Catalogs\DocumentType;
+use App\Models\Tenant\Catalogs\OperationType;
 use Modules\Hotel\Http\Requests\HotelRentRequest;
 use App\Models\Tenant\Catalogs\AffectationIgvType;
 use Modules\Hotel\Http\Requests\HotelRentItemRequest;
@@ -143,8 +145,10 @@ class HotelRentController extends Controller
         $document_types_invoice = DocumentType::whereIn('id', ['01', '03', '80'])->get();
         $user = auth()->user();
         $warehouse_id = $user->establishment_id;
+        $countries = Country::whereActive()->orderBy('description')->get(['id', 'description']);
+        $lodging_export_enabled = OperationType::whereActive()->where('id', '0202')->exists();
 
-		return view('hotel::rooms.checkout', compact('rent', 'room', 'token', 'customer', 'payment_method_types', 'payment_destinations', 'series', 'document_types_invoice', 'warehouse_id'));
+		return view('hotel::rooms.checkout', compact('rent', 'room', 'token', 'customer', 'payment_method_types', 'payment_destinations', 'series', 'document_types_invoice', 'warehouse_id', 'countries', 'lodging_export_enabled'));
 	}
 
 	public function finalizeRent($rentId)
@@ -170,7 +174,7 @@ class HotelRentController extends Controller
 		$customers = Person::with('addresses')
 			->whereType('customers')
 			->whereIsEnabled()
-			->whereIn('identity_document_type_id', [1, 6])
+			->whereIn('identity_document_type_id', [1, 6, 7])
 			->orderBy('name');
 
 		$query = request('input');

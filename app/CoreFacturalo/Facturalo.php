@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Modules\Finance\Traits\FinanceTrait;
 use App\CoreFacturalo\WS\Client\WsClient;
 use App\CoreFacturalo\Helpers\Sunat\BoletaIdentification;
+use App\CoreFacturalo\Helpers\Sunat\HospitalityExport;
 use App\CoreFacturalo\Helpers\Sunat\RucValidator;
 use App\CoreFacturalo\Helpers\Sunat\ProductCode;
 use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
@@ -112,6 +113,7 @@ class Facturalo
             $this->assertBoletaIdentification($inputs);
             $this->assertCustomerRuc($inputs);
             $this->assertItemProductCodes($inputs);
+            $this->assertHospitalityExport($inputs);
         }
 
         switch ($this->type) {
@@ -614,6 +616,21 @@ class Facturalo
             $customer['identity_document_type_id'] ?? null,
             $customer['number'] ?? null
         );
+    }
+
+    /**
+     * Operation type 0202 (lodging export to non-domiciled guests): passport, stay up to 60 days,
+     * Catalogo 55 properties 4000-4005 and affectation 40 without IGV.
+     */
+    private function assertHospitalityExport(array $inputs)
+    {
+        if ($this->type !== 'invoice') {
+            return;
+        }
+
+        HospitalityExport::assert($inputs, function ($id) {
+            return \App\Models\Tenant\Catalogs\Country::where('id', $id)->exists();
+        });
     }
 
     /**
