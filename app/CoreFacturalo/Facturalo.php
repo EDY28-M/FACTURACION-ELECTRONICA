@@ -21,6 +21,7 @@ use App\Models\Tenant\Configuration;
 use Illuminate\Support\Facades\Mail;
 use Modules\Finance\Traits\FinanceTrait;
 use App\CoreFacturalo\WS\Client\WsClient;
+use App\CoreFacturalo\Helpers\Sunat\BoletaIdentification;
 use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
 use App\CoreFacturalo\Helpers\Xml\XmlHash;
 use App\CoreFacturalo\WS\Signed\XmlSigned;
@@ -102,8 +103,10 @@ class Facturalo
         $this->type = $inputs['type'];
 
         // $skipSendDeadlineCheck is set only by trusted server-side flows (offline sync), never from request data.
+        // It also skips the boleta identification check: the offline document was already validated at emission.
         if (!$skipSendDeadlineCheck) {
             $this->assertIssueDateWithinSendDeadline($inputs);
+            $this->assertBoletaIdentification($inputs);
         }
 
         switch ($this->type) {
@@ -582,6 +585,26 @@ class Facturalo
         }
         $this->onlySenderXmlSignedBill();
 
+    }
+
+    /**
+     * Anexo II RS 114-2019/SUNAT: a boleta above S/ 700.00 must identify the buyer (error 2396).
+     */
+    private function assertBoletaIdentification(array $inputs)
+    {
+        if ($this->type !== 'invoice' || ($inputs['document_type_id'] ?? null) !== '03') {
+            return;
+        }
+
+        $customer = $inputs['customer'] ?? [];
+
+        BoletaIdentification::assert(
+            $inputs['total'] ?? 0,
+            $inputs['currency_type_id'] ?? 'PEN',
+            $inputs['exchange_rate_sale'] ?? 1,
+            $customer['identity_document_type_id'] ?? null,
+            $customer['number'] ?? null
+        );
     }
 
     /**

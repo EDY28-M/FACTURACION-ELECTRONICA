@@ -656,6 +656,9 @@
                                                             <td>:</td>
                                                             <td class="text-right">{{ currency_type.symbol }} {{ form.total }}</td>
                                                         </tr>
+                                                        <tr v-if="boletaNeedsIdentification">
+                                                            <td colspan="3" class="text-danger text-right"><small>{{ boletaIdentificationMessage }}</small></td>
+                                                        </tr>
 
                                                     </table>
                                                 </td>
@@ -873,6 +876,7 @@
     import {functions, exchangeRate} from '../../../mixins/functions'
     import {calculateRowItem} from '../../../helpers/functions'
     import {igvFromBase, needsRerate} from '../../../helpers/igv'
+    import {boletaNeedsIdentification, BOLETA_IDENTIFICATION_MESSAGE} from '../../../helpers/boleta-identification'
     import Logo from '../companies/logo.vue'
     import DocumentHotelForm from '../../../../../modules/BusinessTurn/Resources/assets/js/views/hotels/form.vue'
     import DocumentTransportForm from '../../../../../modules/BusinessTurn/Resources/assets/js/views/transports/form.vue'
@@ -951,6 +955,25 @@
             }
         },
         computed: {
+            // SUNAT: boletas above S/ 700.00 must identify the customer (Anexo II RS 114-2019/SUNAT)
+            boletaIdentificationMessage() {
+                return BOLETA_IDENTIFICATION_MESSAGE
+            },
+            boletaNeedsIdentification() {
+                if (!this.form || this.form.document_type_id !== '03') return false
+                // this.customers can be replaced by remote search / document type filter: fall back to all_customers.
+                const customer = _.find(this.customers, {'id': this.form.customer_id}) ||
+                    _.find(this.all_customers, {'id': this.form.customer_id})
+                // Unresolved customer: do not block in the UI, the server check covers it.
+                if (!customer) return false
+                return boletaNeedsIdentification(
+                    this.form.total,
+                    this.form.currency_type_id,
+                    this.form.exchange_rate_sale,
+                    customer.identity_document_type_id,
+                    customer.number
+                )
+            },
             // RS 003-2023/SUNAT: a factura can only be issued up to 3 calendar days back
             // (send deadline = issue date + 3 days). Boletas keep the previous rules.
             issueDateOptions() {
@@ -2137,6 +2160,9 @@
 
             },
             async submit() {
+                if (this.boletaNeedsIdentification) {
+                    return this.$message.error(this.boletaIdentificationMessage);
+                }
                 if (this.form.show_terms_condition) {
                     this.form.terms_condition = this.configuration.terms_condition_sale;
                 }

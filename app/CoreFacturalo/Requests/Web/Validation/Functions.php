@@ -2,6 +2,7 @@
 
 namespace App\CoreFacturalo\Requests\Web\Validation;
 
+use App\CoreFacturalo\Helpers\Sunat\BoletaIdentification;
 use App\Models\Tenant\{
     Establishment,
     Document,
@@ -103,13 +104,17 @@ class Functions
     
     public static function DNI($inputs){
 
-        if (($inputs['document_type_id'] == '03') && ($inputs['total']) > 700) {
-            $person = Person::query()
-                ->with('identity_document_type')
-                ->find($inputs['customer_id']);
-            
-            if (!in_array($person->identity_document_type_id, ['1','6','4','7'], true)) throw new Exception("El tipo doc. identidad {$person->identity_document_type->description} del cliente no es valido.");
-        }
+        if (($inputs['document_type_id'] ?? null) !== '03') return;
+
+        $person = Person::find($inputs['customer_id'] ?? null);
+
+        BoletaIdentification::assert(
+            $inputs['total'] ?? 0,
+            $inputs['currency_type_id'] ?? 'PEN',
+            $inputs['exchange_rate_sale'] ?? 1,
+            optional($person)->identity_document_type_id,
+            optional($person)->number
+        );
 
     }
 
@@ -131,13 +136,6 @@ class Functions
             //     }
             // }
 
-            if ($inputs['document_type_id'] === '03') {
-                if ($inputs['total'] >= 700) {
-                    if (in_array($person->identity_document_type_id, ['0'], true)) {
-                        throw new Exception("El tipo doc. identidad {$person->identity_document_type->description} del cliente no es válido, el monto supera el monto base.");
-                    }
-                }
-            }
 
         }      
 

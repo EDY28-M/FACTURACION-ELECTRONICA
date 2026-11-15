@@ -348,6 +348,7 @@
 <script>
     import Keypress from 'vue-keypress'
     import {splitGross} from '../../../../helpers/igv'
+    import {boletaNeedsIdentification, BOLETA_IDENTIFICATION_MESSAGE} from '../../../../helpers/boleta-identification'
 
     import CardBrandsForm from '../../card_brands/form.vue'
     import SaleNotesOptions from '../../sale_notes/partials/options.vue'
@@ -843,6 +844,17 @@
                 if(!moment(moment().format("YYYY-MM-DD")).isSame(this.form.date_of_issue)){
                    return this.$message.error('La fecha de emisión no coincide con la del día actual');
                 }
+                // SUNAT: boletas above S/ 700.00 must identify the customer; keep the cart untouched
+                if (this.form.document_type_id === '03' && boletaNeedsIdentification(
+                    this.form.total,
+                    this.form.currency_type_id,
+                    this.form.exchange_rate_sale,
+                    this.customer ? this.customer.identity_document_type_id : null,
+                    this.customer ? this.customer.number : null
+                )) {
+                    return this.$message.error(BOLETA_IDENTIFICATION_MESSAGE);
+                }
+
 
                 if(!this.form.series_id)
                 {

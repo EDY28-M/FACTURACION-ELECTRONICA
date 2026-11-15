@@ -2,6 +2,7 @@
 
 namespace App\CoreFacturalo\Requests\Api\Validation;
 
+use App\CoreFacturalo\Helpers\Sunat\BoletaIdentification;
 use App\Models\Tenant\Document;
 use App\Models\Tenant\Warehouse;
 use App\Models\Tenant\Establishment;
@@ -153,13 +154,17 @@ class Functions
     }
 
     public static function DNI($inputs){
-        if (($inputs['document_type_id'] == '03') && ($inputs['total']) > 700) {
-            $person = Person::query()
-                ->with('identity_document_type')
-                ->find($inputs['customer_id']);
+        if (($inputs['document_type_id'] ?? null) !== '03') return;
 
-            if (!in_array($person->identity_document_type_id, ['01','04','06','07'])) throw new Exception("El tipo doc. identidad {$person->identity_document_type->description} del cliente no es valido.");
-        }
+        $person = Person::find($inputs['customer_id'] ?? null);
+
+        BoletaIdentification::assert(
+            $inputs['total'] ?? 0,
+            $inputs['currency_type_id'] ?? 'PEN',
+            $inputs['exchange_rate_sale'] ?? 1,
+            optional($person)->identity_document_type_id,
+            optional($person)->number
+        );
     }
 
     public static function identityDocumentTypeInvoice($inputs)

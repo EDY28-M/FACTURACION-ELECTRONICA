@@ -299,8 +299,9 @@
               let ticket = [{id: '0', name: 'DOC'},{id: '4', name: 'CE'},{id: '1', name: 'DNI'}]
               if(this.formIdentity.identity_document_type_id === '6') {
                 this.typeDocumentList = voucher
-              }else if (this.formIdentity.identity_document_type_id === '1' && this.payment_cash.amount >= 700) {
-                this.typeDocumentList = [{id: '1', name: 'DNI'}]
+              }else if (parseFloat(this.payment_cash.amount) > 700) {
+                // Boletas above S/ 700.00 must identify the buyer: "DOC" (type 0) is not allowed
+                this.typeDocumentList = ticket.filter(function (t) { return t.id !== '0' })
                 this.typeDocuments = ''
               } else {
                 this.typeDocumentList = ticket
