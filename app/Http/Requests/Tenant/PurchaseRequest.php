@@ -29,6 +29,14 @@ class PurchaseRequest extends FormRequest
             'date_of_issue' => [
                 'required',
             ],
+            'sire_destination' => [
+                'nullable',
+                Rule::in(['DG', 'DGNG', 'DNG']),
+            ],
+            'affected_document_type_id' => ['nullable', 'string', 'max:2'],
+            'affected_series' => ['nullable', 'string', 'max:20'],
+            'affected_number' => ['nullable', 'string', 'max:20'],
+            'affected_date_of_issue' => ['nullable', 'date'],
         ];
     }
 }

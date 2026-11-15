@@ -5,9 +5,7 @@ namespace App\CoreFacturalo\Services\Sire;
 use App\Models\Tenant\Company;
 use App\Models\Tenant\Document;
 use Carbon\Carbon;
-use InvalidArgumentException;
 use RuntimeException;
-use ZipArchive;
 
 /**
  * Builds the SIRE "Reemplazo de la propuesta del RVIE" flat file (Anexo 3, RS 112-2021/SUNAT)
@@ -44,23 +42,11 @@ class RvieReplacementBuilder
     public const BOLETA_ID_THRESHOLD = 700.00;
 
     /** Max entries kept per warnings/errors list (a final "y N mas" line is appended). */
-    public const MAX_MESSAGES = 50;
+    public const MAX_MESSAGES = SireSupport::MAX_MESSAGES;
 
     public static function validatePeriod(string $period, ?Carbon $now = null): array
     {
-        if (!preg_match('/^(\d{4})(0[1-9]|1[0-2])$/', $period, $m)) {
-            throw new InvalidArgumentException('El periodo debe tener el formato AAAAMM.');
-        }
-
-        $year = (int) $m[1];
-        $month = (int) $m[2];
-        $now = $now ?: Carbon::now('America/Lima');
-
-        if ($year < 2000 || ($year * 100 + $month) > ((int) $now->format('Y') * 100 + (int) $now->format('n'))) {
-            throw new InvalidArgumentException('El periodo no puede ser futuro.');
-        }
-
-        return [$year, $month];
+        return SireSupport::validatePeriod($period, $now);
     }
 
     /**
@@ -106,32 +92,9 @@ class RvieReplacementBuilder
         // (discounts) stay 0.00 to avoid counting them twice. total_free (free transfers) is NOT part of
         // the totals and is never reported. [unverified] treatment of global charges: only total_other_taxes goes to 25.
         $components = ['total_exportation', 'total_taxed', 'total_igv', 'total_exonerated', 'total_unaffected', 'total_isc', 'total_plastic_bag_taxes', 'total_other_taxes'];
-        $conv = [];
-        foreach ($components as $key) {
-            $conv[$key] = round((float) ($doc[$key] ?? 0) * $rate, 2);
-        }
-        $total = round((float) ($doc['total'] ?? 0) * $rate, 2);
-
-        // Converting each component to PEN can drift by a cent from the converted total. Absorb a small
-        // residual in the taxed base (or the largest non-zero component) so fields 14+15+17+19+20+21+24+25 == 26.
-        // Larger gaps are genuine inconsistencies (e.g. global charges) and are left for the reconciliation warning.
-        $residual = round($total - array_sum($conv), 2);
-        if ($residual != 0.0 && abs($residual) <= 0.05) {
-            $target = $conv['total_taxed'] != 0.0 ? 'total_taxed' : null;
-            if ($target === null) {
-                $max = 0.0;
-                foreach ($conv as $key => $value) {
-                    if (abs($value) > $max) {
-                        $max = abs($value);
-                        $target = $key;
-                    }
-                }
-            }
-            if ($target !== null) {
-                $conv[$target] = round($conv[$target] + $residual, 2);
-            }
-        }
-        $conv['total'] = $total;
+        // Converting each component to PEN can drift by a cent from the converted total: SireSupport absorbs
+        // a small residual in the taxed base (or the largest component) so fields 14+15+17+19+20+21+24+25 == 26.
+        $conv = SireSupport::convertToPen($doc, $components, $rate, 'total_taxed');
 
         $amounts = [];
         foreach ($conv as $key => $value) {
@@ -334,10 +297,7 @@ class RvieReplacementBuilder
 
     private static function addMessage(array &$state, string $list, string $message): void
     {
-        $state[$list === 'errors' ? 'err_count' : 'warn_count']++;
-        if (count($state[$list]) < self::MAX_MESSAGES) {
-            $state[$list][] = $message;
-        }
+        SireSupport::addMessage($state, $list, $message);
     }
 
     private static function consume(array &$state, array $doc, string $ruc, string $companyName, string $period, $handle): void
@@ -404,14 +364,8 @@ class RvieReplacementBuilder
             self::addMessage($state, 'warnings', sprintf('%d comprobante(s) en moneda extranjera se informan convertidos a soles con su tipo de cambio.', $state['converted']));
         }
 
-        $warnings = $state['warnings'];
-        if ($state['warn_count'] > count($warnings)) {
-            $warnings[] = sprintf('y %d mas', $state['warn_count'] - count($warnings));
-        }
-        $errors = $state['errors'];
-        if ($state['err_count'] > count($errors)) {
-            $errors[] = sprintf('y %d mas', $state['err_count'] - count($errors));
-        }
+        $warnings = SireSupport::capList($state['warnings'], $state['warn_count']);
+        $errors = SireSupport::capList($state['errors'], $state['err_count']);
 
         $hasRows = $state['rows'] > 0;
         $filename = self::filename($ruc, $year, $month, $hasRows, $hasRows);
@@ -439,19 +393,7 @@ class RvieReplacementBuilder
      */
     public static function zipFile(string $filename, string $txtPath): string
     {
-        $path = tempnam(sys_get_temp_dir(), 'rvie');
-        $zip = new ZipArchive();
-        if ($zip->open($path, ZipArchive::OVERWRITE) !== true) {
-            throw new RuntimeException('No se pudo crear el archivo ZIP.');
-        }
-        if (filesize($txtPath) === 0) {
-            $zip->addFromString($filename, '');
-        } else {
-            $zip->addFile($txtPath, $filename);
-        }
-        $zip->close();
-
-        return $path;
+        return SireSupport::zipFile($filename, $txtPath, 'rvie');
     }
 
     /**
@@ -530,17 +472,12 @@ class RvieReplacementBuilder
 
     private static function amount(float $value): string
     {
-        $value = round($value, 2);
-        if ($value == 0.0) {
-            $value = 0.0; // avoid "-0.00"
-        }
-
-        return number_format($value, 2, '.', '');
+        return SireSupport::amount($value);
     }
 
     private static function date(?string $date): string
     {
-        return $date ? Carbon::parse($date)->format('d/m/Y') : '';
+        return SireSupport::date($date);
     }
 
     private static function join(array $values, bool $dates = false): string
@@ -552,19 +489,13 @@ class RvieReplacementBuilder
         return implode(',', array_filter($values, 'strlen'));
     }
 
-    /** Removes the field separator and line breaks, collapsing spaces; optionally truncates. */
     private static function text(string $value, ?int $max = null): string
     {
-        $value = trim(preg_replace('/\s+/', ' ', str_replace('|', ' ', $value)));
-
-        return $max !== null ? mb_substr($value, 0, $max) : $value;
+        return SireSupport::text($value, $max);
     }
 
     private static function preview(array $items, int $max = 8, ?int $total = null): string
     {
-        $total = $total ?? count($items);
-        $shown = array_slice($items, 0, $max);
-
-        return implode(', ', $shown).($total > count($shown) ? sprintf(' y %d mas', $total - count($shown)) : '');
+        return SireSupport::preview($items, $max, $total);
     }
 }

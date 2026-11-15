@@ -60,6 +60,9 @@
                     <li>
                         <a href="{{route('tenant.reports.fixed-asset-purchases.index')}}">Activos fijos</a>
                     </li>
+                    <li>
+                        <a href="{{route('tenant.reports.sire_rce.index')}}">SIRE - Registro de compras (RCE)</a>
+                    </li>
                 </ul>
             </div>
         </div>

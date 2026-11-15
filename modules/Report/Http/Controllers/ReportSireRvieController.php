@@ -37,13 +37,13 @@ class ReportSireRvieController extends Controller
     public function download(Request $request)
     {
         $txtPath = tempnam(sys_get_temp_dir(), 'rvietxt');
+        $zipPath = null;
+        $streamed = false;
 
         try {
             $result = $this->generate($request, $txtPath);
 
             if ($result['errors_count'] > 0) {
-                @unlink($txtPath);
-
                 return response()->json([
                     'success' => false,
                     'message' => 'Hay comprobantes que impiden generar el archivo. Corrigelos e intenta nuevamente.',
@@ -52,8 +52,6 @@ class ReportSireRvieController extends Controller
             }
 
             if ($result['demo'] && !filter_var($request->query('force_demo'), FILTER_VALIDATE_BOOLEAN)) {
-                @unlink($txtPath);
-
                 return response()->json([
                     'success' => false,
                     'message' => 'La empresa esta en ambiente de pruebas. Confirma que deseas descargar el archivo de todas formas.',
@@ -62,16 +60,20 @@ class ReportSireRvieController extends Controller
             }
 
             $zipPath = RvieReplacementBuilder::zipFile($result['filename'], $txtPath);
+
+            $response = response()->download($zipPath, $result['zip_filename'], ['Content-Type' => 'application/zip'])
+                ->deleteFileAfterSend(true);
+            $streamed = true;
+
+            return $response;
         } catch (InvalidArgumentException|RuntimeException $e) {
-            @unlink($txtPath);
-
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } finally {
+            @unlink($txtPath);
+            if ($zipPath !== null && !$streamed) {
+                @unlink($zipPath);
+            }
         }
-
-        @unlink($txtPath);
-
-        return response()->download($zipPath, $result['zip_filename'], ['Content-Type' => 'application/zip'])
-            ->deleteFileAfterSend(true);
     }
 
     private function generate(Request $request, ?string $txtPath = null): array

@@ -96,6 +96,19 @@
                                 <small class="form-control-feedback" v-if="errors.exchange_rate_sale" v-text="errors.exchange_rate_sale[0]"></small>
                             </div>
                         </div>
+                        <div class="col-lg-2">
+                            <div class="form-group" :class="{'has-danger': errors.sire_destination}">
+                                <label class="control-label">Destino (SIRE)
+                                    <el-tooltip class="item" effect="dark" content="Destino de la adquisición para el Registro de Compras (SIRE)" placement="top-end">
+                                        <i class="fa fa-info-circle"></i>
+                                    </el-tooltip>
+                                </label>
+                                <el-select v-model="form.sire_destination">
+                                    <el-option v-for="option in sire_destinations" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                                </el-select>
+                                <small class="form-control-feedback" v-if="errors.sire_destination" v-text="errors.sire_destination[0]"></small>
+                            </div>
+                        </div>
 
                         <div class="col-md-8 mt-4">
                             <div class="form-group" >
@@ -321,6 +334,11 @@
         data() {
             return {
                 input_person:{},
+                sire_destinations: [
+                    {id: 'DG', description: 'Operaciones gravadas'},
+                    {id: 'DGNG', description: 'Gravadas y no gravadas'},
+                    {id: 'DNG', description: 'No gravadas'},
+                ],
                 type: 'edit',
                 resource: 'purchases',
                 showDialogAddItem: false,
@@ -584,6 +602,7 @@
                     this.form.series = dato.series
                     this.form.number = dato.number
                     this.form.date_of_due = dato.date_of_due
+                    this.form.sire_destination = dato.sire_destination || 'DG'
                     this.form.date_of_issue = dato.date_of_issue
                     this.form.supplier_id = dato.supplier_id
                     this.aux_supplier_id = dato.supplier_id
@@ -695,6 +714,7 @@
                     perception_number: null,
                     total_perception: 0,
                     date_of_due: moment().format('YYYY-MM-DD'),
+                    sire_destination: 'DG',
                     items: [],
                     charges: [],
                     discounts: [],

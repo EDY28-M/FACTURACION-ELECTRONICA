@@ -62,12 +62,18 @@ class Purchase extends ModelTenant
         'date_of_due',
         'purchase_order_id',
         'customer_id',
-        'total_canceled'
+        'total_canceled',
+        'sire_destination',
+        'affected_document_type_id',
+        'affected_series',
+        'affected_number',
+        'affected_date_of_issue',
     ];
 
     protected $casts = [
         'date_of_issue' => 'date',
         'date_of_due' => 'date',
+        'affected_date_of_issue' => 'date',
     ];
 
     
@@ -86,6 +92,12 @@ class Purchase extends ModelTenant
     //     $this->attributes['establishment'] = (is_null($value))?null:json_encode($value);
     // }
 
+
+    /** Destination of the acquisition for SIRE (DG, DGNG, DNG); anything else falls back to DG. */
+    public function setSireDestinationAttribute($value)
+    {
+        $this->attributes['sire_destination'] = in_array($value, ['DG', 'DGNG', 'DNG'], true) ? $value : 'DG';
+    }
 
     public function getSupplierAttribute($value)
     {
