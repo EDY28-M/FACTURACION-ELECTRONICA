@@ -212,6 +212,30 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="row">
+                            <div class="col-md-12 mt-2">
+                                <h4 class="border-bottom">Credenciales API SUNAT (SIRE)</h4>
+                                <div class="sub-title text-muted mb-2"><small>Opcional. Si se dejan vacías se usan las credenciales de GRE. Genérelas en Menú SOL &gt; Empresas &gt; Credenciales de API SUNAT marcando "MIGE RCE y RVIE - SIRE".</small></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group" :class="{'has-danger': errors.sire_client_id}">
+                                    <label class="control-label">Client ID (SIRE)</label>
+                                    <el-input v-model="form.sire_client_id" :maxlength="100"></el-input>
+                                    <small class="form-control-feedback" v-if="errors.sire_client_id" v-text="errors.sire_client_id[0]"></small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group" :class="{'has-danger': errors.sire_client_secret}">
+                                    <label class="control-label">Client Secret (SIRE)</label>
+                                    <el-input v-model="form.sire_client_secret" type="password" :maxlength="255" autocomplete="new-password"
+                                              :placeholder="form.has_sire_client_secret ? 'Configurado (dejar vacío para mantener)' : ''"></el-input>
+                                    <div class="sub-title text-muted" v-if="form.has_sire_client_secret"><small>Configurado</small></div>
+                                    <small class="form-control-feedback" v-if="errors.sire_client_secret" v-text="errors.sire_client_secret[0]"></small>
+                                </div>
+                            </div>
+                        </div>
                     </template>
                     </div>
                     <div class="form-actions text-right pt-2">
@@ -250,6 +274,7 @@
                     if (response.data !== '') {
                         this.form = response.data.data
                         this.$set(this.form, 'gre_client_secret', null)
+                        this.$set(this.form, 'sire_client_secret', null)
                     }
                 })
         },
@@ -279,6 +304,9 @@
                     gre_client_id: null,
                     gre_client_secret: null,
                     has_gre_client_secret: false,
+                    sire_client_id: null,
+                    sire_client_secret: null,
+                    has_sire_client_secret: false,
 
                 }
             },
@@ -291,6 +319,10 @@
                             if (this.form.gre_client_secret) {
                                 this.form.has_gre_client_secret = true
                                 this.form.gre_client_secret = null
+                            }
+                            if (this.form.sire_client_secret) {
+                                this.form.has_sire_client_secret = true
+                                this.form.sire_client_secret = null
                             }
                         } else {
                             this.$message.error(response.data.message)

@@ -161,14 +161,9 @@ class RvieReplacementBuilder
             throw new RuntimeException('La empresa no tiene un RUC valido configurado.');
         }
 
-        $start = Carbon::create($year, $month, 1)->startOfMonth();
-        $end = $start->copy()->endOfMonth();
         $period = sprintf('%04d%02d', $year, $month);
 
-        $base = Document::query()
-            ->whereBetween('date_of_issue', [$start->toDateString(), $end->toDateString()])
-            ->whereIn('document_type_id', self::DOCUMENT_TYPES)
-            ->where('soap_type_id', $company->soap_type_id);
+        $base = self::baseQuery($company, $year, $month);
 
         $handle = $txtPath !== null ? fopen($txtPath, 'wb') : null;
         $state = self::newState();
@@ -214,6 +209,70 @@ class RvieReplacementBuilder
         $result['txt_path'] = $txtPath;
 
         return $result;
+    }
+
+    /**
+     * Documents of the company's current environment issued in the period: the selection shared by the
+     * replacement file and the SIRE reconciliation (SireReconciliationService).
+     */
+    public static function baseQuery(Company $company, int $year, int $month)
+    {
+        $start = Carbon::create($year, $month, 1)->startOfMonth();
+        $end = $start->copy()->endOfMonth();
+
+        return Document::query()
+            ->whereBetween('date_of_issue', [$start->toDateString(), $end->toDateString()])
+            ->whereIn('document_type_id', self::DOCUMENT_TYPES)
+            ->where('soap_type_id', $company->soap_type_id);
+    }
+
+    /**
+     * System side of the SIRE reconciliation: one light row per document that the replacement file would
+     * report (accepted/observed with real amounts, voided with zero), using the SAME PEN conversion and sign
+     * convention as mapRow(). Documents not reported (pending/rejected) are returned in 'excluded'
+     * (key => state_type_id) so reconciliation can explain why SUNAT has them.
+     *
+     * @return array{rows: array, excluded: array, ruc: string}
+     */
+    public function reconciliationRows(int $year, int $month): array
+    {
+        $company = Company::first();
+        if (!$company || !preg_match('/^\d{11}$/', (string) $company->number)) {
+            throw new RuntimeException('La empresa no tiene un RUC valido configurado.');
+        }
+
+        $period = sprintf('%04d%02d', $year, $month);
+        $base = self::baseQuery($company, $year, $month);
+        $rows = [];
+
+        (clone $base)
+            ->whereIn('state_type_id', array_merge(self::REPORTED_STATES, [self::VOIDED_STATE]))
+            ->with(['note', 'fee'])
+            ->orderBy('date_of_issue')->orderBy('document_type_id')->orderBy('series')->orderBy('number')
+            ->chunk(500, function ($chunk) use (&$rows, $company, $period) {
+                foreach ($chunk as $document) {
+                    $doc = self::normalize($document);
+                    $fields = self::mapRow($doc, $company->number, $company->name, $period);
+                    $rows[] = [
+                        'type' => $doc['document_type_id'],
+                        'series' => (string) $doc['series'],
+                        'number' => (string) $doc['number'],
+                        'date' => $doc['date_of_issue'],
+                        'total' => (float) $fields[25],
+                        'state' => $doc['state_type_id'],
+                    ];
+                }
+            });
+
+        $excluded = [];
+        (clone $base)
+            ->whereIn('state_type_id', array_merge(self::PENDING_STATES, ['09']))
+            ->get(['document_type_id', 'series', 'number', 'state_type_id'])
+            ->each(function ($d) use (&$excluded) {
+                $excluded[SireReconciler::key($d->document_type_id, $d->series, $d->number)] = $d->state_type_id;
+            });
+
+        return ['rows' => $rows, 'excluded' => $excluded, 'ruc' => (string) $company->number];
     }
 
     /**

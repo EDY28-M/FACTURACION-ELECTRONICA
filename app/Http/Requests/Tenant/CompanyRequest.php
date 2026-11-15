@@ -40,6 +40,15 @@ class CompanyRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+            'sire_client_id' => [
+                'nullable',
+                'max:100',
+            ],
+            'sire_client_secret' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
             'soap_username' => [
                 'required_if:soap_type_id,"02"',
                 'required_if:soap_send_id,"02"'

@@ -25,9 +25,10 @@ class Company extends ModelTenant
         'operation_amazonia',
         'img_firm',
         'gre_client_id',
+        'sire_client_id',
     ];
 
-    protected $hidden = ['gre_client_secret'];
+    protected $hidden = ['gre_client_secret', 'sire_client_secret'];
 
     /**
      * Stores the GRE API client secret encrypted. Null/empty clears it.
@@ -59,6 +60,38 @@ class Company extends ModelTenant
     public function hasGreClientSecret()
     {
         return !empty($this->attributes['gre_client_secret'] ?? null);
+    }
+
+    /**
+     * Stores the SIRE API client secret encrypted. Null/empty clears it.
+     */
+    public function setSireClientSecret($plain)
+    {
+        $this->attributes['sire_client_secret'] = ($plain === null || $plain === '') ? null : encrypt($plain);
+    }
+
+    /**
+     * Returns the decrypted SIRE API client secret (backend use only).
+     */
+    public function getSireClientSecret()
+    {
+        $value = $this->attributes['sire_client_secret'] ?? null;
+        if (!$value) {
+            return null;
+        }
+
+        try {
+            return decrypt($value);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            throw new \App\CoreFacturalo\WS\Gre\Exceptions\GreConfigurationException(
+                'No se pudo leer el client_secret de SIRE guardado; vuelve a ingresarlo en la configuración de la empresa.'
+            );
+        }
+    }
+
+    public function hasSireClientSecret()
+    {
+        return !empty($this->attributes['sire_client_secret'] ?? null);
     }
 
     public function identity_document_type()

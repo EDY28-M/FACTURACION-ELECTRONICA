@@ -68,6 +68,48 @@
         </div>
     </div>
 </div>
+
+<div class="card card-dashboard mt-3" id="sire-sunat">
+    <div class="card-body">
+        <h6 class="card-title">Comparar con SUNAT (API SIRE)</h6>
+        <p class="text-muted mb-3">
+            Descarga la propuesta RVIE de SUNAT del periodo seleccionado y la compara con tus ventas. Es solo lectura:
+            no se envía, acepta ni reemplaza nada en SUNAT.
+        </p>
+
+        <div id="sunat-config" class="alert alert-warning d-none" role="alert">
+            <span id="sunat-config-msg"></span>
+            <a href="{{ route('tenant.companies.create') }}" class="alert-link">Ir a la configuración de la empresa</a>
+        </div>
+        <div id="sunat-demo" class="alert alert-info d-none" role="note">
+            La empresa está en ambiente de pruebas. La API de SIRE de SUNAT no tiene ambiente de pruebas y solo responde con credenciales y datos de producción.
+        </div>
+        <div id="sunat-error" class="alert alert-danger d-none" role="alert"></div>
+        <div id="sunat-info" class="alert alert-success d-none" role="status"></div>
+
+        <div class="mb-3">
+            <button type="button" class="btn btn-primary" id="sunat-request">Solicitar propuesta a SUNAT</button>
+            <button type="button" class="btn btn-outline-secondary" id="sunat-reload">Actualizar lista</button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th>Solicitada</th>
+                        <th>Ticket</th>
+                        <th>Estado</th>
+                        <th>Detalle</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="sunat-requests"><tr><td colspan="5" class="text-center text-muted">Selecciona un periodo para ver sus solicitudes.</td></tr></tbody>
+            </table>
+        </div>
+
+        <div id="sunat-result" class="d-none mt-3"></div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -147,6 +189,113 @@
     });
     $('sire-force-demo').addEventListener('change', refreshDownload);
     $('sire-download').addEventListener('click', function (e) { if (this.classList.contains('disabled')) { e.preventDefault(); } });
+    // ---- Comparison with SUNAT (SIRE API) ----
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var sunatBase = "{{ route('tenant.reports.sire_rvie.sunat.index') }}";
+    var statusClass = {requested: 'badge-secondary', processing: 'badge-warning', ready: 'badge-info', failed: 'badge-danger', reconciled: 'badge-success'};
+    var typeNames = {'01': 'Factura', '03': 'Boleta', '07': 'N. crédito', '08': 'N. débito'};
+
+    function sunatMsg(id, msg) {
+        var el = $(id);
+        el.textContent = msg || '';
+        el.classList.toggle('d-none', !msg);
+    }
+
+    function sunatCall(url, method) {
+        var opts = {method: method || 'GET', credentials: 'same-origin', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}};
+        if (method === 'POST') { opts.headers['X-CSRF-TOKEN'] = csrf; }
+        return fetch(url, opts).then(function (r) {
+            return r.json().then(function (j) { return {ok: r.ok, body: j}; }, function () { return {ok: false, body: {message: 'Respuesta no válida del servidor.'}}; });
+        });
+    }
+
+    function loadRequests() {
+        sunatMsg('sunat-error', '');
+        if (!/^\d{6}$/.test(period())) { return; }
+        sunatCall(sunatBase + '?period=' + period()).then(function (res) {
+            if (!res.ok || !res.body.success) { return sunatMsg('sunat-error', res.body.message || 'No se pudo cargar las solicitudes.'); }
+            var d = res.body;
+            $('sunat-config').classList.toggle('d-none', d.configured);
+            $('sunat-config-msg').textContent = d.config_message || '';
+            $('sunat-demo').classList.toggle('d-none', !d.demo);
+            $('sunat-request').disabled = !d.configured;
+            $('sunat-requests').innerHTML = d.requests.map(function (r) {
+                var actions = '';
+                if (r.open) { actions += '<button type="button" class="btn btn-sm btn-outline-primary" data-act="refresh" data-id="' + esc(String(r.id)) + '">Actualizar estado</button>'; }
+                if (r.has_summary) { actions += ' <button type="button" class="btn btn-sm btn-outline-success" data-act="show" data-id="' + esc(String(r.id)) + '">Ver resultado</button>'; }
+                return '<tr><td>' + esc(r.requested_at || '') + '</td><td>' + esc(r.ticket || '-') + '</td><td><span class="badge '
+                    + (statusClass[r.status] || 'badge-secondary') + '">' + esc(r.status_label) + '</span></td><td>' + esc(r.status_detail || '') + '</td><td>' + actions + '</td></tr>';
+            }).join('') || '<tr><td colspan="5" class="text-center text-muted">Aún no hay solicitudes para este periodo.</td></tr>';
+        }).catch(function () { sunatMsg('sunat-error', 'No se pudo cargar las solicitudes.'); });
+    }
+
+    function itemsTable(title, items, total, cols) {
+        if (!total) { return ''; }
+        var head = '<th>Fecha</th><th>Comprobante</th>' + cols.map(function (c) { return '<th class="text-right">' + esc(c[0]) + '</th>'; }).join('') + '<th>Observación</th>';
+        var body = items.map(function (i) {
+            return '<tr><td>' + esc(i.date || '') + '</td><td>' + esc((typeNames[i.type] || i.type) + ' ' + i.series + '-' + i.number) + '</td>'
+                + cols.map(function (c) { return '<td class="text-right">' + (i[c[1]] === null || i[c[1]] === undefined ? '-' : money(i[c[1]])) + '</td>'; }).join('')
+                + '<td>' + esc(i.note || '') + '</td></tr>';
+        }).join('');
+        var more = total > items.length ? '<p class="text-muted small">Se muestran ' + items.length + ' de ' + total + '.</p>' : '';
+        return '<h6 class="mt-3">' + esc(title) + ' (' + total + ')</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' + more;
+    }
+
+    function renderSummary(r) {
+        var s = r.summary, el = $('sunat-result');
+        var html = '<h6>Resultado de la comparación &middot; periodo ' + esc(r.period) + '</h6>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr><th></th><th class="text-right">Comprobantes</th><th class="text-right">Total (S/)</th></tr></thead><tbody>'
+            + '<tr><td>SUNAT (propuesta)</td><td class="text-right">' + s.sunat.count + '</td><td class="text-right">' + money(s.sunat.total) + '</td></tr>'
+            + '<tr><td>Sistema</td><td class="text-right">' + s.system.count + '</td><td class="text-right">' + money(s.system.total) + '</td></tr>'
+            + '<tr><th>Diferencia (SUNAT - Sistema)</th><th class="text-right">' + (s.sunat.count - s.system.count) + '</th><th class="text-right">' + money(s.difference_total) + '</th></tr></tbody></table></div>';
+        html += '<p>Coinciden: <strong>' + s.matched + '</strong></p>';
+        if (s.in_sync) { html += '<div class="alert alert-success">Sin diferencias: la propuesta de SUNAT coincide con tus ventas.</div>'; }
+        (s.warnings || []).forEach(function (w) { html += '<div class="alert alert-warning">' + esc(w) + '</div>'; });
+        html += itemsTable('Solo en SUNAT', s.solo_en_sunat, s.solo_en_sunat_count, [['Total SUNAT', 'sunat_total']]);
+        html += itemsTable('Solo en el sistema', s.solo_en_sistema, s.solo_en_sistema_count, [['Total sistema', 'system_total']]);
+        html += itemsTable('Diferencias de importe', s.diferencias_monto, s.diferencias_monto_count, [['Total SUNAT', 'sunat_total'], ['Total sistema', 'system_total'], ['Diferencia', 'difference']]);
+        html += itemsTable('Boletas consolidadas por rango con diferencia', s.diferencias_rango, s.diferencias_rango_count, [['Total SUNAT', 'sunat_total'], ['Total sistema', 'system_total'], ['Diferencia', 'difference']]);
+        el.innerHTML = html;
+        el.classList.remove('d-none');
+    }
+
+    $('sunat-request').addEventListener('click', function () {
+        var btn = this;
+        sunatMsg('sunat-error', ''); sunatMsg('sunat-info', '');
+        if (!/^\d{6}$/.test(period())) { return sunatMsg('sunat-error', 'Selecciona un periodo valido.'); }
+        btn.disabled = true;
+        var url = sunatBase + '/request?period=' + period();
+        sunatCall(url, 'POST').then(function (res) {
+            if (!res.ok || !res.body.success) { sunatMsg('sunat-error', res.body.message || 'No se pudo solicitar la propuesta.'); } else {
+                sunatMsg('sunat-info', res.body.message);
+                if (res.body.request.summary) { renderSummary(res.body.request); }
+            }
+            loadRequests();
+        }).catch(function () { sunatMsg('sunat-error', 'No se pudo solicitar la propuesta.'); })
+          .then(function () { btn.disabled = false; });
+    });
+
+    $('sunat-reload').addEventListener('click', loadRequests);
+
+    $('sunat-requests').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-act]');
+        if (!btn) { return; }
+        var id = btn.getAttribute('data-id'), act = btn.getAttribute('data-act');
+        sunatMsg('sunat-error', ''); sunatMsg('sunat-info', '');
+        btn.disabled = true;
+        var call = act === 'refresh' ? sunatCall(sunatBase + '/' + id + '/refresh', 'POST') : sunatCall(sunatBase + '/' + id);
+        call.then(function (res) {
+            if (!res.ok || !res.body.success) { sunatMsg('sunat-error', res.body.message || 'No se pudo completar la acción.'); } else {
+                if (res.body.message) { sunatMsg('sunat-info', res.body.message); }
+                if (res.body.request.summary) { renderSummary(res.body.request); }
+            }
+            if (act === 'refresh') { loadRequests(); }
+        }).catch(function () { sunatMsg('sunat-error', 'No se pudo completar la acción.'); })
+          .then(function () { btn.disabled = false; });
+    });
+
+    $('sire-period').addEventListener('change', function () { $('sunat-result').classList.add('d-none'); loadRequests(); });
+    loadRequests();
 })();
 </script>
 @endpush

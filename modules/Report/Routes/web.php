@@ -139,6 +139,12 @@ if($current_hostname) {
                     Route::get('preview', 'ReportSireRvieController@preview')->name('tenant.reports.sire_rvie.preview');
                     Route::get('download', 'ReportSireRvieController@download')->name('tenant.reports.sire_rvie.download');
 
+                    // Read-only reconciliation against SUNAT's propuesta (SIRE API).
+                    Route::get('sunat', 'ReportSireRvieController@sunatIndex')->name('tenant.reports.sire_rvie.sunat.index');
+                    Route::post('sunat/request', 'ReportSireRvieController@sunatRequest')->name('tenant.reports.sire_rvie.sunat.request');
+                    Route::get('sunat/{id}', 'ReportSireRvieController@sunatShow')->where('id', '[0-9]+')->name('tenant.reports.sire_rvie.sunat.show');
+                    Route::post('sunat/{id}/refresh', 'ReportSireRvieController@sunatRefresh')->where('id', '[0-9]+')->name('tenant.reports.sire_rvie.sunat.refresh');
+
                 });
 
                 Route::prefix('sire/rce')->group(function () {

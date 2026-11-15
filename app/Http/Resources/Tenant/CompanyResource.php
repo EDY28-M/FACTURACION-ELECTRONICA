@@ -38,6 +38,8 @@ class CompanyResource extends JsonResource
             'favicon' => $this->favicon,
             'gre_client_id' => $this->gre_client_id,
             'has_gre_client_secret' => $this->hasGreClientSecret(),
+            'sire_client_id' => $this->sire_client_id,
+            'has_sire_client_secret' => $this->hasSireClientSecret(),
         ];
     }
 }

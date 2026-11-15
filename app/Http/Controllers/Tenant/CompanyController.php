@@ -43,6 +43,10 @@ class CompanyController extends Controller
             $company->setGreClientSecret($request->input('gre_client_secret'));
         }
 
+        if (filled($request->input('sire_client_secret'))) {
+            $company->setSireClientSecret($request->input('sire_client_secret'));
+        }
+
         $company->save();
 
         return [

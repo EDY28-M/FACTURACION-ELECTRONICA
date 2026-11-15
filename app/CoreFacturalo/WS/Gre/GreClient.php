@@ -22,13 +22,19 @@ use Illuminate\Support\Facades\Cache;
 class GreClient
 {
     /** @var array */
-    private $settings;
+    protected $settings;
 
     /** @var ClientInterface */
     private $http;
 
     /** @var CacheRepository */
     private $cache;
+
+    /** Human label used in error messages (subclasses such as SireClient override it). */
+    protected $apiLabel = 'GRE';
+
+    /** Token cache namespace; the cache key also embeds the scope so tokens of different APIs never collide. */
+    protected $cachePrefix = 'gre';
 
     public function __construct(array $settings, ClientInterface $http = null, CacheRepository $cache = null)
     {
@@ -41,7 +47,7 @@ class GreClient
         }
         if ($missing) {
             throw new GreConfigurationException(
-                'Configuración GRE incompleta: falta '.implode(', ', $missing).'.'
+                'Configuración '.$this->apiLabel.' incompleta: falta '.implode(', ', $missing).'.'
             );
         }
 
@@ -90,7 +96,7 @@ class GreClient
         if ($status < 200 || $status >= 300 || empty($body['access_token'])) {
             $message = $body['error_description'] ?? $body['msg'] ?? $body['error'] ?? 'No se pudo obtener el token de SUNAT.';
             throw new GreAuthException(
-                'SUNAT rechazó las credenciales de la API GRE: '.$message,
+                'SUNAT rechazó las credenciales de la API '.$this->apiLabel.': '.$message,
                 $status,
                 $body['cod'] ?? ($body['error'] ?? null),
                 $message
@@ -177,7 +183,18 @@ class GreClient
      * Executes an API call with the bearer token. Retries once with a fresh
      * token if SUNAT answers 401 (token revoked/expired earlier than cached).
      */
-    private function authorizedRequest($method, $url, array $options = [])
+    protected function authorizedRequest($method, $url, array $options = [])
+    {
+        return $this->decode((string) $this->authorizedRaw($method, $url, $options)->getBody());
+    }
+
+    /**
+     * Same as authorizedRequest() but returns the PSR-7 response (2xx only; other statuses throw),
+     * so callers can read binary bodies such as ZIP downloads.
+     *
+     * @return \Psr\Http\Message\ResponseInterface
+     */
+    protected function authorizedRaw($method, $url, array $options = [])
     {
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $token = $this->getToken($attempt > 0);
@@ -190,25 +207,24 @@ class GreClient
                 continue;
             }
 
-            $body = $this->decode((string) $response->getBody());
-
             if ($status >= 200 && $status < 300) {
-                return $body;
+                return $response;
             }
 
-            $this->throwApiError($status, $body);
+            $this->throwApiError($status, $this->decode((string) $response->getBody()));
         }
     }
 
-    private function throwApiError($status, array $body)
+    protected function throwApiError($status, array $body)
     {
         $code = isset($body['cod']) ? (string) $body['cod'] : null;
         $msg = $body['msg'] ?? ($body['message'] ?? null);
         $errors = [];
         foreach (($body['errors'] ?? []) as $error) {
             $errors[] = [
-                'codError' => $error['codError'] ?? null,
-                'desError' => $error['desError'] ?? null,
+                // GRE answers {codError, desError}; the SIRE manual documents {cod, msg} (v32, section 5).
+                'codError' => $error['codError'] ?? ($error['cod'] ?? null),
+                'desError' => $error['desError'] ?? ($error['msg'] ?? null),
             ];
         }
 
@@ -223,7 +239,7 @@ class GreClient
         throw new GreApiException($text, $status, $code, $msg, $errors);
     }
 
-    private function request($method, $url, array $options)
+    protected function request($method, $url, array $options)
     {
         $options += [
             'http_errors' => false,
@@ -245,7 +261,7 @@ class GreClient
         }
     }
 
-    private function decode($raw)
+    protected function decode($raw)
     {
         $decoded = json_decode($raw, true);
 
@@ -254,6 +270,6 @@ class GreClient
 
     private function tokenCacheKey()
     {
-        return 'gre:token:'.$this->settings['ruc'].':'.$this->settings['client_id'].':'.md5($this->settings['username']).':'.md5($this->settings['client_secret'].$this->settings['password']);
+        return $this->cachePrefix.':token:'.$this->settings['ruc'].':'.$this->settings['client_id'].':'.md5($this->settings['scope']).':'.md5($this->settings['username']).':'.md5($this->settings['client_secret'].$this->settings['password']);
     }
 }
