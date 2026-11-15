@@ -117,7 +117,9 @@ class DocumentController extends Controller
                                     'identity_document_type_id' => $row->identity_document_type_id,
                                     'identity_document_type_code' => $row->identity_document_type->code,
                                     'addresses' => $row->addresses,
-                                    'address' =>  $row->address
+                                    'address' =>  $row->address,
+                                    'state' => $row->state,
+                                    'condition' => $row->condition
                                 ];
                             });
 
@@ -238,7 +240,9 @@ class DocumentController extends Controller
                     'identity_document_type_code' => $row->identity_document_type->code,
                     'addresses' => $row->addresses,
                     'address' =>  $row->address,
-                    'internal_code' => $row->internal_code
+                    'internal_code' => $row->internal_code,
+                    'state' => $row->state,
+                    'condition' => $row->condition
                 ];
             });
             return $customers;
@@ -666,7 +670,9 @@ class DocumentController extends Controller
                             'identity_document_type_id' => $row->identity_document_type_id,
                             'identity_document_type_code' => $row->identity_document_type->code,
                             'addresses' => $row->addresses,
-                            'address' =>  $row->address
+                            'address' =>  $row->address,
+                            'state' => $row->state,
+                            'condition' => $row->condition
                         ];
                     });
 

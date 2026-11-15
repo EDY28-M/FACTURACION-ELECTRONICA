@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Modules\Finance\Traits\FinanceTrait;
 use App\CoreFacturalo\WS\Client\WsClient;
 use App\CoreFacturalo\Helpers\Sunat\BoletaIdentification;
+use App\CoreFacturalo\Helpers\Sunat\RucValidator;
 use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
 use App\CoreFacturalo\Helpers\Xml\XmlHash;
 use App\CoreFacturalo\WS\Signed\XmlSigned;
@@ -103,10 +104,12 @@ class Facturalo
         $this->type = $inputs['type'];
 
         // $skipSendDeadlineCheck is set only by trusted server-side flows (offline sync), never from request data.
+        // It skips every emission guard below: send deadline, boleta identification and customer RUC check digit.
         // It also skips the boleta identification check: the offline document was already validated at emission.
         if (!$skipSendDeadlineCheck) {
             $this->assertIssueDateWithinSendDeadline($inputs);
             $this->assertBoletaIdentification($inputs);
+            $this->assertCustomerRuc($inputs);
         }
 
         switch ($this->type) {
@@ -609,6 +612,26 @@ class Facturalo
             $customer['identity_document_type_id'] ?? null,
             $customer['number'] ?? null
         );
+    }
+
+    /**
+     * A factura (or a note linked to a factura) addressed to a RUC must carry a well formed RUC
+     * (Modulo 11 check digit). Boletas and other document types are not validated here.
+     * The RUC status (estado/condicion) is NOT checked: SUNAT only observes it (4013/4014), it does not reject.
+     */
+    private function assertCustomerRuc(array $inputs)
+    {
+        $documentTypeId = $inputs['document_type_id'] ?? null;
+        $isFactura = $this->type === 'invoice' && $documentTypeId === '01';
+        $isFacturaNote = in_array($this->type, ['credit', 'debit'], true) && ($inputs['group_id'] ?? null) === '01';
+
+        if (!$isFactura && !$isFacturaNote) {
+            return;
+        }
+
+        $customer = $inputs['customer'] ?? [];
+
+        RucValidator::assert($customer['identity_document_type_id'] ?? null, $customer['number'] ?? null);
     }
 
     /**

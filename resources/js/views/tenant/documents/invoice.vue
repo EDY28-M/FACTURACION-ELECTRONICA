@@ -130,6 +130,7 @@
 
                                     </el-select>
                                     <small class="form-control-feedback" v-if="errors.customer_id" v-text="errors.customer_id[0]"></small>
+                                    <small class="text-warning d-block" v-if="customerStatusWarning" v-text="customerStatusWarning"></small>
                                 </div>
                                 <div v-if="customer_addresses.length > 0" class="form-group">
                                     <label class="control-label font-weight-bold text-info">Dirección</label>
@@ -958,6 +959,19 @@
             // SUNAT: boletas above S/ 700.00 must identify the customer (Anexo II RS 114-2019/SUNAT)
             boletaIdentificationMessage() {
                 return BOLETA_IDENTIFICATION_MESSAGE
+            },
+            // Non-blocking: SUNAT only observes (4013/4014) a receptor RUC that is not active / not habido.
+            customerStatusWarning() {
+                if (!this.form || !this.form.customer_id) return null
+                const customer = _.find(this.customers, {'id': this.form.customer_id}) ||
+                    _.find(this.all_customers, {'id': this.form.customer_id})
+                if (!customer || customer.identity_document_type_id !== '6') return null
+                const state = String(customer.state || '').trim().toUpperCase()
+                const condition = String(customer.condition || '').trim().toUpperCase()
+                const messages = []
+                if (state && state !== 'ACTIVO') messages.push(`El RUC del cliente figura como ${customer.state} en SUNAT.`)
+                if (condition && condition !== 'HABIDO') messages.push(`La condición del cliente es ${customer.condition}: no podrá usar el crédito fiscal.`)
+                return messages.length ? messages.join(' ') : null
             },
             boletaNeedsIdentification() {
                 if (!this.form || this.form.document_type_id !== '03') return false

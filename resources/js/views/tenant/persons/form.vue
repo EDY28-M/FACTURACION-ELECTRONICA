@@ -35,6 +35,7 @@
                             </div>
 
                             <small class="form-control-feedback" v-if="errors.number" v-text="errors.number[0]"></small>
+                            <small class="text-danger" v-else-if="rucInlineError" v-text="rucInlineError"></small>
                         </div>
                     </div>
                 </div>
@@ -277,6 +278,7 @@
 <script>
 
     import {serviceNumber} from '../../../mixins/functions'
+    import {isValidRuc, rucErrorMessage} from '../../../helpers/ruc-validator'
 
     export default {
         mixins: [serviceNumber],
@@ -318,6 +320,13 @@
 
         },
         computed: {
+            // Inline Modulo 11 feedback once the 11 digits are typed (the server enforces it on save).
+            rucInlineError() {
+                if (!this.form || this.form.identity_document_type_id !== '6') return null
+                const number = String(this.form.number || '').trim()
+                if (number.length !== 11 || isValidRuc(number)) return null
+                return rucErrorMessage(number)
+            },
             maxLength: function () {
                 if (this.form.identity_document_type_id === '6') {
                     return 11
@@ -439,6 +448,13 @@
                         return {
                             success: false,
                             message: `El campo número debe contener solo números`
+                        }
+                    }
+
+                    if(!isValidRuc(this.form.number)){
+                        return {
+                            success: false,
+                            message: rucErrorMessage(this.form.number)
                         }
                     }
 
