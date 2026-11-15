@@ -16,6 +16,10 @@ class ItemRequest extends FormRequest
     {
         $id = $this->input('id');
         return [
+            'item_code' => [
+                'nullable',
+                \App\CoreFacturalo\Helpers\Sunat\ProductCode::itemCodeRule(\App\CoreFacturalo\Helpers\Sunat\ProductCode::storedItemCode($id)),
+            ],
             'internal_id' => [
                 'required',
                 Rule::unique('tenant.items')->ignore($id),

@@ -157,6 +157,7 @@ if ($hostname) {
 			Route::get('items/tables', 'Tenant\ItemController@tables');
 			Route::get('items/record/{item}', 'Tenant\ItemController@record');
 			Route::post('items', 'Tenant\ItemController@store');
+			Route::get('items/sunat-product-codes', 'Tenant\ItemController@sunatProductCodes');
 			Route::delete('items/{item}', 'Tenant\ItemController@destroy');
 			Route::delete('items/item-unit-type/{item}', 'Tenant\ItemController@destroyItemUnitType');
 			Route::post('items/import', 'Tenant\ItemController@import');

@@ -165,12 +165,22 @@
                     </div>
                     <div class="col-md-3">
                         <div class="form-group" :class="{'has-danger': errors.item_code}">
-                            <label class="control-label">Código Sunat
-                                <el-tooltip class="item" effect="dark" content="Código proporcionado por SUNAT, campo obligatorio para exportaciones" placement="top">
+                            <label class="control-label">Código de producto SUNAT
+                                <el-tooltip class="item" effect="dark" content="Código del Catálogo 25 de SUNAT (8 dígitos). Busque por descripción o código." placement="top">
                                     <i class="fa fa-info-circle"></i>
                                 </el-tooltip>
                             </label>
-                            <el-input v-model="form.item_code" dusk="item_code"></el-input>
+                            <el-select v-model="form.item_code" dusk="item_code" filterable remote clearable
+                                       reserve-keyword placeholder="Buscar por descripción o código"
+                                       :remote-method="searchSunatCodes" :loading="loading_sunat_codes"
+                                       no-data-text="Escriba al menos 3 caracteres" style="width:100%">
+                                <el-option v-for="opt in sunatCodeOptions" :key="opt.code" :value="opt.code"
+                                           :label="opt.code + ' - ' + opt.description">
+                                    <span style="float:left">{{ opt.code }}</span>
+                                    <span style="float:right;color:#8492a6;font-size:12px;max-width:75%;overflow:hidden;text-overflow:ellipsis">{{ opt.description }}</span>
+                                </el-option>
+                            </el-select>
+                            <small class="text-warning" v-if="form.item_code && !codeInCatalog">El código no está en el catálogo. Seleccione uno válido.</small>
                             <small class="form-control-feedback" v-if="errors.item_code" v-text="errors.item_code[0]"></small>
                         </div>
                     </div>
@@ -561,6 +571,8 @@
                 form_brand:{ add: false, name: null, id: null },
                 warehouses: [],
                 loading_submit: false,
+                sunatCodeOptions: [],
+                loading_sunat_codes: false,
                 showPercentagePerception: false,
                 has_percentage_perception: false,
                 percentage_perception:null,
@@ -626,7 +638,31 @@
 
         },
 
+        computed: {
+            codeInCatalog() {
+                return this.sunatCodeOptions.some(o => o.code === this.form.item_code)
+            }
+        },
+        watch: {
+            'form.item_code'(code) {
+                // Existing value (edit mode): look it up so it is shown or flagged as outside the catalog.
+                if (code && !this.codeInCatalog) this.searchSunatCodes(code)
+            }
+        },
         methods: {
+            searchSunatCodes(query) {
+                query = (query || '').trim()
+                if (query.length < 3) return
+                this.loading_sunat_codes = true
+                this.$http.get(`/${this.resource}/sunat-product-codes`, {params: {q: query}})
+                    .then(response => {
+                        // Keep the already selected option so it keeps its description while the list changes.
+                        const kept = this.sunatCodeOptions.filter(o => o.code === this.form.item_code)
+                        const found = response.data.data
+                        this.sunatCodeOptions = kept.filter(k => !found.some(f => f.code === k.code)).concat(found)
+                    })
+                    .finally(() => { this.loading_sunat_codes = false })
+            },
             setDefaultConfiguration(){
                 this.form.sale_affectation_igv_type_id = (this.configuration) ? this.configuration.affectation_igv_type_id : '10'
 

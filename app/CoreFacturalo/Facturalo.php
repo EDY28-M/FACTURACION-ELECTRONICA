@@ -23,6 +23,7 @@ use Modules\Finance\Traits\FinanceTrait;
 use App\CoreFacturalo\WS\Client\WsClient;
 use App\CoreFacturalo\Helpers\Sunat\BoletaIdentification;
 use App\CoreFacturalo\Helpers\Sunat\RucValidator;
+use App\CoreFacturalo\Helpers\Sunat\ProductCode;
 use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
 use App\CoreFacturalo\Helpers\Xml\XmlHash;
 use App\CoreFacturalo\WS\Signed\XmlSigned;
@@ -110,6 +111,7 @@ class Facturalo
             $this->assertIssueDateWithinSendDeadline($inputs);
             $this->assertBoletaIdentification($inputs);
             $this->assertCustomerRuc($inputs);
+            $this->assertItemProductCodes($inputs);
         }
 
         switch ($this->type) {
@@ -612,6 +614,19 @@ class Facturalo
             $customer['identity_document_type_id'] ?? null,
             $customer['number'] ?? null
         );
+    }
+
+    /**
+     * SUNAT product code (Catalogo 25): does nothing before sunat.product_code_required_from;
+     * from that date facturas, boletas and notes need an existing code on every item.
+     */
+    private function assertItemProductCodes(array $inputs)
+    {
+        if (!in_array($this->type, ['invoice', 'credit', 'debit'], true)) {
+            return;
+        }
+
+        ProductCode::assertItems($inputs);
     }
 
     /**

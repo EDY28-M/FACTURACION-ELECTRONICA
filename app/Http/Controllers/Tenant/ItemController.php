@@ -127,6 +127,16 @@ class ItemController extends Controller
         return view('tenant.items.form');
     }
 
+    /**
+     * Search SUNAT Catalogo 25 (system database) by description or code.
+     */
+    public function sunatProductCodes(\Illuminate\Http\Request $request)
+    {
+        return response()->json([
+            'data' => \App\CoreFacturalo\Helpers\Sunat\ProductCodeSearch::run($request->query('q'), 30),
+        ]);
+    }
+
     public function tables()
     {
         $unit_types = UnitType::whereActive()->orderByDescription()->get();

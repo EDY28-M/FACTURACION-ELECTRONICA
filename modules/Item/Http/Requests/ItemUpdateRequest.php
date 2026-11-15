@@ -29,7 +29,8 @@ class ItemUpdateRequest extends FormRequest
             ],
             'has_igv' => 'boolean',
             'item_code' => [
-                'max:250',
+                'nullable',
+                \App\CoreFacturalo\Helpers\Sunat\ProductCode::itemCodeRule(\App\CoreFacturalo\Helpers\Sunat\ProductCode::storedItemCode($id)),
             ],
             'description' => [
                 'required',

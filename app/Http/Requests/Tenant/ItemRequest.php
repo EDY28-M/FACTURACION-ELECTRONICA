@@ -69,6 +69,10 @@ class ItemRequest extends FormRequest
             // 'brand_id' => [
             //     'required_if:is_set,false',
             // ],
+            'item_code' => [
+                'nullable',
+                \App\CoreFacturalo\Helpers\Sunat\ProductCode::itemCodeRule(\App\CoreFacturalo\Helpers\Sunat\ProductCode::storedItemCode($id)),
+            ],
             'model' => 'max:100'
 
         ];

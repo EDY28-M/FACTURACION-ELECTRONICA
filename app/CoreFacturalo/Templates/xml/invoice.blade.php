@@ -536,7 +536,7 @@
             @endif
             @if($row->item->item_code)
             <cac:CommodityClassification>
-                <cbc:ItemClassificationCode>{{ $row->item->item_code }}</cbc:ItemClassificationCode>
+                <cbc:ItemClassificationCode listID="UNSPSC" listAgencyName="GS1 US" listName="Item Classification">{{ $row->item->item_code }}</cbc:ItemClassificationCode>
             </cac:CommodityClassification>
             @endif
             @if($row->item->item_code_gs1)
