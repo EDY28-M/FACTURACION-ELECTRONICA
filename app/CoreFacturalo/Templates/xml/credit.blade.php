@@ -6,9 +6,11 @@
     $series = ($note->affected_document) ? $note->affected_document->series : $note->data_affected_document->series;
     $document_type_id = ($note->affected_document) ? $note->affected_document->document_type_id : $note->data_affected_document->document_type_id;
     $number = ($note->affected_document) ? $note->affected_document->number : $note->data_affected_document->number;
+    // Type 13 (adjustment of payment amounts/dates): carries the new cuotas and zero amounts.
+    $isPaymentAdjustment = ((string) $note->note_credit_type_id === '13');
 
 @endphp
-{!! '<?xml version="1.0" encoding="utf-8" standalone="no"?>' !!}
+{!! '<'.'?xml version="1.0" encoding="utf-8" standalone="no"?'.'>' !!}
 <CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
             xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
             xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
@@ -151,6 +153,21 @@
             @endif
         </cac:Party>
     </cac:AccountingCustomerParty>
+    @if($isPaymentAdjustment)
+    <cac:PaymentTerms>
+        <cbc:ID>FormaPago</cbc:ID>
+        <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
+        <cbc:Amount currencyID="{{ $document->currency_type_id }}">{{ number_format($document->fee->sum('amount'), 2, '.', '') }}</cbc:Amount>
+    </cac:PaymentTerms>
+    @foreach($document->fee as $fee)
+    <cac:PaymentTerms>
+        <cbc:ID>FormaPago</cbc:ID>
+        <cbc:PaymentMeansID>Cuota{{ sprintf("%03d", $loop->iteration) }}</cbc:PaymentMeansID>
+        <cbc:Amount currencyID="{{ $document->currency_type_id }}">{{ number_format($fee->amount, 2, '.', '') }}</cbc:Amount>
+        <cbc:PaymentDueDate>{{ $fee->date->format('Y-m-d') }}</cbc:PaymentDueDate>
+    </cac:PaymentTerms>
+    @endforeach
+    @endif
     <cac:TaxTotal>
         <cbc:TaxAmount currencyID="{{ $document->currency_type_id }}">{{ $document->total_taxes }}</cbc:TaxAmount>
         @if($document->total_isc > 0)
@@ -162,6 +179,19 @@
                     <cbc:ID>2000</cbc:ID>
                     <cbc:Name>ISC</cbc:Name>
                     <cbc:TaxTypeCode>EXC</cbc:TaxTypeCode>
+                </cac:TaxScheme>
+            </cac:TaxCategory>
+        </cac:TaxSubtotal>
+        @endif
+        @if($isPaymentAdjustment)
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="{{ $document->currency_type_id }}">0.00</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="{{ $document->currency_type_id }}">0.00</cbc:TaxAmount>
+            <cac:TaxCategory>
+                <cac:TaxScheme>
+                    <cbc:ID>1000</cbc:ID>
+                    <cbc:Name>IGV</cbc:Name>
+                    <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
                 </cac:TaxScheme>
             </cac:TaxCategory>
         </cac:TaxSubtotal>
@@ -269,7 +299,7 @@
     <cac:CreditNoteLine>
         <cbc:ID>{{ $loop->iteration }}</cbc:ID>
         <cbc:CreditedQuantity unitCode="{{ $row->item->unit_type_id }}">{{ $row->quantity }}</cbc:CreditedQuantity>
-        @if($row->total_value > 0)
+        @if($row->total_value > 0 || $isPaymentAdjustment)
         <cbc:LineExtensionAmount currencyID="{{ $document->currency_type_id }}">{{ $row->total_value }}</cbc:LineExtensionAmount>
         @endif
         <cac:PricingReference>

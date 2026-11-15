@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\CoreFacturalo\Requests\Inputs\Functions;
+use App\CoreFacturalo\Helpers\Sunat\CreditNotePaymentAdjustment;
 use App\Models\Tenant\Company;
 use App\Models\Tenant\Document;
 
@@ -35,7 +36,11 @@ class DocumentObserver
      */
     public function updated(Document $document)
     {
-        //
+        // Every path that accepts a document (CDR response, consult CDR, manual status change)
+        // ends here, so accepted type 13 credit notes update the affected invoice cuotas once.
+        if ($document->wasChanged('state_type_id') && $document->state_type_id === '05') {
+            CreditNotePaymentAdjustment::applyAccepted($document);
+        }
     }
 
     /**

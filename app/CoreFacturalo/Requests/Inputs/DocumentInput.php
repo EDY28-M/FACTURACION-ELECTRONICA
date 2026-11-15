@@ -10,6 +10,7 @@ use App\Models\Tenant\Catalogs\DocumentType;
 use App\Models\Tenant\Company;
 use App\Models\Tenant\Document;
 use App\Models\Tenant\Item;
+use App\CoreFacturalo\Helpers\Sunat\CreditNotePaymentAdjustment;
 use Illuminate\Support\Str;
 use App\CoreFacturalo\Requests\Inputs\Transform\DocumentWebTransform;
 use Modules\Offline\Models\OfflineConfiguration;
@@ -60,7 +61,7 @@ class DocumentInput
             $data_json = Functions::valueKeyInArray($inputs, 'data_json');
         }
 
-        return [
+        $data = [
             'type' => $inputs['type'],
             'group_id' => $inputs['group_id'],
             'user_id' => auth()->id(),
@@ -132,6 +133,19 @@ class DocumentInput
             'payment_condition_id' => key_exists('payment_condition_id', $inputs)?$inputs['payment_condition_id']:'01',
             'fee' => Functions::valueKeyInArray($inputs, 'fee', []),
         ];
+
+        // Credit note type 13: only payment terms change; amounts are zero and cuotas are validated.
+        if ($data['type'] === 'credit' && CreditNotePaymentAdjustment::isType($data['note']['note_credit_type_id'])) {
+            $data['fee'] = CreditNotePaymentAdjustment::validatedFees(
+                $data['note']['affected_document_id'],
+                $data['date_of_issue'],
+                $data['currency_type_id'],
+                $data['fee']
+            );
+            $data = CreditNotePaymentAdjustment::zeroAmounts($data);
+        }
+
+        return $data;
     }
 
     private static function items($inputs)

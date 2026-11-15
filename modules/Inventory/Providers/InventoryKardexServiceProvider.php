@@ -2,6 +2,7 @@
 
 namespace Modules\Inventory\Providers;
 
+use App\CoreFacturalo\Helpers\Sunat\CreditNoteStock;
 use App\Models\Tenant\DocumentItem;
 use App\Models\Tenant\Document;
 use App\Models\Tenant\Item;
@@ -55,6 +56,9 @@ class InventoryKardexServiceProvider extends ServiceProvider
 
     private function sale() {
         DocumentItem::created(function($document_item) {
+            // Credit notes only give stock back for voids/returns (catalog 09: 01, 02, 06, 07).
+            if(!CreditNoteStock::documentMovesStock($document_item->document)) return;
+
             if(!$document_item->item->is_set){
 
                 $presentationQuantity = (!empty($document_item->item->presentation)) ? $document_item->item->presentation->quantity_unit : 1;

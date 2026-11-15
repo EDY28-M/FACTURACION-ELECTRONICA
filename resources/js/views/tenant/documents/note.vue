@@ -43,8 +43,8 @@
                             <template v-else>
                                 <div class="form-group" :class="{'has-danger': errors['note.note_credit_type_id']}">
                                     <label class="control-label">Tipo nota de crédito</label>
-                                    <el-select v-model="form.note_credit_or_debit_type_id">
-                                        <el-option v-for="option in note_credit_types" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                                    <el-select v-model="form.note_credit_or_debit_type_id" @change="changeNoteCreditType">
+                                        <el-option v-for="option in availableNoteCreditTypes" :key="option.id" :value="option.id" :label="option.description"></el-option>
                                     </el-select>
                                     <small class="form-control-feedback" v-if="errors['note.note_credit_type_id']" v-text="errors['note.note_credit_type_id'][0]"></small>
                                 </div>
@@ -112,7 +112,40 @@
                             </div>
                         </div>
                     </div>
-                    <div class="row">
+                    <div class="row" v-if="isPaymentAdjustment">
+                        <div class="col-md-12">
+                            <h5>Nuevas cuotas de pago (crédito)</h5>
+                            <p class="text-muted mb-2">Esta nota solo modifica el monto pendiente y/o las fechas de vencimiento. Los importes de la nota se emiten en cero.</p>
+                            <table class="table table-sm">
+                                <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Fecha de vencimiento</th>
+                                    <th class="text-right">Monto</th>
+                                    <th></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr v-for="(fee, index) in form.fee" :key="index">
+                                    <td>{{ index + 1 }}</td>
+                                    <td>
+                                        <el-date-picker v-model="fee.date" type="date" value-format="yyyy-MM-dd" :clearable="false" :picker-options="feeDateOptions"></el-date-picker>
+                                    </td>
+                                    <td class="text-right">
+                                        <el-input-number v-model="fee.amount" :min="0" :precision="2" :controls="false"></el-input-number>
+                                    </td>
+                                    <td class="text-right">
+                                        <button type="button" class="btn btn-xs btn-danger" @click.prevent="removeFee(index)">x</button>
+                                    </td>
+                                </tr>
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn btn-sm btn-primary" @click.prevent="addFee">+ Agregar cuota</button>
+                            <p class="text-right mb-0"><b>Monto neto pendiente: </b>{{ currency_type.symbol }} {{ feeTotal }}</p>
+                            <small class="form-control-feedback text-danger" v-if="errors.message" v-text="errors.message"></small>
+                        </div>
+                    </div>
+                    <div class="row" v-if="!isPaymentAdjustment">
                         <div class="col-lg-2 col-md-6 d-flex align-items-end pt-2">
                             <div class="form-group">
                                 <button type="button" class="btn waves-effect waves-light btn-primary" @click.prevent="clickAddItemNote()">+ Agregar Producto</button>
@@ -133,7 +166,7 @@
                                         <th class="text-right">Descuento</th>
                                         <th class="text-right">Cargo</th>
                                         <th class="text-right">Total</th>
-                                        <th></th>
+                                        <th v-if="!isPaymentAdjustment"></th>
                                     </tr>
                                     </thead>
                                     <tbody>
@@ -146,7 +179,7 @@
                                         <td class="text-right">{{ currency_type.symbol }} {{ row.total_discount }}</td>
                                         <td class="text-right">{{ currency_type.symbol }} {{ row.total_charge }}</td>
                                         <td class="text-right">{{ currency_type.symbol }} {{ row.total }}</td>
-                                        <td class="text-right">
+                                        <td class="text-right" v-if="!isPaymentAdjustment">
                                             <button type="button" class="btn waves-effect waves-light btn-xs btn-danger" @click.prevent="clickRemoveItem(index)">x</button>
                                             <button type="button" class="btn waves-effect waves-light btn-xs btn-info" @click.prevent="ediItem(row, index)" ><span style='font-size:10px;'>&#9998;</span> </button>
                                         </td>
@@ -168,7 +201,7 @@
                 </div>
                 <div class="form-actions text-right mt-4">
                     <el-button @click.prevent="close()">Cancelar</el-button>
-                    <el-button type="primary" native-type="submit" :loading="loading_submit" v-if="form.items.length > 0 && form.total > 0">Generar</el-button>
+                    <el-button type="primary" native-type="submit" :loading="loading_submit" v-if="form.items.length > 0 && (form.total > 0 || isPaymentAdjustment)">Generar</el-button>
                 </div>
             </form>
         </div>
@@ -230,6 +263,23 @@
             }
         },
         computed: {
+            isPaymentAdjustment() {
+                return this.form.document_type_id === '07' && this.form.note_credit_or_debit_type_id === '13'
+            },
+            // Type 13 (payment amounts/dates adjustment) only applies to credit facturas.
+            availableNoteCreditTypes() {
+                const allowed13 = !!this.document && this.document.document_type_id === '01' && this.document.payment_condition_id === '02'
+                return this.note_credit_types.filter(row => row.id !== '13' || allowed13)
+            },
+            feeTotal() {
+                return _.round(_.sumBy(this.form.fee || [], row => parseFloat(row.amount) || 0), 2).toFixed(2)
+            },
+            feeDateOptions() {
+                const issue = this.form.date_of_issue
+                return {
+                    disabledDate: (time) => !moment(time).isAfter(moment(issue, 'YYYY-MM-DD'), 'day')
+                }
+            },
             // RS 003-2023/SUNAT: notes linked to a factura (F series) can only be issued up to 3 calendar days back.
             issueDateOptions() {
                 const limited = !!this.document && this.document.group_id === '01' && !this.is_contingency
@@ -307,6 +357,7 @@
                     },
                     operation_type_id: null,
                     hotel: {},
+                    fee: [],
                 }
 
                 await this.form.items.forEach((item)=>{
@@ -316,6 +367,26 @@
                     item.IdLoteSelected = item.item.IdLoteSelected
                 })
 
+            },
+            changeNoteCreditType() {
+                this.form.fee = []
+                if (this.isPaymentAdjustment) {
+                    // Prefill with the cuotas of the affected factura; the user edits amounts/dates.
+                    const fees = (this.document.fee || [])
+                    this.form.fee = fees.length > 0
+                        ? fees.map(row => ({
+                            date: moment(row.date).format('YYYY-MM-DD'),
+                            currency_type_id: this.form.currency_type_id,
+                            amount: parseFloat(row.amount)
+                        }))
+                        : [{date: null, currency_type_id: this.form.currency_type_id, amount: 0}]
+                }
+            },
+            addFee() {
+                this.form.fee.push({date: null, currency_type_id: this.form.currency_type_id, amount: 0})
+            },
+            removeFee(index) {
+                this.form.fee.splice(index, 1)
             },
             clickAddItemNote(){
                 this.recordItem = null
@@ -380,6 +451,7 @@
             },
             changeDocumentType() {
                 this.form.note_credit_or_debit_type_id = null
+                this.form.fee = []
                 this.form.series_id = null
                 if(this.is_contingency) {
                     this.series = _.filter(this.all_series, {'document_type_id': this.form.document_type_id,

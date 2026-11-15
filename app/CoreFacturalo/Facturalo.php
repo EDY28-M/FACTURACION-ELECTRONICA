@@ -113,10 +113,14 @@ class Facturalo
             case 'debit':
             case 'credit':
                 $document = Document::create($inputs);
+                // The note is stored before the items: the stock listeners read the credit note type.
+                $document->note()->create($inputs['note']);
+                if ($this->type === 'credit' && (string) ($inputs['note']['note_credit_type_id'] ?? '') === '13') {
+                    $this->saveFee($document, $inputs['fee'] ?? []);
+                }
                 foreach ($inputs['items'] as $row) {
                     $document->items()->create($row);
                 }
-                $document->note()->create($inputs['note']);
                 $this->document = Document::find($document->id);
                 break;
             case 'invoice':
