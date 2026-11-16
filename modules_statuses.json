@@ -1,0 +1,22 @@
+{
+    "Account": true,
+    "BusinessTurn": true,
+    "Dashboard": true,
+    "Document": true,
+    "DocumentaryProcedure": true,
+    "Ecommerce": true,
+    "Expense": true,
+    "Finance": true,
+    "Hotel": true,
+    "Inventory": true,
+    "Item": true,
+    "LevelAccess": true,
+    "Offline": true,
+    "Order": true,
+    "Padron": true,
+    "Pos": true,
+    "Purchase": true,
+    "Report": true,
+    "Sale": true,
+    "Services": true
+}

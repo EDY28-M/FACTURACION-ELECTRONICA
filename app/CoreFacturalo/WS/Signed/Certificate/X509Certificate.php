@@ -173,10 +173,57 @@ class X509Certificate
         $result = openssl_pkcs12_read($pfx, $certs, $password);
 
         if ($result === false) {
-            throw new \Exception(openssl_error_string());
+            $opensslError = openssl_error_string();
+            $fallbackCerts = $this->parsePfxViaOpenSslCli($pfx, $password);
+            if ($fallbackCerts !== null) {
+                $this->certs = $fallbackCerts;
+                return;
+            }
+            throw new \Exception($opensslError ?: 'Unable to read PKCS#12 certificate');
         }
 
         $this->certs = $certs;
+    }
+
+    private function parsePfxViaOpenSslCli($pfx, $password): ?array
+    {
+        $tmpPfx = tempnam(sys_get_temp_dir(), 'pfx_');
+        if ($tmpPfx === false) {
+            return null;
+        }
+
+        try {
+            file_put_contents($tmpPfx, $pfx);
+            $process = new \Symfony\Component\Process\Process(
+                ['openssl', 'pkcs12', '-legacy', '-in', $tmpPfx, '-nodes', '-passin', 'env:OPENSSL_PFX_PASS'],
+                null,
+                ['OPENSSL_PFX_PASS' => (string) $password]
+            );
+            $process->run();
+            $pem = $process->getOutput();
+        } catch (\Throwable $e) {
+            return null;
+        } finally {
+            @unlink($tmpPfx);
+        }
+
+        if (!$pem || strpos($pem, '-----BEGIN CERTIFICATE-----') === false) {
+            return null;
+        }
+
+        $certMatch = [];
+        $keyMatch = [];
+        preg_match('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $pem, $certMatch);
+        preg_match('/-----BEGIN (?:RSA |ENCRYPTED )?PRIVATE KEY-----.*?-----END (?:RSA |ENCRYPTED )?PRIVATE KEY-----/s', $pem, $keyMatch);
+
+        if (empty($certMatch[0]) || empty($keyMatch[0])) {
+            return null;
+        }
+
+        return [
+            'cert' => $certMatch[0] . "\n",
+            'pkey' => $keyMatch[0] . "\n",
+        ];
     }
 
     private function loadSubject()

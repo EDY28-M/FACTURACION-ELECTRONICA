@@ -150,6 +150,8 @@ return [
         /*
          * Package Service Providers...
          */
+        Hyn\Tenancy\Providers\TenancyProvider::class,
+        Hyn\Tenancy\Providers\WebserverProvider::class,
         Collective\Html\HtmlServiceProvider::class,
 
         /*

@@ -34,6 +34,7 @@ class WsSecurityHeader extends SoapHeader
             )],
             SOAP_ENC_OBJECT
         );
-        $this->SoapHeader(self::WSS_NAMESPACE, 'Security', $security, false);
+        // PHP 8 removed the PHP 4-style SoapHeader::SoapHeader() constructor alias.
+        parent::__construct(self::WSS_NAMESPACE, 'Security', $security, false);
     }
 }
