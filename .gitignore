@@ -30,3 +30,14 @@ composer.lock
 /.project
 app/CoreFacturalo/Templates/pdf/personalizada*
 public/templates/pdf/personalizada*
+/.local/
+
+# local work artefacts and generated output
+/work/
+/.impeccable/
+/.atl/
+/.claude/
+.DS_Store
+/public/js/chunk-*.js
+/public/js/chunk-*.js.map
+/public/proto-tenant/
