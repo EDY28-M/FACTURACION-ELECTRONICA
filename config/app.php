@@ -188,7 +188,8 @@ return [
         Rap2hpoutre\LaravelLogViewer\LaravelLogViewerServiceProvider::class,
 
         ZanySoft\Zip\ZipServiceProvider::class,
-        Barryvdh\Debugbar\ServiceProvider::class,
+        // Dev-only package: absent after `composer install --no-dev` (production deployments).
+        ...(class_exists(\Barryvdh\Debugbar\ServiceProvider::class) ? [Barryvdh\Debugbar\ServiceProvider::class] : []),
     ],
 
     /*
