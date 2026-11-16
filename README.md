@@ -1,6 +1,16 @@
 # ** Facturador PRO 4 **
 
 
+## Despliegue en servidor
+
+Instalacion y actualizacion con un solo comando en un VPS con Docker:
+
+```sh
+APP_URL_BASE=facturador.midominio.com ./deploy.sh
+```
+
+Guia completa (DNS, SSL, respaldos, scheduler): [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Manuales de Instalación
 
 [Windows - Linux](https://drive.google.com/file/d/1GowS3z9dbrN6htRcWybJG-X68PZbfdO2/view?usp=sharing "Clic")
