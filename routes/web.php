@@ -24,7 +24,7 @@ if ($hostname) {
 		Route::middleware(['auth', 'redirect.module', 'locked.tenant'])->group(function () {
 			// Route::get('catalogs', 'Tenant\CatalogController@index')->name('tenant.catalogs.index');
             Route::get('list-reports', 'Tenant\SettingController@listReports');
-            Route::get('list-settings', 'Tenant\SettingController@indexSettings');
+            Route::get('list-settings', 'Tenant\SettingController@indexSettings')->name('tenant.general_configuration.index');
             Route::get('list-banks', 'Tenant\SettingController@listBanks');
             Route::get('list-bank-accounts', 'Tenant\SettingController@listAccountBanks');
             Route::get('list-currencies', 'Tenant\SettingController@listCurrencies');
@@ -155,9 +155,9 @@ if ($hostname) {
 			Route::get('items/columns', 'Tenant\ItemController@columns');
 			Route::get('items/records', 'Tenant\ItemController@records');
 			Route::get('items/tables', 'Tenant\ItemController@tables');
+			Route::get('items/sunat-product-codes', 'Tenant\ItemController@sunatProductCodes');
 			Route::get('items/record/{item}', 'Tenant\ItemController@record');
 			Route::post('items', 'Tenant\ItemController@store');
-			Route::get('items/sunat-product-codes', 'Tenant\ItemController@sunatProductCodes');
 			Route::delete('items/{item}', 'Tenant\ItemController@destroy');
 			Route::delete('items/item-unit-type/{item}', 'Tenant\ItemController@destroyItemUnitType');
 			Route::post('items/import', 'Tenant\ItemController@import');
@@ -286,10 +286,10 @@ if ($hostname) {
 			Route::get('dispatches/create/{document?}/{type?}/{dispatch?}', 'Tenant\DispatchController@create');
 			Route::post('dispatches/tables', 'Tenant\DispatchController@tables');
 			Route::post('dispatches', 'Tenant\DispatchController@store');
-			Route::get('dispatches/record/{id}', 'Tenant\DispatchController@record');
-			Route::post('dispatches/email', 'Tenant\DispatchController@email');
 			Route::post('dispatches/send/{id}', 'Tenant\DispatchController@send');
 			Route::post('dispatches/status/{id}', 'Tenant\DispatchController@status');
+			Route::get('dispatches/record/{id}', 'Tenant\DispatchController@record');
+			Route::post('dispatches/email', 'Tenant\DispatchController@email');
             Route::get('dispatches/generate/{sale_note}', 'Tenant\DispatchController@generate');
             Route::get('dispatches/record/{id}/tables', 'Tenant\DispatchController@generateDocumentTables');
             Route::post('dispatches/record/{id}/set-document-id', 'Tenant\DispatchController@setDocumentId');
@@ -380,11 +380,11 @@ if ($hostname) {
 			Route::get('purchases/anular/{id}', 'Tenant\PurchaseController@anular');
 			Route::get('purchases/delete/{id}', 'Tenant\PurchaseController@delete');
 			Route::post('purchases/import', 'Tenant\PurchaseController@import');
-			// Route::get('purchases/print/{external_id}/{format?}', 'Tenant\PurchaseController@toPrint');
-			Route::get('purchases/search-items', 'Tenant\PurchaseController@searchItems');
 			// SUNAT "Consulta de validez de comprobantes" for supplier documents.
 			Route::post('purchases/validate-sunat-period', 'Tenant\PurchaseSunatValidationController@validatePeriod');
 			Route::post('purchases/{id}/validate-sunat', 'Tenant\PurchaseSunatValidationController@validateOne')->where('id', '[0-9]+');
+			// Route::get('purchases/print/{external_id}/{format?}', 'Tenant\PurchaseController@toPrint');
+			Route::get('purchases/search-items', 'Tenant\PurchaseController@searchItems');
 			Route::get('purchases/search/item/{item}', 'Tenant\PurchaseController@searchItemById');
 			// Route::get('purchases/item_resource/{id}', 'Tenant\PurchaseController@itemResource');
 
@@ -395,7 +395,7 @@ if ($hostname) {
 			Route::get('purchases/item/tables', 'Tenant\PurchaseController@item_tables');
 			// Route::get('documents/table/{table}', 'Tenant\DocumentController@table');
 
-			Route::delete('purchases/destroy_purchase_item/{purchase_item}', 'PurchaseController@destroy_purchase_item');
+			Route::delete('purchases/destroy_purchase_item/{purchase_item}', 'Tenant\PurchaseController@destroy_purchase_item');
 
 			//quotations
 			Route::get('quotations', 'Tenant\QuotationController@index')->name('tenant.quotations.index')->middleware('redirect.level');
@@ -483,7 +483,7 @@ if ($hostname) {
 			Route::get('cash', 'Tenant\CashController@index')->name('tenant.cash.index');
 			Route::get('cash/columns', 'Tenant\CashController@columns');
 			Route::get('cash/records', 'Tenant\CashController@records');
-			Route::get('cash/create', 'Tenant\CashController@create')->name('tenant.sale_notes.create');
+			Route::get('cash/create', 'Tenant\CashController@create')->name('tenant.cash.create');
 			Route::get('cash/tables', 'Tenant\CashController@tables');
 			Route::get('cash/opening_cash', 'Tenant\CashController@opening_cash');
 			Route::get('cash/opening_cash_check/{user_id}', 'Tenant\CashController@opening_cash_check');
@@ -560,11 +560,14 @@ if ($hostname) {
             // Configuración del Login
             Route::get('login-page', 'Tenant\LoginConfigurationController@index')->name('tenant.login_page');
             Route::post('login-page/upload-bg-image', 'Tenant\LoginConfigurationController@uploadBgImage');
+            Route::post('login-page/reset-bg-image', 'Tenant\LoginConfigurationController@resetBgImage');
             Route::post('login-page/update', 'Tenant\LoginConfigurationController@update');
 		});
 	});
 } else {
-	Route::domain(env('APP_URL_BASE'))->group(function () {
+	$systemDomain = env('APP_URL_BASE');
+	$groupAttributes = ($systemDomain && !in_array($systemDomain, ['localhost', '127.0.0.1', ''])) ? ['domain' => $systemDomain] : [];
+	Route::group($groupAttributes, function () {
 		Route::get('login', 'System\LoginController@showLoginForm')->name('login');
 		Route::post('login', 'System\LoginController@login');
 		Route::post('logout', 'System\LoginController@logout')->name('logout');

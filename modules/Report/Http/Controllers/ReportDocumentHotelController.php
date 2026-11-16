@@ -4,7 +4,7 @@ namespace Modules\Report\Http\Controllers;
 
 use App\Models\Tenant\Catalogs\DocumentType;
 use App\Http\Controllers\Controller;
-use Barryvdh\DomPDF\Facade as PDF;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use Modules\Report\Exports\DocumentHotelExport;
 use Illuminate\Http\Request;
 use Modules\Report\Traits\ReportTrait;
@@ -40,7 +40,8 @@ class ReportDocumentHotelController extends Controller
         $record = BusinessTurn::where('value','hotel')->where('active',true)->first();
 
         if(!$record){
-            return redirect()->route('tenant.reports.sale_notes.index');
+            return redirect()->route('tenant.reports.sale_notes.index')
+                ->with('warning', 'El giro de negocio Hoteles no está activo.');
         }
 
         return view('report::document_hotels.index');

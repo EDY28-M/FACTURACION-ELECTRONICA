@@ -42,6 +42,24 @@ class LoginConfigurationController extends Controller
         ], 200);
     }
 
+    /**
+     * Drop the uploaded background so the sign-in page shows the default animation again.
+     */
+    public function resetBgImage()
+    {
+        $config = Configuration::first();
+        $loginConfig = $config->login;
+        $loginConfig->type = 'animation';
+        $loginConfig->image = null;
+        $config->login = $loginConfig;
+        $config->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Se restableció la animación predeterminada.',
+        ], 200);
+    }
+
     public function update()
     {
         request()->validate([

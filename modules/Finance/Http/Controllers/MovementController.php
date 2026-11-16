@@ -12,7 +12,7 @@ use App\Models\Tenant\Company;
 use Modules\Finance\Traits\FinanceTrait; 
 use Modules\Finance\Http\Resources\MovementCollection;
 use Modules\Finance\Exports\MovementExport;
-use Barryvdh\DomPDF\Facade as PDF;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Models\Tenant\Establishment;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;

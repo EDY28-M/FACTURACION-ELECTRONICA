@@ -12,7 +12,7 @@ use App\Models\Tenant\Company;
 use Modules\Finance\Traits\FinanceTrait; 
 use Modules\Finance\Http\Resources\GlobalPaymentCollection;
 use Modules\Finance\Exports\BalanceExport;
-use Barryvdh\DomPDF\Facade as PDF;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Models\Tenant\Establishment;
 use Carbon\Carbon;
 

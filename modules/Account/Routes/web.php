@@ -31,7 +31,9 @@ if($hostname) {
 } 
 else {
 
-    Route::domain(env('APP_URL_BASE'))->group(function() {
+    $systemDomain = env('APP_URL_BASE');
+    $groupAttributes = ($systemDomain && !in_array($systemDomain, ['localhost', '127.0.0.1', ''])) ? ['domain' => $systemDomain] : [];
+    Route::group($groupAttributes, function() {
  
         Route::middleware('auth:admin')->group(function() {
 

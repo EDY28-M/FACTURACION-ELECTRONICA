@@ -35,7 +35,7 @@ class PosController extends Controller
     {
         $cash = Cash::where([['user_id', auth()->user()->id],['state', true]])->first();
 
-        if(!$cash) return redirect()->route('tenant.cash.index');
+        if(!$cash) return redirect()->route('tenant.cash.index')->with('warning', 'Para usar el Punto de Venta (POS) primero debes aperturar una caja chica en esta pantalla.');
 
         $configuration = Configuration::first();
 
@@ -50,7 +50,7 @@ class PosController extends Controller
     {
         $cash = Cash::where([['user_id', auth()->user()->id],['state', true]])->first();
 
-        if(!$cash) return redirect()->route('tenant.cash.index');
+        if(!$cash) return redirect()->route('tenant.cash.index')->with('warning', 'Para usar el Punto de Venta (POS) primero debes aperturar una caja chica en esta pantalla.');
 
         return view('tenant.pos.index_full');
     }

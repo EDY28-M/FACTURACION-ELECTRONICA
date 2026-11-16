@@ -139,8 +139,11 @@ class ClientController extends Controller
         return $record;
     }
 
-    public function charts()
+    public function charts(Request $request)
     {
+        $current_year = (int) date('Y');
+        $request->validate(['year' => 'nullable|integer|in:'.$current_year.','.($current_year - 1)]);
+        $year = (int) $request->input('year', $current_year);
         $records = Client::all();
         $count_documents = [];
         foreach ($records as $row) {
@@ -148,9 +151,8 @@ class ClientController extends Controller
             $tenancy->tenant($row->hostname->website);
             for($i = 1; $i <= 12; $i++)
             {
-                $date_initial = Carbon::parse(date('Y').'-'.$i.'-1');
-                $year_before = Carbon::now()->subYear()->format('Y');
-                $date_final = Carbon::parse(date('Y').'-'.$i.'-'.cal_days_in_month(CAL_GREGORIAN, $i, $year_before));
+                $date_initial = Carbon::createFromDate($year, $i, 1)->startOfDay();
+                $date_final = $date_initial->copy()->endOfMonth();
                 $count_documents[] = [
                     'client' => $row->number,
                     'month' => $i,
@@ -331,10 +333,18 @@ class ClientController extends Controller
             $client->locked_emission = $request->input('locked_emission');
             $client->save();
 
-            DB::connection('system')->commit();
+            $sysConn = DB::connection('system');
+            if ($sysConn->getPdo()->inTransaction()) {
+                $sysConn->commit();
+            } elseif ($sysConn->transactionLevel() > 0) {
+                $sysConn->rollBack(0);
+            }
         }
         catch (Exception $e) {
-            DB::connection('system')->rollBack();
+            $sysConn = DB::connection('system');
+            if ($sysConn->transactionLevel() > 0) {
+                $sysConn->rollBack(0);
+            }
             app(HostnameRepository::class)->delete($hostname, true);
             app(WebsiteRepository::class)->delete($website, true);
 
@@ -418,7 +428,7 @@ class ClientController extends Controller
         ]);
 
 
-        $user_id = DB::connection('tenant')->table('users')->insert([
+        $user_id = DB::connection('tenant')->table('users')->insertGetId([
             'name' => 'Administrador',
             'email' => $request->input('email'),
             'password' => bcrypt($request->input('password')),
@@ -429,22 +439,29 @@ class ClientController extends Controller
         ]);
 
 
-        if($request->input('type') == 'admin'){
+        $modules = $request->input('modules', []);
+        $levels = $request->input('levels', []);
+
+        if (is_array($modules) && count($modules) > 0) {
             $array_modules = [];
             $array_levels = [];
-            foreach ($request->modules as $module) {
-                array_push($array_modules, [
+            foreach ($modules as $module) {
+                $array_modules[] = [
                     'module_id' => $module, 'user_id' => $user_id
-                ]);
+                ];
             }
-            foreach ($request->levels as $level) {
-                array_push($array_levels, [
-                    'module_level_id' => $level, 'user_id' => $user_id
-                ]);
+            if (is_array($levels)) {
+                foreach ($levels as $level) {
+                    $array_levels[] = [
+                        'module_level_id' => $level, 'user_id' => $user_id
+                    ];
+                }
             }
             DB::connection('tenant')->table('module_user')->insert($array_modules);
-            DB::connection('tenant')->table('module_level_user')->insert($array_levels);
-        } else {
+            if (count($array_levels) > 0) {
+                DB::connection('tenant')->table('module_level_user')->insert($array_levels);
+            }
+        } elseif ($request->input('type') != 'admin') {
             DB::connection('tenant')->table('module_user')->insert([
                 ['module_id' => 1, 'user_id' => $user_id],
                 ['module_id' => 3, 'user_id' => $user_id],

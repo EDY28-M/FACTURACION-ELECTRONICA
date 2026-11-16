@@ -18,7 +18,7 @@ use App\Models\Tenant\CashDocument;
 use Exception;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
-use Barryvdh\DomPDF\Facade as PDF;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use App\Models\Tenant\DocumentItem;
 use App\Models\Tenant\PaymentMethodType;
 use Modules\Pos\Models\CashTransaction;
