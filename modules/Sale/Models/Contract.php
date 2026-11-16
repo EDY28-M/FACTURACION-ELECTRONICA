@@ -68,13 +68,37 @@ class Contract extends ModelTenant
         'account_number',
         'terms_condition',
         'seller_id',
+        'recurrence_enabled',
+        'recurrence_mode',
+        'recurrence_period',
+        'recurrence_interval',
+        'recurrence_start_date',
+        'recurrence_end_date',
+        'recurrence_day',
+        'next_billing_date',
+        'billing_document_type_id',
+        'billing_series',
+        'billing_user_id',
+        'recurrence_backfill',
     ];
 
     protected $casts = [
         'date_of_issue' => 'date',
         'date_of_due' => 'date',
         'delivery_date' => 'date',
+        'recurrence_enabled' => 'boolean',
+        'recurrence_backfill' => 'boolean',
+        'recurrence_interval' => 'integer',
+        'recurrence_day' => 'integer',
+        'recurrence_start_date' => 'date',
+        'recurrence_end_date' => 'date',
+        'next_billing_date' => 'date',
     ];
+
+    public function billings()
+    {
+        return $this->hasMany(ContractBilling::class);
+    }
 
     public function getEstablishmentAttribute($value)
     {

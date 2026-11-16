@@ -17,7 +17,11 @@ use App\CoreFacturalo\Template;
 use App\Models\Tenant\Quotation;
 use App\Models\Tenant\Warehouse;
 use Mpdf\Config\ConfigVariables;
+use Carbon\Carbon;
 use Modules\Sale\Models\Contract;
+use Modules\Sale\Models\ContractBilling;
+use Modules\Sale\Services\ContractBillingService;
+use Modules\Sale\Services\RecurrenceSchedule;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Configuration;
@@ -152,13 +156,14 @@ class ContractController extends Controller
         $payment_method_types = PaymentMethodType::orderBy('id','desc')->get();
         $payment_destinations = $this->getPaymentDestinations();
         $configuration = Configuration::select('destination_sale')->first();
+        $billing_series = Series::whereIn('document_type_id', ['01', '03'])->get(['id', 'establishment_id', 'document_type_id', 'number']);
         $sellers = User::without(['establishment'])
             ->whereIn('type', ['seller'])
             ->orWhere('id', auth()->user()->id)
             ->get();
 
         return compact('customers', 'establishments','currency_types', 'discount_types', 'charge_types', 'configuration',
-                        'company', 'document_type_03_filter','payment_method_types', 'payment_destinations', 'sellers');
+                        'company', 'document_type_03_filter','payment_method_types', 'payment_destinations', 'sellers', 'billing_series');
 
     }
 
@@ -212,6 +217,7 @@ class ContractController extends Controller
 
             $data = $this->mergeData($request);
             $data['terms_condition'] = $this->getTermsCondition();
+            $data = $this->applyRecurrence($data, $request->input('id'));
 
             $this->contract =  Contract::updateOrCreate( ['id' => $request->input('id')], $data);
 
@@ -238,6 +244,60 @@ class ContractController extends Controller
         ];
     }
 
+
+    /**
+     * The server is the only authority on next_billing_date: first occurrence of the schedule, or the one
+     * after the last issued period when the contract already billed something.
+     */
+    private function applyRecurrence(array $data, $contractId): array
+    {
+        $enabled = !empty($data['recurrence_enabled']);
+        $data['recurrence_enabled'] = $enabled;
+        $existing = $contractId ? Contract::find($contractId) : null;
+
+        if (!$enabled) {
+            $data['next_billing_date'] = null;
+            // Never trust the client for the issuing user.
+            $data['billing_user_id'] = $existing ? $existing->billing_user_id : null;
+
+            return $data;
+        }
+
+        $data['recurrence_interval'] = (int) ($data['recurrence_interval'] ?: 1);
+        $data['recurrence_day'] = !empty($data['recurrence_day']) ? (int) $data['recurrence_day'] : null;
+        $data['recurrence_backfill'] = !empty($data['recurrence_backfill']);
+        $data['billing_series'] = !empty($data['billing_series']) ? strtoupper($data['billing_series']) : null;
+        // Invoices are issued as the user who first enabled the recurrence (kept on later edits).
+        $data['billing_user_id'] = ($existing && $existing->billing_user_id) ? $existing->billing_user_id : auth()->id();
+
+        $lastIssued = $contractId
+            ? ContractBilling::where('contract_id', $contractId)->where('status', ContractBilling::STATUS_ISSUED)->max('period_date')
+            : null;
+
+        $scheduleUnchanged = $existing && $existing->recurrence_enabled && $existing->next_billing_date
+            && $existing->recurrence_start_date->format('Y-m-d') === Carbon::parse($data['recurrence_start_date'])->format('Y-m-d')
+            && $existing->recurrence_period === $data['recurrence_period']
+            && (int) $existing->recurrence_interval === $data['recurrence_interval']
+            && (int) $existing->recurrence_day === (int) $data['recurrence_day'];
+
+        if ($scheduleUnchanged) {
+            // Keep the pending pointer (it may be a failed period that must not be skipped).
+            $next = $existing->next_billing_date;
+        } elseif ($lastIssued) {
+            $next = RecurrenceSchedule::next($data['recurrence_start_date'], $data['recurrence_period'], $data['recurrence_interval'], $lastIssued, $data['recurrence_day']);
+        } else {
+            $initial = ContractBillingService::initialNextBillingDate($data);
+            $next = $initial ? Carbon::parse($initial) : null;
+        }
+
+        if ($next && !empty($data['recurrence_end_date']) && $next->gt(Carbon::parse($data['recurrence_end_date']))) {
+            $next = null;
+        }
+
+        $data['next_billing_date'] = $next ? $next->format('Y-m-d') : null;
+
+        return $data;
+    }
 
     private function getTermsCondition(){
 

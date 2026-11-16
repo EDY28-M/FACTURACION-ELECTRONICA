@@ -190,6 +190,7 @@ Vue.component('tenant-sale-opportunities-form', require('@viewsModuleSale/sale_o
 Vue.component('tenant-payment-method-types-index', require('@viewsModuleSale/payment_method_types/index.vue'));
 Vue.component('tenant-contracts-index', require('@viewsModuleSale/contracts/index.vue'));
 Vue.component('tenant-contracts-form', require('@viewsModuleSale/contracts/form.vue'));
+Vue.component('tenant-contracts-recurrent', require('@viewsModuleSale/contracts/recurrent.vue'));
 Vue.component('tenant-production-orders-index', require('@viewsModuleSale/production_orders/index.vue'));
 
 //Item

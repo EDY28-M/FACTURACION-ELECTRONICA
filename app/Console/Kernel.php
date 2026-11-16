@@ -25,6 +25,12 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule) {
         $schedule->command('tenancy:run tenant:run')
             ->everyMinute();
+
+        // Recurrent billing of contracts in automatic mode (06:00 Lima time).
+        $schedule->command('contracts:bill-recurrent')
+            ->dailyAt('06:00')
+            ->timezone('America/Lima')
+            ->withoutOverlapping(120);
     }
 
     /**

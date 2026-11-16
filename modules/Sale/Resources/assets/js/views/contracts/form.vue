@@ -257,6 +257,105 @@
                     </div>
 
 
+
+                    <div class="form-body pt-0">
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="card mb-3 recurrence-card">
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-center justify-content-between flex-wrap">
+                                            <h5 class="mt-0 mb-2">Facturación recurrente</h5>
+                                            <el-switch v-model="form.recurrence_enabled" active-text="Activada" inactive-text="Desactivada"></el-switch>
+                                        </div>
+                                        <div class="row" v-if="form.recurrence_enabled">
+                                            <div class="col-12 col-lg-6">
+                                                <div class="form-group" :class="{'has-danger': errors.recurrence_mode}">
+                                                    <label class="control-label">Modo de emisión</label>
+                                                    <el-radio-group v-model="form.recurrence_mode" class="d-block">
+                                                        <el-radio label="manual" border>Manual</el-radio>
+                                                        <el-radio label="automatic" border>Automática</el-radio>
+                                                    </el-radio-group>
+                                                    <small class="form-text text-muted" v-if="form.recurrence_mode === 'manual'">Manual: la emito yo desde la lista de facturación recurrente.</small>
+                                                    <small class="form-text text-muted" v-else>Automática: el sistema la emite y envía cada día a las 6:00.</small>
+                                                    <small class="form-control-feedback" v-if="errors.recurrence_mode" v-text="errors.recurrence_mode[0]"></small>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-lg-6">
+                                                <div class="form-group" :class="{'has-danger': errors.recurrence_interval || errors.recurrence_period}">
+                                                    <label class="control-label">Periodicidad</label>
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="mr-2">Cada</span>
+                                                        <el-input-number v-model="form.recurrence_interval" :min="1" :max="60" size="small" style="width:110px"></el-input-number>
+                                                        <el-select v-model="form.recurrence_period" size="small" class="ml-2" style="width:130px">
+                                                            <el-option value="month" :label="form.recurrence_interval === 1 ? 'mes' : 'meses'"></el-option>
+                                                            <el-option value="year" :label="form.recurrence_interval === 1 ? 'año' : 'años'"></el-option>
+                                                        </el-select>
+                                                    </div>
+                                                    <small class="form-control-feedback" v-if="errors.recurrence_interval" v-text="errors.recurrence_interval[0]"></small>
+                                                    <small class="form-control-feedback" v-if="errors.recurrence_period" v-text="errors.recurrence_period[0]"></small>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-group" :class="{'has-danger': errors.recurrence_start_date}">
+                                                    <label class="control-label">Fecha de inicio</label>
+                                                    <el-date-picker v-model="form.recurrence_start_date" type="date" value-format="yyyy-MM-dd" :clearable="false"></el-date-picker>
+                                                    <small class="form-control-feedback" v-if="errors.recurrence_start_date" v-text="errors.recurrence_start_date[0]"></small>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-group" :class="{'has-danger': errors.recurrence_end_date}">
+                                                    <label class="control-label">Fecha de fin (opcional)</label>
+                                                    <el-date-picker v-model="form.recurrence_end_date" type="date" value-format="yyyy-MM-dd"></el-date-picker>
+                                                    <small class="form-control-feedback" v-if="errors.recurrence_end_date" v-text="errors.recurrence_end_date[0]"></small>
+                                                </div>
+                                            </div>
+                                            <div class="col-12" v-if="startDateInPast">
+                                                <el-alert type="warning" :closable="false" show-icon
+                                                          title="La fecha de inicio ya pasó. Por defecto la primera facturación será la próxima fecha desde hoy.">
+                                                </el-alert>
+                                                <el-checkbox class="mt-2 mb-3" v-model="form.recurrence_backfill">Facturar también los periodos anteriores</el-checkbox>
+                                            </div>
+                                            <div class="col-12 col-md-4" v-if="form.next_billing_date">
+                                                <div class="form-group">
+                                                    <label class="control-label">Próxima facturación</label>
+                                                    <div class="pt-2"><strong>{{ form.next_billing_date.substring(0, 10) }}</strong></div>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-group" :class="{'has-danger': errors.billing_document_type_id}">
+                                                    <label class="control-label">Tipo de comprobante</label>
+                                                    <el-select v-model="form.billing_document_type_id" @change="form.billing_series = null">
+                                                        <el-option value="01" label="Factura"></el-option>
+                                                        <el-option value="03" label="Boleta de venta"></el-option>
+                                                    </el-select>
+                                                    <small class="form-text text-muted" v-if="form.billing_document_type_id === '01'">Las facturas requieren un cliente con RUC.</small>
+                                                    <small class="form-control-feedback" v-if="errors.billing_document_type_id" v-text="errors.billing_document_type_id[0]"></small>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-group" :class="{'has-danger': errors.billing_series}">
+                                                    <label class="control-label">Serie</label>
+                                                    <el-select v-model="form.billing_series" clearable placeholder="Primera serie disponible">
+                                                        <el-option v-for="row in billingSeriesOptions" :key="row.id" :value="row.number" :label="row.number"></el-option>
+                                                    </el-select>
+                                                    <small class="form-control-feedback" v-if="errors.billing_series" v-text="errors.billing_series[0]"></small>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <div class="form-group" :class="{'has-danger': errors.recurrence_day}">
+                                                    <label class="control-label">Día de facturación (opcional)</label>
+                                                    <el-input-number v-model="form.recurrence_day" :min="1" :max="31" size="small" controls-position="right"></el-input-number>
+                                                    <small class="form-text text-muted">Si se deja vacío se usa el día de la fecha de inicio.</small>
+                                                    <small class="form-control-feedback" v-if="errors.recurrence_day" v-text="errors.recurrence_day[0]"></small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-actions text-right mt-4">
                         <el-button @click.prevent="close()">Cancelar</el-button>
                         <el-button class="submit" type="primary" native-type="submit" :loading="loading_submit" v-if="form.items.length > 0">Generar</el-button>
@@ -326,10 +425,20 @@
                 currency_type: {},
                 contractNewId: null,
                 payment_destinations:  [],
+                billing_series: [],
                 configuration: {},
                 activePanel: 0,
                 loading_search:false
             }
+        },
+        computed: {
+            startDateInPast() {
+                return !!this.form.recurrence_start_date && this.form.recurrence_start_date < moment().format('YYYY-MM-DD')
+            },
+            billingSeriesOptions() {
+                return this.billing_series.filter(row => row.document_type_id === this.form.billing_document_type_id
+                    && row.establishment_id === this.form.establishment_id)
+            },
         },
         async created() {
             // console.log(this.showPayments)
@@ -349,6 +458,7 @@
                     this.payment_destinations = data.payment_destinations
                     this.configuration = data.configuration
                     this.sellers = data.sellers;
+                    this.billing_series = data.billing_series || []
 
                     this.changeEstablishment()
                     this.changeDateOfIssue()
@@ -426,6 +536,15 @@
                     await this.$http.get(`/${this.resource}/record/${this.id}`)
                         .then(response => {
                             this.form = response.data.data.contract;
+                            ['recurrence_start_date', 'recurrence_end_date', 'next_billing_date'].forEach(field => {
+                                if (this.form[field]) this.form[field] = String(this.form[field]).substring(0, 10)
+                            })
+                            this.form.recurrence_enabled = !!this.form.recurrence_enabled
+                            this.form.recurrence_backfill = !!this.form.recurrence_backfill
+                            this.form.recurrence_mode = this.form.recurrence_mode || 'manual'
+                            this.form.recurrence_period = this.form.recurrence_period || 'month'
+                            this.form.recurrence_interval = this.form.recurrence_interval || 1
+                            this.form.billing_document_type_id = this.form.billing_document_type_id || '01'
                             this.reloadDataCustomers(this.form.customer_id)
 
                         })
@@ -541,6 +660,17 @@
                     },
                     payments: [],
                     quotation_id:null,
+                    recurrence_enabled: false,
+                    recurrence_mode: 'manual',
+                    recurrence_period: 'month',
+                    recurrence_interval: 1,
+                    recurrence_start_date: moment().format('YYYY-MM-DD'),
+                    recurrence_end_date: null,
+                    recurrence_day: null,
+                    recurrence_backfill: false,
+                    next_billing_date: null,
+                    billing_document_type_id: '01',
+                    billing_series: null,
                 }
 
                 if(this.showPayments){

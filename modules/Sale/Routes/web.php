@@ -45,6 +45,13 @@ if($current_hostname) {
 
             Route::prefix('contracts')->group(function () {
 
+                Route::middleware(['redirect.level'])->group(function () {
+                    Route::get('/recurrent', 'ContractRecurrentController@index')->name('tenant.contracts.recurrent');
+                    Route::get('/recurrent/pending', 'ContractRecurrentController@pending');
+                    Route::get('/recurrent/history', 'ContractRecurrentController@history');
+                    Route::post('/recurrent/issue', 'ContractRecurrentController@issue');
+                });
+
                 Route::get('', 'ContractController@index')->name('tenant.contracts.index')->middleware(['redirect.level']);
                 Route::get('/columns', 'ContractController@columns');
                 Route::get('/records', 'ContractController@records');

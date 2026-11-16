@@ -6,6 +6,7 @@
                 <li class="active"><span>Contratos</span></li>
             </ol>
             <div class="right-wrapper pull-right">
+                <a :href="`/${resource}/recurrent`" class="btn btn-custom btn-sm  mt-2 mr-2"><i class="fa fa-sync-alt"></i> Facturación recurrente</a>
                 <a :href="`/${resource}/create`" class="btn btn-custom btn-sm  mt-2 mr-2"><i class="fa fa-plus-circle"></i> Nuevo</a>
             </div>
         </div>
