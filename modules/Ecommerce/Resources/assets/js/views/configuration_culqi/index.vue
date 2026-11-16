@@ -38,7 +38,7 @@
                       </div>
                       <i class="fa fa-info-circle"></i>
                     </el-tooltip></label>
-                  <el-input v-model="form.token_private_culqui"></el-input>
+                  <el-input v-model="form.token_private_culqui" type="password" autocomplete="new-password" :placeholder="has_private ? 'Guardado. Escriba para reemplazar' : ''"></el-input>
                   <small
                     class="form-control-feedback"
                     v-if="errors.token_private_culqui"
@@ -65,6 +65,7 @@ export default {
   data() {
     return {
       loading_submit: false,
+      has_private: false,
       // headers: headers_token,
       resource: "ecommerce",
       errors: {},
@@ -81,7 +82,7 @@ export default {
         let data = response.data.data;
         this.form.id = data.id;
         this.form.token_public_culqui = data.token_public_culqui;
-        this.form.token_private_culqui = data.token_private_culqui;
+        this.has_private = !!data.has_token_private_culqui;
       }
     });
   },
@@ -103,6 +104,10 @@ export default {
         .post(`/${this.resource}/configuration_culqui`, this.form)
         .then(response => {
           if (response.data.success) {
+            if (this.form.token_private_culqui) {
+              this.has_private = true;
+              this.form.token_private_culqui = "";
+            }
             this.$message.success(response.data.message);
           } else {
             this.$message.error(response.data.message);
@@ -118,8 +123,7 @@ export default {
         .then(() => {
           this.loading_submit = false;
         });
-    },
-    submit_paypal() {}
+    }
   }
 };
 </script>

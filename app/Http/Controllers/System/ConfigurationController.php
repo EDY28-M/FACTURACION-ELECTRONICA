@@ -37,7 +37,7 @@ class ConfigurationController extends Controller
 
         return [
             'token_public_culqui' => $configuration->token_public_culqui,
-            'token_private_culqui' => $configuration->token_private_culqui,
+            'has_token_private_culqui' => (bool) $configuration->token_private_culqui,
         ];
     }
 

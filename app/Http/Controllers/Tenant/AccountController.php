@@ -13,8 +13,9 @@ use App\Models\System\ClientPayment;
 
 
 use App\Http\Resources\Tenant\AccountPaymentCollection;
-use Culqi\Culqi;
-use Culqi\CulqiException;
+use App\Services\Payments\PlatformPayment;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\Tenant\CulqiEmail;
 use stdClass;
@@ -45,9 +46,8 @@ class AccountController extends Controller
     {
         $configuration = ConfigurationAdmin::first();
         $token_public_culqui = $configuration->token_public_culqui;
-        $token_private_culqui = $configuration->token_private_culqui;
 
-        return view('tenant.account.payment_index', compact("token_public_culqui", "token_private_culqui"));
+        return view('tenant.account.payment_index', compact('token_public_culqui'));
     }
 
     public function paymentRecords()
@@ -86,85 +86,64 @@ class AccountController extends Controller
 
     }
 
-    public function paymentCulqui(Request $request)
+    public function paymentCulqui(Request $request, PlatformPayment $platform)
     {
-        
+        $validator = Validator::make($request->all(), [
+            'id_payment_account' => 'required|integer',
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'installments' => 'nullable|integer',
+        ]);
+        if ($validator->fails()) {
+            return ['success' => false, 'message' => 'Los datos del pago no son válidos.'];
+        }
 
-            $configuration = ConfigurationAdmin::first();
-            $token_private_culqui = $configuration->token_private_culqui;
+        $secret = ConfigurationAdmin::first()->token_private_culqui;
+        if (! $secret) {
+            return ['success' => false, 'message' => 'La pasarela de pagos no está configurada.'];
+        }
 
-            if(!$token_private_culqui)
-            {
-                return [
-                    'success' => false,
-                    'message' =>  'token private culqi no defined'
-                ];
-            }
-           
-            $user = auth()->user();
-    
-            $SECRET_API_KEY = $token_private_culqui;
-            $culqi = new Culqi(array('api_key' => $SECRET_API_KEY));
-
-
-            try{
-
-                $charge = $culqi->Charges->create(
-                    array(
-                        "amount" => $request->precio,
-                        "currency_code" => "PEN",
-                        "email" => $request->email,
-                        "description" =>  $request->producto, 
-                        "source_id" => $request->token,
-                        "installments" => $request->installments
-                      )
-                );
-
-            }catch(Exception $e)
-            {
-              return [
-                  'success' => false,
-                  'message' =>  $e->getMessage()
-              ];
+        $model = new AccountPayment();
+        $result = $model->getConnection()->transaction(function () use ($request, $platform, $secret) {
+            // Row lock: concurrent submissions for the same payment are serialized.
+            $payment = AccountPayment::lockForUpdate()->find($request->id_payment_account);
+            if (! $payment) {
+                return ['success' => false, 'message' => 'El pago solicitado no existe.', 'charge_id' => null, 'payment' => null];
             }
 
-            /**
-             * Todo
-             *  definir estados de pago en accunpayment
-             */
+            $result = $platform->pay($payment, $secret, $request->token, $request->email, $request->installments);
+            $result['payment'] = $payment;
 
-            $account_payment = AccountPayment::find($request->id_payment_account);
-            $account_payment->state = 1; // 1 ees pagado, 2 es pendiente
-            $account_payment->date_of_payment_real = date('Y-m-d'); 
-            $account_payment->save();
+            return $result;
+        });
 
+        if (! $result['success']) {
+            return ['success' => false, 'message' => $result['message']];
+        }
 
-            $system_client_payment =  ClientPayment::find($account_payment->reference_id);
-            $system_client_payment->state = 1;
-            $system_client_payment->save();
+        // Side effects after a verified payment must never turn it into an error.
+        try {
+            $system_client_payment = ClientPayment::find($result['payment']->reference_id);
+            if ($system_client_payment) {
+                $system_client_payment->state = 1;
+                $system_client_payment->save();
+            }
+        } catch (Exception $e) {
+            Log::error('Platform payment paid but system record not updated', ['charge_id' => $result['charge_id'], 'account_payment_id' => $result['payment']->id]);
+        }
 
-    
-            $customer_email = $request->email;
+        try {
             $document = new stdClass;
-            $document->client = $user->name;
-            $document->product = $request->producto;
-            $document->total = $request->precio_culqi;
-            $document->items = json_decode($request->items, true);
+            $document->client = optional(auth()->user())->name;
+            $document->product = 'Pago Programado Cuenta Facturador Pro';
+            $document->total = number_format((float) $result['payment']->payment, 2, '.', '');
+            $document->items = [['description' => 'Pago programado facturador', 'cantidad' => '1', 'unit_type_id' => 'NIU']];
 
-            Mail::to($customer_email)->send(new CulqiEmail($document));
-    
-            return [
-                'success' => true,
-                'culqui' => $charge,
-                'message' => 'Pago efectuado correctamente'
-            ];
+            Mail::to($request->email)->send(new CulqiEmail($document));
+        } catch (Exception $e) {
+            Log::warning('Platform payment confirmation email failed', ['charge_id' => $result['charge_id']]);
+        }
+
+        return ['success' => true, 'message' => $result['message']];
     }
-          
-    
-
-   
-
-    
-
-    
 }

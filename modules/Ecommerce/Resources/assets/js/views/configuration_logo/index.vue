@@ -102,8 +102,7 @@ export default {
         .then(() => {
           this.loading_submit = false;
         });
-    },
-    submit_paypal() {}
+    }
   }
 };
 </script>

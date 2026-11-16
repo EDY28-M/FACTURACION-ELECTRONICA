@@ -2,6 +2,7 @@
 
 namespace App\Models\System;
 
+use App\Casts\EncryptedSecret;
 use Hyn\Tenancy\Traits\UsesSystemConnection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -23,6 +24,10 @@ class Configuration extends Model
         'token_apiruc',
         'login',
         'use_login_global'
+    ];
+
+    protected $casts = [
+        'token_private_culqui' => EncryptedSecret::class,
     ];
 
     public function getUseLoginGlobalAttribute($value)

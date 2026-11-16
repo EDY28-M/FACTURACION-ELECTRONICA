@@ -93,11 +93,6 @@
                     con VISA</a>
                 <a href="{{route('tenant_ecommerce_login')}}" class="btn btn-block btn-sm btn-primary login-link">Pagar
                     con EFECTIVO</a>
-                <a style="margin-left:15%" href="{{route('tenant_ecommerce_login')}}"
-                    class="btn btn-block btn-sm login-link">
-                    <img src="{{ asset('porto-ecommerce/assets/images/btn_buynowCC_LG.gif') }}" alt="">
-                </a>
-
                 @else
                 <button class="btn btn-block btn-sm btn-primary culqi" onclick="execCulqi()"> Pagar con VISA </button>
 
@@ -115,12 +110,6 @@
                     </div>
                 </div>
 
-
-                @if($information->script_paypal)
-
-                    {!!html_entity_decode($information->script_paypal)!!}
-
-                @endif
 
 
                 @endguest
@@ -241,9 +230,6 @@
             }
         },
         async mounted() {
-          await this.changeExchangeRate(moment().format("YYYY-MM-DD"))
-
-          let exchange_rate_sale = this.exchange_rate_sale
           let contex = this
 
           $(".input_quantity").change(function (e) {
@@ -251,25 +237,12 @@
             let id = $(this).data('product')
             let row = contex.records.find(x => x.id == id)
 
-            if(row.currency_type_id === 'USD') {
-              row.sub_total = ((parseFloat(row.sale_unit_price) * value) * exchange_rate_sale).toFixed(2)
-            } else {
-              row.sub_total = (parseFloat(row.sale_unit_price) * value).toFixed(2)
-            }
-
             row.cantidad = value
-            contex.calculateSummary()
+            row.sub_total = (parseFloat(row.sale_unit_price) * value).toFixed(2)
+            contex.applyQuote()
           })
 
-          this.records.forEach(function (item) {
-            if(item.currency_type_id === 'USD') {
-              item.sub_total = (parseFloat(item.sub_total) * exchange_rate_sale).toFixed(2)
-              item.exchange_rate_sale = exchange_rate_sale
-            }
-            item.sale_unit_price = parseFloat(item.sale_unit_price).toFixed(2)
-          })
-
-          this.calculateSummary()
+          await this.applyQuote()
         },
         created() {
             let array = localStorage.getItem('products_cart');
@@ -288,6 +261,30 @@
 
         },
         methods: {
+          // Prices and totals come from the server (single source of truth, includes USD conversion).
+          async applyQuote() {
+            if (this.records.length) {
+              try {
+                const response = await axios.post('{{ route("tenant_ecommerce_cart_quote") }}', {
+                  items: this.records.map(x => ({ id: x.id, cantidad: x.cantidad }))
+                }, this.getHeaderConfig())
+                if (response.data.success) {
+                  response.data.lines.forEach((line) => {
+                    let row = this.records.find(x => x.id == line.id)
+                    if (!row) return
+                    this.$set(row, 'sale_unit_price', Number(line.unit_pen).toFixed(2))
+                    this.$set(row, 'currency_type_id', 'PEN')
+                    this.$set(row, 'currency_type_symbol', 'S/')
+                    this.$set(row, 'exchange_rate_sale', line.exchange_rate_sale)
+                    this.$set(row, 'cantidad', line.cantidad)
+                    this.$set(row, 'sub_total', Number(line.sub_total).toFixed(2))
+                  })
+                  this.exchange_rate_sale = parseFloat(response.data.exchange_rate_sale) || 1
+                }
+              } catch (e) {}
+            }
+            this.calculateSummary()
+          },
           async changeExchangeRate(exchange_rate_date){
             var response = await axios.get(`/exchange_rate/ecommence/${exchange_rate_date}`)
             this.exchange_rate_sale = parseFloat(response.data.sale)

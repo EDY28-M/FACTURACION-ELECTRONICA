@@ -2,6 +2,8 @@
 
 namespace App\Models\Tenant;
 
+use App\Casts\EncryptedSecret;
+
 class ConfigurationEcommerce extends ModelTenant
 {
     protected $table = "configuration_ecommerce";
@@ -11,7 +13,6 @@ class ConfigurationEcommerce extends ModelTenant
         'information_contact_email',
         'information_contact_phone',
         'information_contact_address',
-        'script_paypal',
         'token_private_culqui',
         'token_public_culqui',
         'link_youtube',
@@ -20,6 +21,10 @@ class ConfigurationEcommerce extends ModelTenant
         'tag_shipping',
         'tag_dollar',
         'tag_support'
+    ];
+
+    protected $casts = [
+        'token_private_culqui' => EncryptedSecret::class,
     ];
 
 }

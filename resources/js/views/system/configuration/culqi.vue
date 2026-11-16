@@ -8,7 +8,7 @@
             </div>
             <div class="system-field" :class="{'has-danger': errors.token_private_culqui}">
                 <label for="culqi-private">Token privado</label>
-                <el-input id="culqi-private" class="system-mono-input" :type="reveal ? 'text' : 'password'" v-model="form.token_private_culqui" placeholder="sk_live_…" autocomplete="off">
+                <el-input id="culqi-private" class="system-mono-input" :type="reveal ? 'text' : 'password'" v-model="form.token_private_culqui" autocomplete="new-password" :placeholder="has_private ? 'Guardado. Escribe para reemplazar' : 'sk_live_…'">
                     <button slot="suffix" type="button" class="system-input-toggle" aria-label="Mostrar u ocultar token" :aria-pressed="String(reveal)" @click="reveal = !reveal">
                         <svg class="sys-icon" aria-hidden="true"><use :href="$icon((reveal ? 'eye-off' : 'eye'))" /></svg>
                     </button>
@@ -29,6 +29,7 @@ export default {
     return {
       loading_submit: false,
       reveal: false,
+      has_private: false,
       // headers: headers_token,
       resource: "configurations",
       errors: {},
@@ -42,7 +43,7 @@ export default {
 
     await this.$http.get(`/${this.resource}/record`).then(response => {
         this.form.token_public_culqui = response.data.token_public_culqui;
-        this.form.token_private_culqui = response.data.token_private_culqui;
+        this.has_private = !!response.data.has_token_private_culqui;
         this.emitStatus();
     });
   },
@@ -50,7 +51,7 @@ export default {
     emitStatus() {
       this.$emit("status", {
         culqi_public: !!this.form.token_public_culqui,
-        culqi_private: !!this.form.token_private_culqui
+        culqi_private: this.has_private
       });
     },
     initForm() {
@@ -66,6 +67,10 @@ export default {
         .post(`/${this.resource}`, this.form)
         .then(response => {
           if (response.data.success) {
+            if (this.form.token_private_culqui) {
+              this.has_private = true;
+              this.form.token_private_culqui = null;
+            }
             this.$message.success(response.data.message);
             this.emitStatus();
           } else {

@@ -30,22 +30,27 @@ class ConfigurationController extends Controller
 
     public function store_configuration(ConfigurationEcommerceRequest $request)
     {
-        $id = $request->input('id');
-        $configuration = ConfigurationEcommerce::find($id);
-        $configuration->fill($request->all());
-        $configuration->save();
-
-        return [
-            'success' => true,
-            'message' => 'Configuración actualizada'
-        ];
+        return $this->updateSection($request, [
+            'information_contact_name',
+            'information_contact_email',
+            'information_contact_phone',
+            'information_contact_address',
+        ], 'Configuración actualizada');
     }
 
     public function store_configuration_culqui(Request $request)
     {
-        $id = $request->input('id');
-        $configuration = ConfigurationEcommerce::find($id);
-        $configuration->fill($request->all());
+        $request->validate([
+            'token_public_culqui' => 'nullable|string|max:255',
+            'token_private_culqui' => 'nullable|string|max:255',
+        ]);
+
+        $configuration = ConfigurationEcommerce::firstOrFail();
+        $configuration->token_public_culqui = $request->input('token_public_culqui');
+        // Write-only: an empty value keeps the stored secret.
+        if ($request->filled('token_private_culqui')) {
+            $configuration->token_private_culqui = $request->input('token_private_culqui');
+        }
         $configuration->save();
 
         return [
@@ -54,42 +59,28 @@ class ConfigurationController extends Controller
         ];
     }
 
-    public function store_configuration_paypal(Request $request)
-    {
-        $id = $request->input('id');
-        $configuration = ConfigurationEcommerce::find($id);
-        $configuration->fill($request->all());
-        $configuration->save();
-
-        return [
-            'success' => true,
-            'message' => 'Configuración Paypal actualizada'
-        ];
-    }
-
     public function store_configuration_tag(Request $request)
     {
-        $id = $request->input('id');
-        $configuration = ConfigurationEcommerce::find($id);
-        $configuration->fill($request->all());
-        $configuration->save();
-
-        return [
-            'success' => true,
-            'message' => 'Configuración Tags actualizada'
-        ];
+        return $this->updateSection($request, ['tag_shipping', 'tag_dollar', 'tag_support'], 'Configuración Tags actualizada');
     }
 
     public function store_configuration_social(Request $request)
     {
-        $id = $request->input('id');
-        $configuration = ConfigurationEcommerce::find($id);
-        $configuration->fill($request->all());
+        return $this->updateSection($request, ['link_youtube', 'link_twitter', 'link_facebook'], 'Configuración de Redes Sociales actualizada');
+    }
+
+    /**
+     * Updates only the whitelisted fields of the single tenant configuration record.
+     */
+    private function updateSection(Request $request, array $fields, string $message)
+    {
+        $configuration = ConfigurationEcommerce::firstOrFail();
+        $configuration->fill($request->only($fields));
         $configuration->save();
 
         return [
             'success' => true,
-            'message' => 'Configuración de Redes Sociales actualizada'
+            'message' => $message
         ];
     }
 

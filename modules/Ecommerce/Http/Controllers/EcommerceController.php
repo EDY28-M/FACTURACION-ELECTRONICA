@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\Tenant\CulqiEmail;
 use App\Http\Controllers\Tenant\Api\ServiceController;
 use Illuminate\Support\Facades\Validator;
+use App\Services\Payments\CartPricing;
+use Exception;
 use Modules\Inventory\Models\InventoryConfiguration;
 
 class EcommerceController extends Controller
@@ -184,10 +186,20 @@ class EcommerceController extends Controller
 
     public function transactionFinally(Request $request)
     {
-        try{
-            $user = auth()->user();
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        try {
             //1. confirmar dato de compriante en order
-            $order_generated = Order::find($request->orderId);
+            $order_generated = Order::findOrFail($request->orderId);
+
+            // Only the buyer can attach a document, and only once.
+            $owner = strtolower(trim((string) data_get($order_generated->customer, 'correo_electronico')));
+            abort_unless($owner !== '' && $owner === strtolower(trim((string) $user->email)), 403);
+            abort_if($order_generated->document_external_id, 403);
+            // Card orders must be verified as paid; cash orders are created by the logged-in buyer.
+            abort_unless($order_generated->status_order_id == 2 || $order_generated->reference_payment === 'efectivo', 403);
+
             $order_generated->document_external_id = $request->document_external_id;
             $order_generated->number_document = $request->number_document;
             $order_generated->save();
@@ -199,19 +211,34 @@ class EcommerceController extends Controller
                 'order_total' => $order_generated->total
             ];
         }
+        catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            throw $e;
+        }
         catch(Exception $e)
         {
             return [
                 'success' => false,
-                'message' =>  $e->getMessage()
+                'message' => 'No se pudo actualizar la orden.'
             ];
         }
 
     }
 
+    public function quote(Request $request)
+    {
+        try {
+            $cart = CartPricing::forStore((array) $request->items);
+
+            return ['success' => true, 'total' => $cart['total'], 'lines' => $cart['lines'], 'exchange_rate_sale' => $cart['exchange_rate_sale']];
+        } catch (\InvalidArgumentException $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
     public function paymentCash(Request $request)
     {
-        $validator = Validator::make($request->customer, [
+        $customer = is_array($request->customer) ? $request->customer : [];
+        $validator = Validator::make($customer, [
             'telefono' => 'required|numeric',
             'direccion' => 'required',
             'codigo_tipo_documento_identidad' => 'required|numeric',
@@ -221,43 +248,48 @@ class EcommerceController extends Controller
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
-        } else {
-            try {
-                $user = auth()->user();
-                $order = Order::create([
+        }
+
+        try {
+            // The total is always recomputed from database prices; client amounts are ignored.
+            $cart = CartPricing::forStore((array) $request->items);
+
+            $user = auth()->user();
+            if ($user) {
+                $customer['correo_electronico'] = $user->email;
+            }
+
+            $order = Order::create([
                 'external_id' => Str::uuid()->toString(),
-                'customer' =>  $request->customer,
+                'customer' => $customer,
                 'shipping_address' => 'direccion 1',
-                'items' =>  $request->items,
-                'total' => $request->precio_culqi,
+                'items' => $cart['lines'],
+                'total' => $cart['total'],
                 'reference_payment' => 'efectivo',
                 'status_order_id' => 1,
                 'purchase' => $request->purchase
-              ]);
+            ]);
 
-            $customer_email = $user->email;
-            $document = new stdClass;
-            $document->client = $user->name;
-            $document->product = $request->producto;
-            $document->total = $request->precio_culqi;
-            $document->items = $request->items;
+            $customer_email = $customer['correo_electronico'] ?? null;
+            if ($customer_email) {
+                $document = new stdClass;
+                $document->client = $customer['apellidos_y_nombres_o_razon_social'] ?? $customer_email;
+                $document->product = 'Compras Ecommerce Facturador Pro';
+                $document->total = number_format($cart['total'], 2, '.', '');
+                $document->items = $cart['lines'];
 
-            $this->paymentCashEmail($customer_email, $document);
+                $this->paymentCashEmail($customer_email, $document);
+            }
 
-            //Mail::to($customer_email)->send(new CulqiEmail($document));
             return [
                 'success' => true,
                 'order' => $order
             ];
-
-        }catch(Exception $e)
-        {
-            return [
-                'success' => false,
-                'message' =>  $e->getMessage()
-            ];
+        } catch (\InvalidArgumentException $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => 'No se pudo registrar el pedido.'];
         }
-      }
     }
 
     public function paymentCashEmail($customer_email, $document)

@@ -63,7 +63,6 @@ return [
         ['path' => 'promotions', 'module' => 'ecommerce'],
         ['path' => 'ecommerce/configuration', 'module' => 'ecommerce', 'ajax' => true],
         ['path' => 'ecommerce/configuration_culqui', 'module' => 'ecommerce', 'ajax' => true],
-        ['path' => 'ecommerce/configuration_paypal', 'module' => 'ecommerce', 'ajax' => true],
         ['path' => 'ecommerce/configuration_social', 'module' => 'ecommerce', 'ajax' => true],
         ['path' => 'ecommerce/configuration_tags', 'module' => 'ecommerce', 'ajax' => true],
         ['path' => 'ecommerce/record', 'module' => 'ecommerce', 'ajax' => true],
