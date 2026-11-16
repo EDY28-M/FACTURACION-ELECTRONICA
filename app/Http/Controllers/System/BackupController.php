@@ -22,11 +22,11 @@ class BackupController extends Controller
 
     public function index() {
 
-        $avail = new Process('df -m -h --output=avail /');
+        $avail = Process::fromShellCommandline('df -m -h --output=avail /');
         $avail->run();
         $disc_used = $avail->getOutput();
 
-        $df = new Process('du -sh '.storage_path().' | cut -f1');
+        $df = Process::fromShellCommandline('du -sh '.storage_path().' | cut -f1');
         $df->run();
         $storage_size = $df->getOutput();
 
@@ -85,10 +85,9 @@ class BackupController extends Controller
         $config = [
             'driver' => 'ftp',
             'host'   => $request['host'],
-            'port' => $request['port'],
+            'port' => (int) ($request['port'] ?: 21),
             'username' => $request['username'],
             'password'   => $request['password'],
-            'port'  => 21,
             'passive'   => true,
         ];
 

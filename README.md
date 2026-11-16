@@ -114,3 +114,31 @@ Contraseña: 123456
 ### Software para grabar pantalla
 Contraseña: camtasia: [Descargar](https://drive.google.com/file/d/1lJ4N3whm9AMRmRl0oW-5ptf0uCx26Eek/view?usp=sharing "Clic")<br>
 
+
+
+### Compilación del dashboard en Node.js 24
+
+La interfaz mantiene Vue 2 y Laravel Mix 3. El compilador raíz `node-sass` utiliza
+un alias exacto a Dart Sass 1.77.8 para ejecutar los estilos de componentes en macOS ARM.
+
+```sh
+npm run test:dashboard
+docker compose exec -T fpm php tests/ui/chart-month-boundaries.php
+npm run production:js
+```
+
+`production:js` compila primero en `.local/build-js`, valida los archivos y publica
+el conjunto JavaScript completo junto con su manifiesto. Ante un error de publicación,
+restaura los archivos anteriores y conserva copias en `.local/build-js/previous`.
+La publicación no es una transacción de lectura simultánea entre múltiples archivos.
+Conserva los CSS existentes
+(`app.css`, `auth.css`) y sus entradas del manifiesto. Usa OpenSSL legacy únicamente
+para compatibilidad con Webpack 3, sin cambiar el runtime de la aplicación.
+
+La compilación completa de Sass sigue limitada por `resolve-url-loader` 2 y su
+analizador antiguo; no usar esta ruta para cambios en `resources/sass` sin actualizar
+ese pipeline. `public/css/system-theme.css` se sirve directamente. La instalación
+limpia también conserva un `node-sass` 4 transitivo de Mix: no se ha validado `npm ci`
+normal en Node 24. Para instalar dependencias sin ejecutar ese binario antiguo se
+requiere `npm ci --ignore-scripts --legacy-peer-deps`; otras dependencias nativas
+pueden necesitar una configuración independiente. No se migraron frameworks.

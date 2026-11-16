@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 use Zip;
 
 class BackupFiles extends Command
@@ -51,6 +52,7 @@ class BackupFiles extends Command
                 $zip = Zip::create(storage_path('app/backups/zip/'. $folder .'.zip'));
                 $zip->add(storage_path('app/tenancy/tenants/' . $folder) . '/', true);
                 $zip->add(storage_path('app/backups/'. $folder . '/'), true);
+                $zip->close();
 
                 Log::info('Backup ' . $folder . ' storage success');
             } else {
@@ -59,11 +61,12 @@ class BackupFiles extends Command
                 $zip = Zip::create(storage_path('app/backups/zip/'.$today.'_storage.zip'));
                 $zip->add(storage_path('app/tenancy/tenants/'), true);
                 $zip->add(storage_path('app/backups/'.$path_sql.'/'), true);
+                $zip->close();
 
                 Log::info('Backup storage success');
             }
         } catch (Throwable $e) {
-            Log::error('Backup failed', $e);
+            Log::error('Backup failed', ['exception' => $e]);
         }
     }
 }

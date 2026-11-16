@@ -116,17 +116,22 @@ class QuotationController extends Controller
                         ->whereTypeUser()
                         ->latest();
 
-        }else{
+        }else if($request->column){
 
             $records = Quotation::where($request->column, 'like', "%{$request->value}%")
                                 ->whereTypeUser()
                                 ->latest();
 
+        }else{
+
+            $records = Quotation::whereTypeUser()
+                                ->latest();
+
         }
 
-        $form = json_decode($request->form);
+        $form = $request->form ? json_decode($request->form) : null;
 
-        if($form->date_start && $form->date_end){
+        if($form && !empty($form->date_start) && !empty($form->date_end)){
             $records = $records->whereBetween('date_of_issue', [$form->date_start, $form->date_end]);
         }
 
@@ -590,7 +595,7 @@ class QuotationController extends Controller
         return compact('customers');
     }
 
-    public function download($external_id, $format) {
+    public function download($external_id, $format = 'a4') {
         $quotation = Quotation::where('external_id', $external_id)->first();
 
         if (!$quotation) throw new Exception("El código {$external_id} es inválido, no se encontro la cotización relacionada");
@@ -600,7 +605,7 @@ class QuotationController extends Controller
         return $this->downloadStorage($quotation->filename, 'quotation');
     }
 
-    public function toPrint($external_id, $format) {
+    public function toPrint($external_id, $format = 'a4') {
         $quotation = Quotation::where('external_id', $external_id)->first();
 
         if (!$quotation) throw new Exception("El código {$external_id} es inválido, no se encontro la cotización relacionada");
@@ -816,12 +821,12 @@ class QuotationController extends Controller
         if ($format_pdf != 'ticket') {
             if(config('tenant.pdf_template_footer')) {
 
-                $html_footer = $template->pdfFooter($base_template,$this->quotation);
+                $html_footer = $template->pdfFooter($base_template, $document);
                 $html_footer_term_condition = ($document->terms_condition) ? $template->pdfFooterTermCondition($base_template, $document):"";
 
                 $html_footer_legend = "";
                 if($configuration->legend_footer){
-                    $html_footer_legend = $template->pdfFooterLegend($base_template, $this->quotation);
+                    $html_footer_legend = $template->pdfFooterLegend($base_template, $document);
                 }
 
                 $pdf->SetHTMLFooter($html_footer_term_condition.$html_footer.$html_footer_legend);

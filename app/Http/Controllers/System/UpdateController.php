@@ -20,7 +20,7 @@ class UpdateController extends Controller
 
     public function version()
     {
-        $id = new Process('git describe --tags');
+        $id = Process::fromShellCommandline('git describe --tags');
         $id->run();
         $res_id = $id->getOutput();
         // $tag = new Process('git tag | sort -V | tail -1');
@@ -31,7 +31,7 @@ class UpdateController extends Controller
 
     public function branch()
     {
-        $process = new Process('git rev-parse --abbrev-ref HEAD');
+        $process = Process::fromShellCommandline('git rev-parse --abbrev-ref HEAD');
         $process->run();
         if (!$process->isSuccessful()) {
             throw new ProcessFailedException($process);
@@ -42,20 +42,25 @@ class UpdateController extends Controller
 
     public function pull($branch)
     {
-        $chown = new Process('chown -R ssh/');
+        $safeBranch = preg_replace('/[^a-zA-Z0-9._\/-]/', '', (string) $branch);
+        if ($safeBranch === '' || strpos($safeBranch, '-') === 0) {
+            throw new \InvalidArgumentException('Invalid branch name');
+        }
+
+        $chown = Process::fromShellCommandline('chown -R ssh/');
         $chown->run();
 
-        $checkout = new Process('git checkout .');
+        $checkout = new Process(['git', 'checkout', '.']);
         $checkout->run();
 
-        $process = new Process('git pull origin '.$branch);
+        $process = new Process(['git', 'pull', 'origin', $safeBranch]);
         $process->run();
         if (!$process->isSuccessful()) {
             throw new ProcessFailedException($process);
         }
         $output = $process->getOutput();
 
-        $fetch = new Process('git fetch');
+        $fetch = new Process(['git', 'fetch']);
         $fetch->run();
 
         return json_encode($output);
@@ -82,11 +87,11 @@ class UpdateController extends Controller
 
     public function composerInstall()
     {
-        $process = new Process(system('composer install -d '. base_path()));
+        $process = Process::fromShellCommandline('composer install -d '. base_path());
         $process->run();
         $output = $process->getOutput();
 
-        $chmod = new Process('chmod -R 777 ../vendor/mpdf/mpdf');
+        $chmod = Process::fromShellCommandline('chmod -R 777 ../vendor/mpdf/mpdf');
         $chmod->run();
 
         return json_encode($output);
@@ -130,8 +135,11 @@ class UpdateController extends Controller
     }
 
     public function changelog() {
-
-        $file = File::get(base_path('CHANGELOG.md'));
-        return Markdown::convertToHtml($file);
+        $path = base_path('CHANGELOG.md');
+        if (!File::exists($path)) {
+            return '';
+        }
+        $file = File::get($path);
+        return (string) Markdown::convertToHtml($file);
     }
 }
