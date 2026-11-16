@@ -18,6 +18,13 @@ class DispatchController extends Controller
     public function store(Request $request)
     {
         
+        if ($request->input('document_type_id') === '31') {
+            return response()->json([
+                'success' => false,
+                'message' => 'La guía transportista (31) solo se puede emitir desde el sistema web por ahora.',
+            ], 422);
+        }
+
         $request->validate([
             'delivery.address' => 'required|max:100',
             'origin.address' => 'required|max:100',

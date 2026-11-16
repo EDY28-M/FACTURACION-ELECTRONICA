@@ -316,7 +316,7 @@ class DispatchController extends Controller
 		$districts = District::whereActive()->get();
 		$establishments = Establishment::all();
 		$series = Series::all();
-		$company = Company::select('number')->first();
+		$company = Company::select('number', 'mtc_registration_number')->first();
 
 		return compact(
 			'establishments',

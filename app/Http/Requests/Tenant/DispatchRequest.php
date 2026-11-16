@@ -4,6 +4,7 @@ namespace App\Http\Requests\Tenant;
 
 use Illuminate\Foundation\Http\FormRequest;
 use App\Models\Tenant\Company;
+use App\Models\Tenant\Series;
 use Illuminate\Validation\Rule;
 
 class DispatchRequest extends FormRequest
@@ -11,6 +12,19 @@ class DispatchRequest extends FormRequest
     public function authorize()
     {
         return true;
+    }
+
+    /**
+     * The web form posts `series_id`; make sure `series` is always the resolved series number.
+     */
+    protected function prepareForValidation()
+    {
+        if ($this->filled('series_id') && !$this->filled('series')) {
+            $series = Series::find($this->input('series_id'));
+            if ($series) {
+                $this->merge(['series' => $series->number, 'document_type_id' => $this->input('document_type_id', $series->document_type_id)]);
+            }
+        }
     }
 
     public function rules()

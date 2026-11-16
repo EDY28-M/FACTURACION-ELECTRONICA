@@ -72,7 +72,8 @@ class DispatchInput
             'license_plate' => ( isset($inputs['license_plate']) ) ? $inputs['license_plate'] : null ,
             'origin' => self::origin($inputs),
             'delivery' => self::delivery($inputs),
-            'dispatcher' => self::dispatcher($inputs),
+            // The carrier guide (31) is issued by the company itself: no third-party dispatcher.
+            'dispatcher' => $is_carrier ? null : self::dispatcher($inputs),
             'driver' => self::driver($inputs),
             'items' => self::items($inputs),
             'legends' => LegendInput::set($inputs),

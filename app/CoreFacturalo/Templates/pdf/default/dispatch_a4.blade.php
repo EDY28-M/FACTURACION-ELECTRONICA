@@ -5,6 +5,7 @@
 
     $document_number = $document->series.'-'.str_pad($document->number, 8, '0', STR_PAD_LEFT);
     $document_type_driver = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->driver)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
+    $is_carrier = $document->document_type_id === '31';
     $document_type_dispatcher = App\Models\Tenant\Catalogs\IdentityDocumentType::find(optional($document->dispatcher)->identity_document_type_id) ?? new App\Models\Tenant\Catalogs\IdentityDocumentType();
 
 @endphp
@@ -76,6 +77,23 @@
     </tr>
     </tbody>
 </table>
+@if($is_carrier && $document->sender)
+<table class="full-width border-box mt-10 mb-10">
+    <thead>
+    <tr>
+        <th class="border-bottom text-left">REMITENTE</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td>Razón Social: {{ $document->sender->name }}</td>
+    </tr>
+    <tr>
+        <td>Documento: {{ $document->sender->number }}</td>
+    </tr>
+    </tbody>
+</table>
+@endif
 <table class="full-width border-box mt-10 mb-10">
     <thead>
     <tr>
@@ -87,13 +105,19 @@
         <td>Fecha Emisión: {{ $document->date_of_issue->format('Y-m-d') }}</td>
         <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('Y-m-d') }}</td>
     </tr>
+    @if(!$is_carrier)
     <tr>
         <td>Motivo Traslado: {{ $document->transfer_reason_type->description }}</td>
         <td>Modalidad de Transporte: {{ $document->transport_mode_type->description }}</td>
     </tr>
+    @endif
     <tr>
         <td>Peso Bruto Total({{ $document->unit_type_id }}): {{ $document->total_weight }}</td>
+        @if(!$is_carrier)
         <td>Número de Bultos: {{ $document->packages_number }}</td>
+        @else
+        <td>Pagador del flete: {{ ['remitente' => 'Remitente', 'subcontratador' => 'Subcontratador', 'tercero' => 'Tercero'][$document->freight_payer] ?? '-' }}@if($document->freight_payer === 'tercero' && $document->freight_payer_party) ({{ $document->freight_payer_party->number }} - {{ $document->freight_payer_party->name }})@endif</td>
+        @endif
     </tr>
     <tr>
         <td>P.Partida: {{ $document->origin->location_id }} - {{ $document->origin->address }}</td>
@@ -108,10 +132,27 @@
     </tr>
     </thead>
     <tbody>
+    @if($is_carrier)
+    <tr>
+        <td>Transportista: {{ $company->name }} (RUC {{ $company->number }})</td>
+        <td>N° registro MTC: {{ $company->mtc_registration_number }}</td>
+    </tr>
+    @if($document->subcontractor)
+    <tr>
+        <td colspan="2">Transporte subcontratado: {{ $document->subcontractor->number }} - {{ $document->subcontractor->name }}</td>
+    </tr>
+    @endif
+    @if(optional($document->vehicle_details)->tuc)
+    <tr>
+        <td colspan="2">TUC / Habilitación vehicular: {{ $document->vehicle_details->tuc }}</td>
+    </tr>
+    @endif
+    @else
     <tr>
         <td>Nombre y/o razón social: {{ optional($document->dispatcher)->name }}</td>
         <td>{{ $document_type_dispatcher->description }}: {{ optional($document->dispatcher)->number }}</td>
     </tr>
+    @endif
     <tbody>
     <tr>
         <td>Número de placa del vehículo: {{ $document->license_plate }}</td>
@@ -158,6 +199,19 @@
     @endforeach
     </tbody>
 </table>
+
+@if($is_carrier && !empty($document->related_dispatches))
+<table class="full-width border-box mt-10 mb-10">
+    <tr>
+        <td class="text-bold border-bottom font-bold">GUÍAS DE REMISIÓN DEL REMITENTE</td>
+    </tr>
+    @foreach($document->related_dispatches as $related_guide)
+    <tr>
+        <td>{{ $related_guide->series_number }}@if(!empty($related_guide->ruc)) (RUC {{ $related_guide->ruc }})@endif</td>
+    </tr>
+    @endforeach
+</table>
+@endif
 
 @if($document->observations)
 <table class="full-width border-box mt-10 mb-10">

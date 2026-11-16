@@ -12,6 +12,12 @@ class DispatchValidation
     {
         $series = Functions::findSeries($inputs);
         if (!$series) throw new Exception("La serie no fue encontrada.");
+        if (isset($inputs['document_type_id']) && $series->document_type_id !== $inputs['document_type_id']) {
+            throw new Exception("La serie {$series->number} no corresponde al tipo de guía seleccionado.");
+        }
+        if (isset($inputs['establishment_id']) && (int) $series->establishment_id !== (int) $inputs['establishment_id']) {
+            throw new Exception("La serie {$series->number} no pertenece al establecimiento seleccionado.");
+        }
         $inputs['series'] = $series->number;
         unset($inputs['series_id']);
 

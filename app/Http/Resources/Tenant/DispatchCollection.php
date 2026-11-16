@@ -35,6 +35,8 @@ class DispatchCollection extends ResourceCollection
 				'state_type_id'          => $row->state_type_id,
 				'state_type_description' => $row->state_type->description,
 				'series'                 => $row->series,
+				'document_type_id'       => $row->document_type_id,
+				'document_type_description' => $row->document_type_id === '31' ? 'Transportista' : 'Remitente',
 				'ticket'                 => $row->ticket,
 				'sunat_message'          => optional($row->soap_shipping_response)->description,
 				'has_xml'                => $row->has_xml,

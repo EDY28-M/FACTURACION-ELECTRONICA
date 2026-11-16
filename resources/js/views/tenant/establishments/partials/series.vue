@@ -37,6 +37,8 @@
                                         <div class="form-group mb-0" :class="{'has-danger': row.errors.number}">
                                             <el-input v-model="row.number" :maxlength="4"></el-input>
                                             <small class="form-control-feedback" v-if="row.errors.number" v-text="row.errors.number[0]"></small>
+                                            <small class="text-muted" v-if="row.document_type_id == '31'">Debe iniciar con V (ej. V001)</small>
+                                            <small class="text-muted" v-if="row.document_type_id == '09'">Electrónica: T (ej. T001)</small>
                                         </div>
                                     </td>
                                     <td>

@@ -7,6 +7,21 @@
             <form autocomplete="off" @submit.prevent="submit">
                 <div class="form-body">
                     <div class="row">
+                        <div class="col-lg-12">
+                            <div class="form-group">
+                                <label class="control-label">Tipo de guía<span class="text-danger"> *</span></label>
+                                <div>
+                                    <el-radio-group v-model="form.document_type_id" @change="changeDocumentType">
+                                        <el-radio-button label="09">Remitente (09)</el-radio-button>
+                                        <el-radio-button label="31">Transportista (31)</el-radio-button>
+                                    </el-radio-group>
+                                </div>
+                                <small class="text-muted" v-if="isCarrier">La guía transportista la emite la empresa que presta el servicio de transporte. Use una serie que inicie con V.</small>
+                                <small class="form-control-feedback" v-if="errors.mtc_registration_number" v-text="errors.mtc_registration_number[0]"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
                         <div class="col-lg-2">
                             <div class="form-group" :class="{'has-danger': errors.establishment}">
                                 <label class="control-label">Establecimiento<span class="text-danger"> *</span></label>
@@ -51,7 +66,7 @@
                                 <small class="form-control-feedback" v-if="errors.customer_id" v-text="errors.customer_id[0]"></small>
                             </div>
                         </div>
-                        <div class="col-lg-2">
+                        <div class="col-lg-2" v-if="!isCarrier">
                             <div class="form-group" :class="{'has-danger': errors.transport_mode_type_id}">
                                 <label class="control-label">Modo de translado<span class="text-danger"> *</span></label>
                                 <el-select v-model="form.transport_mode_type_id">
@@ -60,7 +75,7 @@
                                 <small class="form-control-feedback" v-if="errors.transport_mode_type_id" v-text="errors.transport_mode_type_id[0]"></small>
                             </div>
                         </div>
-                        <div class="col-lg-4">
+                        <div class="col-lg-4" v-if="!isCarrier">
                             <div class="form-group" :class="{'has-danger': errors.transfer_reason_type_id}">
                                 <label class="control-label">Motivo de translado<span class="text-danger"> *</span></label>
                                 <el-select v-model="form.transfer_reason_type_id">
@@ -87,7 +102,7 @@
                             </div>
                         </div> -->
 
-                        <div class="col-lg-6">
+                        <div class="col-lg-6" v-if="!isCarrier">
                             <div class="form-group" :class="{'has-danger': errors.transfer_reason_description}">
                                 <label class="control-label">Descripción de motivo de traslado</label>
                                 <el-input type="textarea" :rows="3" placeholder="Descripción de motivo de traslado..." v-model="form.transfer_reason_description" maxlength="100"></el-input>
@@ -100,7 +115,7 @@
                             <div class="form-group" :class="{'has-danger': errors.unit_type_id}">
                                 <label class="control-label">Unidad de medida<span class="text-danger"> *</span></label>
                                 <el-select v-model="form.unit_type_id">
-                                    <el-option v-for="option in unitTypes" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                                    <el-option v-for="option in availableUnitTypes" :key="option.id" :value="option.id" :label="option.description"></el-option>
                                 </el-select>
                                 <small class="form-control-feedback" v-if="errors.unit_type_id" v-text="errors.unit_type_id[0]"></small>
                             </div>
@@ -112,7 +127,7 @@
                                 <small class="form-control-feedback" v-if="errors.total_weight" v-text="errors.total_weight[0]"></small>
                             </div>
                         </div>
-                        <div class="col-lg-2">
+                        <div class="col-lg-2" v-if="!isCarrier">
                             <div class="form-group" :class="{'has-danger': errors.packages_number}">
                                 <label class="control-label">Número de paquetes<span class="text-danger"> *</span></label>
                                 <el-input-number v-model="form.packages_number" :precision="0" :step="1" :min="0" :max="9999999999"></el-input-number>
@@ -220,7 +235,7 @@
                         </div>
                     </div>
                     <hr>
-                    <template v-if="form.transport_mode_type_id === '01'">
+                    <template v-if="!isCarrier && form.transport_mode_type_id === '01'">
                     <h4>Datos transportista</h4>
                     <div class="row">
                         <div class="col-lg-4">
@@ -254,7 +269,7 @@
                         </div>
                     </div>
                     </template>
-                    <template v-if="form.transport_mode_type_id === '02'">
+                    <template v-if="!isCarrier && form.transport_mode_type_id === '02'">
                     <h4>Datos conductor</h4>
                     <div class="row">
                         <div class="col-lg-4">
@@ -305,6 +320,204 @@
                                 <el-input v-model="form.driver.family_name" :maxlength="100" placeholder="Apellidos..."></el-input>
                                 <small class="form-control-feedback" v-if="errors['driver.family_name']" v-text="errors['driver.family_name'][0]"></small>
                             </div>
+                        </div>
+                    </div>
+                    </template>
+                    <template v-if="isCarrier">
+                    <h4>Remitente</h4>
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['sender.identity_document_type_id']}">
+                                <label class="control-label">Tipo Doc. Identidad<span class="text-danger"> *</span></label>
+                                <el-select v-model="form.sender.identity_document_type_id" filterable>
+                                    <el-option v-for="option in identityDocumentTypes" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                                </el-select>
+                                <small class="form-control-feedback" v-if="errors['sender.identity_document_type_id']" v-text="errors['sender.identity_document_type_id'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['sender.number']}">
+                                <label class="control-label">Número<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.sender.number" :maxlength="15" placeholder="Número..."></el-input>
+                                <small class="form-control-feedback" v-if="errors['sender.number']" v-text="errors['sender.number'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['sender.name']}">
+                                <label class="control-label">Nombre y/o razón social<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.sender.name" :maxlength="250" placeholder="Nombre y/o razón social..."></el-input>
+                                <small class="form-control-feedback" v-if="errors['sender.name']" v-text="errors['sender.name'][0]"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <h4>Guías de remisión del remitente relacionadas</h4>
+                    <div class="row" v-for="(row, index) in form.related_dispatches" :key="'rd' + index">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['related_dispatches.' + index + '.series_number']}">
+                                <label class="control-label">Serie-Número</label>
+                                <el-input v-model="row.series_number" :maxlength="13" placeholder="T001-123"></el-input>
+                                <small class="form-control-feedback" v-if="errors['related_dispatches.' + index + '.series_number']" v-text="errors['related_dispatches.' + index + '.series_number'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label class="control-label">RUC del emisor</label>
+                                <el-input v-model="row.ruc" :maxlength="11" placeholder="RUC del remitente..."></el-input>
+                            </div>
+                        </div>
+                        <div class="col-lg-2">
+                            <div class="form-group">
+                                <label class="control-label">&nbsp;</label><br>
+                                <button type="button" class="btn waves-effect waves-light btn-xs btn-danger" @click.prevent="removeRelatedDispatch(index)">x</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn waves-effect waves-light btn-xs btn-primary" @click.prevent="addRelatedDispatch">+ Agregar guía relacionada</button>
+                    </div>
+                    <h4>Pago del flete y subcontratación</h4>
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors.freight_payer}">
+                                <label class="control-label">Pagador del flete<span class="text-danger"> *</span></label>
+                                <el-select v-model="form.freight_payer">
+                                    <el-option value="remitente" label="Remitente"></el-option>
+                                    <el-option value="subcontratador" label="Subcontratador"></el-option>
+                                    <el-option value="tercero" label="Tercero"></el-option>
+                                </el-select>
+                                <small class="form-control-feedback" v-if="errors.freight_payer" v-text="errors.freight_payer[0]"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" v-if="form.freight_payer === 'tercero'">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['freight_payer_party.identity_document_type_id']}">
+                                <label class="control-label">Tipo Doc. Identidad del pagador<span class="text-danger"> *</span></label>
+                                <el-select v-model="form.freight_payer_party.identity_document_type_id" filterable>
+                                    <el-option v-for="option in identityDocumentTypes" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                                </el-select>
+                                <small class="form-control-feedback" v-if="errors['freight_payer_party.identity_document_type_id']" v-text="errors['freight_payer_party.identity_document_type_id'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['freight_payer_party.number']}">
+                                <label class="control-label">Número del pagador<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.freight_payer_party.number" :maxlength="15"></el-input>
+                                <small class="form-control-feedback" v-if="errors['freight_payer_party.number']" v-text="errors['freight_payer_party.number'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['freight_payer_party.name']}">
+                                <label class="control-label">Nombre y/o razón social del pagador<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.freight_payer_party.name" :maxlength="250"></el-input>
+                                <small class="form-control-feedback" v-if="errors['freight_payer_party.name']" v-text="errors['freight_payer_party.name'][0]"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['subcontractor.number']}">
+                                <label class="control-label">RUC del subcontratador<span class="text-danger" v-if="form.freight_payer === 'subcontratador'"> *</span></label>
+                                <el-input v-model="form.subcontractor.number" :maxlength="11" placeholder="Solo si el transporte es subcontratado"></el-input>
+                                <small class="form-control-feedback" v-if="errors['subcontractor.number']" v-text="errors['subcontractor.number'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="form-group" :class="{'has-danger': errors['subcontractor.name']}">
+                                <label class="control-label">Razón social del subcontratador</label>
+                                <el-input v-model="form.subcontractor.name" :maxlength="250"></el-input>
+                                <small class="form-control-feedback" v-if="errors['subcontractor.name']" v-text="errors['subcontractor.name'][0]"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <h4>Vehículo y conductor</h4>
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors.license_plate}">
+                                <label class="control-label">Placa del vehículo<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.license_plate" :maxlength="8" placeholder="Placa..."></el-input>
+                                <small class="form-control-feedback" v-if="errors.license_plate" v-text="errors.license_plate[0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['vehicle_details.tuc']}">
+                                <label class="control-label">N° TUC o certificado de habilitación vehicular</label>
+                                <el-input v-model="form.vehicle_details.tuc" :maxlength="15"></el-input>
+                                <small class="form-control-feedback" v-if="errors['vehicle_details.tuc']" v-text="errors['vehicle_details.tuc'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label class="control-label">N° de autorización del vehículo</label>
+                                <el-input v-model="form.vehicle_details.authorization_number" :maxlength="50"></el-input>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label class="control-label">Código de entidad autorizadora</label>
+                                <el-input v-model="form.vehicle_details.authorization_entity_id" :maxlength="2"></el-input>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['secondary_license_plates.semitrailer']}">
+                                <label class="control-label">Placa del semirremolque</label>
+                                <el-input v-model="form.secondary_license_plates.semitrailer" :maxlength="8"></el-input>
+                                <small class="form-control-feedback" v-if="errors['secondary_license_plates.semitrailer']" v-text="errors['secondary_license_plates.semitrailer'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label class="control-label">N° TUC del semirremolque</label>
+                                <el-input v-model="form.vehicle_details.semitrailer_tuc" :maxlength="15"></el-input>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.identity_document_type_id']}">
+                                <label class="control-label">Tipo Doc. Identidad del conductor<span class="text-danger"> *</span></label>
+                                <el-select v-model="form.driver.identity_document_type_id" filterable>
+                                    <el-option v-for="option in identityDocumentTypes" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                                </el-select>
+                                <small class="form-control-feedback" v-if="errors['driver.identity_document_type_id']" v-text="errors['driver.identity_document_type_id'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.number']}">
+                                <label class="control-label">Número del conductor<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.driver.number" :maxlength="15"></el-input>
+                                <small class="form-control-feedback" v-if="errors['driver.number']" v-text="errors['driver.number'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.license']}">
+                                <label class="control-label">Licencia de conducir<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.driver.license" :maxlength="10"></el-input>
+                                <small class="form-control-feedback" v-if="errors['driver.license']" v-text="errors['driver.license'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.first_name']}">
+                                <label class="control-label">Nombres del conductor<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.driver.first_name" :maxlength="100"></el-input>
+                                <small class="form-control-feedback" v-if="errors['driver.first_name']" v-text="errors['driver.first_name'][0]"></small>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group" :class="{'has-danger': errors['driver.family_name']}">
+                                <label class="control-label">Apellidos del conductor<span class="text-danger"> *</span></label>
+                                <el-input v-model="form.driver.family_name" :maxlength="100"></el-input>
+                                <small class="form-control-feedback" v-if="errors['driver.family_name']" v-text="errors['driver.family_name'][0]"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <h4>Indicadores del traslado</h4>
+                    <div class="row">
+                        <div class="col-lg-12">
+                            <el-checkbox v-model="form.indicators.total_transfer">Traslado total de bienes</el-checkbox>
+                            <el-checkbox v-model="form.transshipment_indicator">Transbordo programado</el-checkbox>
+                            <el-checkbox v-model="form.indicators.empty_vehicle_return">Retorno de vehículo vacío</el-checkbox>
+                            <el-checkbox v-model="form.indicators.empty_packaging_return">Retorno de vehículo con envases o embalajes vacíos</el-checkbox>
                         </div>
                     </div>
                     </template>
@@ -401,6 +614,15 @@
                 company: {},
                 customerAddresses: [],
             }
+        },
+        computed: {
+            isCarrier() {
+                return this.form.document_type_id === '31';
+            },
+            availableUnitTypes() {
+                // SUNAT only accepts kilograms or metric tons as gross weight unit for the transportista guide.
+                return this.isCarrier ? this.unitTypes.filter(u => ['KGM', 'TNE'].includes(u.id)) : this.unitTypes;
+            },
         },
         async created() {
             // this.clean();
@@ -587,6 +809,33 @@
                     // optional: {
                     //     invoice_number: this.document.series+'-'+this.document.number
                     // },
+                    sender: {
+                        identity_document_type_id: '6',
+                        number: null,
+                        name: null,
+                    },
+                    freight_payer: 'remitente',
+                    freight_payer_party: {
+                        identity_document_type_id: '6',
+                        number: null,
+                        name: null,
+                    },
+                    subcontractor: {
+                        number: null,
+                        name: null,
+                    },
+                    related_dispatches: [],
+                    vehicle_details: {
+                        tuc: null,
+                        authorization_number: null,
+                        authorization_entity_id: null,
+                        semitrailer_tuc: null,
+                    },
+                    indicators: {
+                        total_transfer: false,
+                        empty_vehicle_return: false,
+                        empty_packaging_return: false,
+                    },
                     items: [],
                     reference_order_form_id: null,
                     license_plate:null,
@@ -595,6 +844,24 @@
                     }
 
                 }
+            },
+            changeDocumentType() {
+                this.form.series_id = null;
+                this.changeEstablishment();
+
+                if (this.isCarrier) {
+                    this.form.transport_mode_type_id = null;
+                    this.form.transfer_reason_type_id = null;
+                    if (!['KGM', 'TNE'].includes(this.form.unit_type_id)) {
+                        this.form.unit_type_id = 'KGM';
+                    }
+                }
+            },
+            addRelatedDispatch() {
+                this.form.related_dispatches.push({series_number: '', ruc: ''});
+            },
+            removeRelatedDispatch(index) {
+                this.form.related_dispatches.splice(index, 1);
             },
             changeEstablishment() {
                 this.series = _.filter(this.seriesAll, {

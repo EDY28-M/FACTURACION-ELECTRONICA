@@ -204,7 +204,7 @@
                 </cac:PartyLegalEntity>
             </cac:CarrierParty>
             @endif
-            @if($isPublicTransport && $dispatcher)
+            @if(!$isCarrier && $isPublicTransport && $dispatcher)
             <cac:CarrierParty>
                 <cac:PartyIdentification>
                     <cbc:ID schemeID="{{ $dispatcher->identity_document_type_id ?? '' }}">{{ $dispatcher->number ?? '' }}</cbc:ID>
