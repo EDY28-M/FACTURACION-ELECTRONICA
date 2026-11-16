@@ -44,6 +44,51 @@ class User extends Authenticatable
         return $this->belongsToMany(ModuleLevel::class);
     }
 
+    /** @var bool|null */
+    private $ownerCache;
+
+    /** @var string[]|null */
+    private $moduleValuesCache;
+
+    /** @var string[]|null */
+    private $levelValuesCache;
+
+    /**
+     * The tenant owner is the first user created for the tenant; it always has full access.
+     */
+    public function isOwner(): bool
+    {
+        if ($this->ownerCache === null) {
+            $this->ownerCache = (int) $this->id === (int) static::query()->min('id');
+        }
+
+        return $this->ownerCache;
+    }
+
+    /**
+     * Module values (modules.value) granted to the user. Empty means no access.
+     */
+    public function moduleValues(): array
+    {
+        if ($this->moduleValuesCache === null) {
+            $this->moduleValuesCache = $this->modules()->pluck('value')->all();
+        }
+
+        return $this->moduleValuesCache;
+    }
+
+    /**
+     * Level values (module_levels.value) granted to the user. Empty means no access.
+     */
+    public function levelValues(): array
+    {
+        if ($this->levelValuesCache === null) {
+            $this->levelValuesCache = $this->levels()->pluck('value')->all();
+        }
+
+        return $this->levelValuesCache;
+    }
+
     public function authorizeModules($modules)
     {
         if ($this->hasAnyModule($modules)) {

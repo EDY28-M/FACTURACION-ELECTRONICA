@@ -4,7 +4,7 @@ $hostname = app(Hyn\Tenancy\Contracts\CurrentHostname::class);
 
 if($hostname) {
     Route::domain($hostname->fqdn)->group(function () {
-        Route::middleware(['auth', 'locked.tenant'])->group(function() {
+        Route::middleware(['auth', 'redirect.module', 'locked.tenant'])->group(function() {
 
 
             Route::get('categories', 'CategoryController@index')->name('tenant.categories.index')->middleware('redirect.level');

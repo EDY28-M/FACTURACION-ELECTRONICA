@@ -39,6 +39,7 @@ class UserCollection extends ResourceCollection
                 'api_token' => $row->api_token,
                 'establishment_description' => optional($row->establishment)->description,
                 'type' => $type,
+                'is_owner' => $row->isOwner(),
                 'locked' => (bool) $row->locked,
 
             ];

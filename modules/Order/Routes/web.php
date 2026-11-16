@@ -8,7 +8,7 @@ if($current_hostname) {
         Route::get('order-forms/print/{external_id}/{format?}', 'OrderFormController@toPrint');
         Route::get('order-notes/print/{external_id}/{format?}', 'OrderNoteController@toPrint');
 
-        Route::middleware(['auth', 'locked.tenant'])->group(function () {
+        Route::middleware(['auth', 'redirect.module', 'locked.tenant'])->group(function () {
 
             Route::prefix('order-notes')->group(function () {
 

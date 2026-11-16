@@ -39,14 +39,15 @@
                             <td>{{ row.establishment_description }}</td>
                             <td class="text-right">
                                 <button v-if="typeUser === 'admin'" type="button" class="btn waves-effect waves-light btn-xs btn-info" @click.prevent="clickCreate(row.id)">Editar</button>
-                                <button type="button" class="btn waves-effect waves-light btn-xs btn-danger"  @click.prevent="clickDelete(row.id)" v-if="row.id != 1 && typeUser === 'admin'">Eliminar</button>
+                                <button type="button" class="btn waves-effect waves-light btn-xs btn-danger"  @click.prevent="clickDelete(row.id)" v-if="!row.is_owner && typeUser === 'admin'">Eliminar</button>
                             </td>
                         </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-            <users-form :showDialog.sync="showDialog"
+            <users-form v-if="showDialog"
+                        :showDialog.sync="showDialog"
                         :typeUser="typeUser"
                         :recordId="recordId"></users-form>
         </div>

@@ -11,6 +11,8 @@ use App\Http\Requests\Tenant\UserRequest;
 use App\Http\Resources\Tenant\UserResource;
 use Modules\LevelAccess\Models\ModuleLevel;
 use App\Http\Resources\Tenant\UserCollection;
+use App\Support\Access\PermissionTree;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -28,46 +30,9 @@ class UserController extends Controller
 
     public function tables()
     {
-        $modulesTenant = DB::connection('tenant')
-            ->table('module_user')
-            ->where('user_id', 1)
-            ->select('module_id')
-            ->get()
-            ->pluck('module_id')
-            ->all();
-
-        $levelsTenant = DB::connection('tenant')
-            ->table('module_level_user')
-            ->where('user_id', 1)
-            ->get()
-            ->pluck('module_level_id')
-            ->toArray();
-
-        $modules = Module::with(['levels' => function ($query) use ($levelsTenant) {
-            $query->whereIn('id', $levelsTenant);
-        }])
-            ->orderBy('order_menu')
-            ->whereIn('id', $modulesTenant)
-            ->get();
-        $datasource = [];
-        $children = array();
-
-        for ($i = 0; $i < count($modules); $i++) {
-            $hasChild = false;
-            $expanded = false;
-            $isChecked = true;
-            if (count($modules[$i]->levels) > 0) :
-                for ($j = 0; $j < count($modules[$i]->levels); $j++) {
-                    array_push($datasource, ['id' => $modules[$i]->id . '-' . $modules[$i]->levels[$j]->id, 'pid' => $modules[$i]->id, 'name' => $modules[$i]->levels[$j]->description, 'isChecked' => $isChecked]);
-                }
-            endif;
-            if (count($modules[$i]->levels) > 0) :
-                $hasChild = true;
-                $expanded = true;
-                $isChecked = false;
-            endif;
-            array_push($datasource,  ['id' => $modules[$i]->id, 'name' => $modules[$i]->description, 'hasChild' => $hasChild, 'expanded' => $expanded, 'isChecked' => $isChecked]);
-        }
+        $modules = Module::orderBy('order_menu')->orderBy('id')->get();
+        // New users start without permissions: the administrator must grant them explicitly.
+        $datasource = PermissionTree::build();
 
         $establishments = Establishment::orderBy('description')->get();
         $types = [['type' => 'admin', 'description' => 'Administrador'], ['type' => 'seller', 'description' => 'Vendedor']];
@@ -90,6 +55,48 @@ class UserController extends Controller
             }
         }
 
+        $ownerId = (int) User::query()->min('id');
+        $isOwnerTarget = $id && (int) $id === $ownerId;
+
+        // The owner always has full access; its permissions are not editable.
+        // An edit that does not send the permission tree leaves the stored permissions untouched.
+        $syncPermissions = !$isOwnerTarget && ($request->has('modules') || !$id);
+        $moduleIds = [];
+        $levelIds = [];
+
+        if ($syncPermissions) {
+            $requestedModules = collect($request->input('modules'))->where('checked', true)->pluck('id')->map(function ($value) {
+                return (int) $value;
+            })->unique()->values()->all();
+            $moduleIds = Module::whereIn('id', $requestedModules)->pluck('id')->all();
+
+            if (count($moduleIds) === 0) {
+                throw ValidationException::withMessages(['modules' => ['Seleccione al menos un módulo.']]);
+            }
+
+            $requestedLevels = collect($request->input('levels'))->where('checked', true)->pluck('id')->map(function ($value) {
+                return (int) $value;
+            })->unique()->values()->all();
+            // A level is only valid inside a module that is also selected.
+            $levelIds = ModuleLevel::whereIn('id', $requestedLevels)->whereIn('module_id', $moduleIds)->pluck('id')->all();
+
+            // A module that defines levels in the catalogue requires at least one selected level.
+            $modulesWithCatalogLevels = ModuleLevel::query()->distinct()->pluck('module_id')->map(function ($value) {
+                return (int) $value;
+            })->all();
+            $modulesWithSelectedLevels = ModuleLevel::whereIn('id', $levelIds)->distinct()->pluck('module_id')->map(function ($value) {
+                return (int) $value;
+            })->all();
+            $moduleIds = array_values(array_filter($moduleIds, function ($moduleId) use ($modulesWithCatalogLevels, $modulesWithSelectedLevels) {
+                return !in_array((int) $moduleId, $modulesWithCatalogLevels, true)
+                    || in_array((int) $moduleId, $modulesWithSelectedLevels, true);
+            }));
+
+            if (count($moduleIds) === 0) {
+                throw ValidationException::withMessages(['modules' => ['Seleccione al menos un módulo.']]);
+            }
+        }
+
         $user = User::firstOrNew(['id' => $id]);
         $user->name = $request->input('name');
         $user->email = $request->input('email');
@@ -105,30 +112,10 @@ class UserController extends Controller
         }
         $user->save();
 
-        $first_user = User::select('id')->first();
-
-        if ($first_user->id != $id) {
-
-            $modules = collect($request->input('modules'))->where('checked', true)->pluck('id')->toArray();
-
-            $user->modules()->sync($modules);
-
-
-            $levels = collect($request->input('levels'))->where('checked', true)->pluck('id')->toArray();
-            $user->levels()->sync($levels);
-
-
+        if ($syncPermissions) {
+            $user->modules()->sync($moduleIds);
+            $user->levels()->sync($levelIds);
         }
-
-        // dd($user->getModules()->transform(function($row, $key) {
-        //     return [
-        //         'id' => $row->id,
-        //         'privot_id' => $row->pivot,
-        //         'privot_user' => $row->pivot->user_id,
-        //         'privot_module' => $row->pivot->module_id,
-
-        //     ];
-        // }));
 
         return [
             'success' => true,
@@ -146,6 +133,12 @@ class UserController extends Controller
     public function destroy($id)
     {
         $user = User::findOrFail($id);
+        if ($user->isOwner()) {
+            return [
+                'success' => false,
+                'message' => 'No se puede eliminar al usuario principal'
+            ];
+        }
         $user->delete();
 
         return [

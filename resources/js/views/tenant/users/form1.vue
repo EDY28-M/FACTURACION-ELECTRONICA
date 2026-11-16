@@ -97,7 +97,7 @@
           <div class="col-md-4" v-if="typeUser != 'integrator'">
             <div class="form-group" :class="{ 'has-danger': errors.type }">
               <label class="control-label">Perfil</label>
-              <el-select v-model="form.type" :disabled="form.id === 1">
+              <el-select v-model="form.type" :disabled="form.is_owner">
                 <el-option
                   v-for="option in types"
                   :key="option.type"
@@ -116,12 +116,21 @@
             <div class="form-comtrol">
               <label class="control-label">Permisos Módulos</label>
 
-              <div id="app">
+              <div v-if="form.is_owner" class="alert alert-info mb-0">
+                El usuario principal tiene acceso total.
+              </div>
+              <div v-else id="app">
+                <small
+                  class="form-control-feedback text-danger d-block"
+                  v-if="errors.modules"
+                  v-text="errors.modules[0]"
+                ></small>
                 <div class="control_wrapper">
                   <ejs-treeview
                     id="treeview"
                     :fields="fields"
                     :showCheckBox="true"
+                    :loadOnDemand="false"
                     :nodeChecked="nodeChecked"
                   ></ejs-treeview>
                 </div>
@@ -167,7 +176,7 @@
       </div>
       <div class="form-actions text-right mt-4">
         <el-button @click.prevent="close()">Cancelar</el-button>
-        <el-button type="primary" native-type="submit" :loading="loading_submit"
+        <el-button type="primary" native-type="submit" :loading="loading_submit" :disabled="loading_record"
           >Guardar</el-button
         >
       </div>
@@ -193,6 +202,7 @@ export default {
   data() {
     return {
       loading_submit: false,
+      loading_record: false,
       titleDialog: null,
       resource: "users",
       errors: {},
@@ -241,6 +251,7 @@ export default {
         password_confirmation: null,
         locked: false,
         type: null,
+        is_owner: false,
         modules: [],
         levels: [],
       };
@@ -256,6 +267,7 @@ export default {
     },
     create() {
       this.titleDialog = this.recordId ? "Editar Usuario" : "Nuevo Usuario";
+      this.loading_record = true;
       if (this.recordId) {
         this.$http
           .get(`/${this.resource}/record/${this.recordId}`)
@@ -265,11 +277,15 @@ export default {
               dataSource: response.data.data.dataSource,
               id: "id",
               parentID: "pid",
-              text: "description",
+              text: "name",
               hasChildren: "hasChild",
             };
             this.form = response.data.data;
             this.show_levels = this.form.levels.length > 0 ? true : false;
+          })
+          .catch(() => {})
+          .then(() => {
+            this.loading_record = false;
           });
       } else {
 
@@ -285,10 +301,22 @@ export default {
           this.modules = response.data.modules;
           this.establishments = response.data.establishments;
           this.types = response.data.types;
+        })
+        .catch(() => {})
+        .then(() => {
+          this.loading_record = false;
         });
       }
     },
     submit() {
+      // Rebuild the permission lists from the tree right before saving (the tree is the source of truth).
+      if (!this.form.is_owner && this.syncPermissionsFromTree()) {
+        if (this.form.modules.length === 0) {
+          this.errors = { modules: ["Seleccione al menos un módulo."] };
+          this.$message.error("Seleccione al menos un módulo");
+          return;
+        }
+      }
       this.loading_submit = true;
       this.$http
         .post(`/${this.resource}`, this.form)
@@ -305,39 +333,46 @@ export default {
         })
         .catch((error) => {
           if (error.response.status === 422) {
-            this.errors = error.response.data;
+            const data = error.response.data;
+            this.errors = data.errors || data;
+            if (this.errors.modules) {
+              this.$message.error(this.errors.modules[0]);
+            }
           } else {
             this.$message.error(error.response.data.message);
-
           }
         })
         .then(() => {
           this.loading_submit = false;
         });
     },
-    nodeChecked: function (args) {
-      this.form.levels = [];
-      this.form.modules = [];
-      var treeObj = document.getElementById("treeview").ej2_instances[0];
-      var array_d = treeObj.checkedNodes;
-      for (let h = 0; h < array_d.length; h++) {
-        const element = array_d[h].split("-");
-        if (element.length > 1) {
-          this.form.modules.push({
-            id: element[0],
-            checked: true,
-          });
-          this.form.levels.push({
-            id: element[1],
-            checked: true,
-          });
-        } else {
-          this.form.modules.push({
-            id: array_d[h],
-            checked: true,
-          });
-        }
+    nodeChecked: function () {
+      this.syncPermissionsFromTree();
+    },
+    // Returns false when the tree is not rendered (nothing is recomputed in that case).
+    syncPermissionsFromTree() {
+      const element = document.getElementById("treeview");
+      if (!element || !element.ej2_instances) {
+        return false;
       }
+      const treeObj = element.ej2_instances[0];
+      const modules = [];
+      const levels = [];
+      // Checked leaves are "moduleId-levelId"; a fully checked parent is its plain id.
+      // The parent of any checked child is included even when it shows as indeterminate.
+      treeObj.checkedNodes.forEach((node) => {
+        const parts = String(node).split("-");
+        if (parts.length > 1) {
+          levels.push({ id: Number(parts[1]), checked: true });
+        }
+        const moduleId = Number(parts[0]);
+        if (!modules.some((m) => m.id === moduleId)) {
+          modules.push({ id: moduleId, checked: true });
+        }
+      });
+      this.form.modules = modules;
+      this.form.levels = levels;
+      return true;
     },
     close() {
 

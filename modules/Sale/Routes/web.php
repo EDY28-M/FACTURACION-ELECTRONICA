@@ -5,7 +5,7 @@ $current_hostname = app(Hyn\Tenancy\Contracts\CurrentHostname::class);
 
 if($current_hostname) {
     Route::domain($current_hostname->fqdn)->group(function () {
-        Route::middleware(['auth', 'locked.tenant'])->group(function () {
+        Route::middleware(['auth', 'redirect.module', 'locked.tenant'])->group(function () {
 
             Route::prefix('sale-opportunities')->group(function() {
 
@@ -77,8 +77,6 @@ if($current_hostname) {
 
             });
 
-        });
-
         
         Route::prefix('production-orders')->group(function () {
 
@@ -135,6 +133,7 @@ if($current_hostname) {
             Route::post('', 'TechnicalServicePaymentController@store');
             Route::delete('/{record_payment}', 'TechnicalServicePaymentController@destroy');
 
+        });
         });
     });
 }
