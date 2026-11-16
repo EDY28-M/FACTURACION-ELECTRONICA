@@ -6,8 +6,8 @@
     <article class="auth__form">
         <form class="form-material" id="loginform" method="POST" action="{{ route('password.update') }}">
             @include('tenant.auth.partials.form_logo')
-            <h1 class="auth__title">Bienvenido a<br>{{ $company->trade_name }}</h1>
-            <p>Su nueva contraseña debe ser diferente de las contraseñas utilizadas anteriormente</p>
+            <h1 class="auth__title">Crea una nueva contraseña</h1>
+            <p>Usa una contraseña distinta a las que ya usaste antes.</p>
             @csrf
 
             <input type="hidden" name="token" value="{{ $token }}">
@@ -52,11 +52,11 @@
                 </div>
             </div>
 
-            <div class="form-group text-center">
-                <button type="submit" class="btn btn-signin btn-block">REINICIAR CONTRASEÑA</button>
+            <div class="form-group">
+                <button type="submit" class="btn btn-signin btn-block">Guardar contraseña</button>
                 <br>
                 <a href="{{ url('login') }}" class="btn btn-link">
-                    <i class="fa fa-arrow-left mr-2"></i> Regresar al login
+                    Volver a iniciar sesión
                 </a>
             </div>
             @include('tenant.auth.partials.socials')

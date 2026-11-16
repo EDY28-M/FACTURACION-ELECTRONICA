@@ -58,7 +58,7 @@
                         <th class="text-right">T.Igv</th>
                         <th class="text-right">Total</th>
                         <th class="text-center">Saldo</th>
-                        <th class="text-center"></th>
+                        <th class="text-center">Pagos</th>
                         <th class="text-center">Descargas</th>
                         <!--<th class="text-center">Anulación</th>-->
                         <th class="text-right" v-if="typeUser != 'integrator'">Acciones</th>

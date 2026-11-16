@@ -1,74 +1,111 @@
 <template>
-    <div class="row">
-        <div class="card col-md-8">
-            <div class="card-header justify-content-center d-block">
-                <h4>Generar backup</h4>
-                <br>
-                <form class="row pt-2" @submit.prevent="onSubmitBackups">
-                    <div class="col-12 mb-2">
-                        <span>Tipo</span> <br>
-                        <el-radio v-model="formBackups.type" label="todos">Todos</el-radio>
-                        <el-radio v-model="formBackups.type" label="individual">Individual</el-radio>
-                    </div>
-                    <div class="col-6 col-md-3 form-group" v-if="formBackups.type === 'individual'" :class="{'has-danger': errors.hostname_id}">
-                        <el-select v-model="formBackups.hostname_id" clearable filterable placeholder="Selecciona un cliente">
-                            <el-option v-for="cl in clients" :key="cl.hostname_id" :label="cl.name" :value="cl.hostname_id"></el-option>
-                        </el-select>
-                        <small class="form-control-feedback" v-if="errors.hostname_id" v-text="errors.hostname_id[0]"></small>
-                    </div>
-                    <div class="col-6 col-md-3 form-group">
-                        <el-button @click.prevent="start()" :loading="loading_submit" :disabled="loading_submit">Iniciar Proceso</el-button>
-                    </div>
-                </form>
-                <br><br>
-                <p class="mb-0">Espacio disponible en disco: {{discUsed}}</p>
-                <p class="mb-0">Espacio ocupado por archivos de facturación: {{storageSize}}</p>
+    <div class="system-dashboard">
+        <header class="system-page-heading">
+            <div>
+                <h1>Backup</h1>
+                <p>Copia de base de datos y archivos de facturación</p>
             </div>
-            <div class="card-body">
-                <p v-if="newLastZip !== ''">Ultimo Backup generado: <strong>{{newLastZip.name}} {{newLastZipDate}}</strong></p>
-                <el-button @click.prevent="clickDownload()" >Descargar</el-button>
-                <hr>
-                <p class="mb-2">Para restaurar una base de datos debe ejecutar los siguientes comandos.</p>
-                <code>mysql -u [user] -p [database_name] < [filename].sql</code>
-                <br>
-                <hr>
-                <p class="mb-2">Para restaurar los archivos descargados debe copiar todas carpetas dentro de la carpeta del cliente.</p>
-                <code>cp [path_del_zip]/signed storage/app/tenancy/tenants/tenancy_[subdominio del cliente]</code> <br>
-                <code>cp [path_del_zip]/unsigned storage/app/tenancy/tenants/tenancy_[subdominio del cliente]</code> <br>
-                <code>cp [path_del_zip]/cdr storage/app/tenancy/tenants/tenancy_[subdominio del cliente]</code> <br>
-                <code>cp [path_del_zip]/pdf storage/app/tenancy/tenants/tenancy_[subdominio del cliente]</code> <br>
-                <p>Repetir para todas las carpetas que estan dentro del .zip</p>
-            </div>
-        </div>
-        <div class="card col-md-4 mt-0">
-            <div class="card-header">
-                Enviar por FTP último backup generado
-            </div>
-            <div class="card-body">
+        </header>
 
-                <small class="text-muted">Por seguridad sus datos FTP no son guardados</small>
-                <form v-if="newLastZip !== ''">
-                    <div class="form-group" :class="{'has-danger': errors.host}">
-                        <label class="control-label">Host/IP</label>
-                        <el-input v-model="form.host"></el-input>
+        <div class="system-split system-split-3">
+            <div class="system-stack">
+                <section class="system-panel system-panel-pad">
+                    <h2 class="system-panel-title"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('database-backup')" /></svg><span>Generar backup</span></h2>
+                    <form @submit.prevent="start()">
+                        <div class="system-option-grid" role="radiogroup" aria-label="Tipo de backup">
+                            <label class="system-option" :class="{'is-selected': formBackups.type === 'todos'}">
+                                <input type="radio" value="todos" v-model="formBackups.type" />
+                                <svg class="sys-icon sys-icon-md" aria-hidden="true"><use :href="$icon('database')" /></svg><span><strong>Todos</strong><small>Base de datos y archivos</small></span>
+                            </label>
+                            <label class="system-option" :class="{'is-selected': formBackups.type === 'individual'}">
+                                <input type="radio" value="individual" v-model="formBackups.type" />
+                                <svg class="sys-icon sys-icon-md" aria-hidden="true"><use :href="$icon('building-2')" /></svg><span><strong>Individual</strong><small>Un cliente específico</small></span>
+                            </label>
+                        </div>
+
+                        <div v-if="formBackups.type === 'individual'" class="system-field" :class="{'has-danger': errors.hostname_id || clientError}">
+                            <label>Cliente</label>
+                            <el-select v-model="formBackups.hostname_id" clearable filterable placeholder="Selecciona un cliente" aria-label="Cliente">
+                                <el-option v-for="cl in clients" :key="cl.hostname_id" :label="cl.name" :value="cl.hostname_id"></el-option>
+                            </el-select>
+                            <small class="form-control-feedback" v-if="clientError">Selecciona el cliente que quieres respaldar.</small>
+                            <small class="form-control-feedback" v-else-if="errors.hostname_id" v-text="errors.hostname_id[0]"></small>
+                        </div>
+
+                        <p v-if="db.error || files.error" class="system-inline-alert" role="alert">
+                            {{ db.error || files.error }}
+                        </p>
+                        <p v-else-if="files.status === 'success'" class="system-inline-ok" role="status">
+                            Backup generado correctamente.
+                        </p>
+
+                        <button type="submit" class="system-button system-button-primary" :disabled="loading_submit">
+                            <svg class="sys-icon" aria-hidden="true"><use :href="$icon('play')" /></svg>{{ loading_submit ? 'Generando…' : 'Iniciar proceso' }}
+                        </button>
+                    </form>
+
+                    <div class="system-stat-row">
+                        <div class="system-stat"><span>Espacio disponible en disco</span><strong>{{ discLabel }}</strong></div>
+                        <div class="system-stat"><span>Archivos de facturación</span><strong>{{ storageLabel }}</strong></div>
                     </div>
-                    <div class="form-group" :class="{'has-danger': errors.port}">
-                        <label class="control-label">Puerto</label>
-                        <el-input v-model="form.port"></el-input>
+
+                    <div class="system-last-backup">
+                        <p v-if="newLastZip !== '' && newLastZip">Último backup: <strong>{{ newLastZip.date || 'sin fecha' }}</strong> · <span class="system-mono">{{ newLastZip.name }}</span></p>
+                        <p v-else>Todavía no se generó ningún backup.</p>
+                        <button type="button" class="system-button" :disabled="!newLastZip" @click.prevent="clickDownload()">
+                            <svg class="sys-icon" aria-hidden="true"><use :href="$icon('download')" /></svg>Descargar
+                        </button>
                     </div>
-                    <div class="form-group" :class="{'has-danger': errors.username}">
-                        <label class="control-label">Usuario</label>
-                        <el-input v-model="form.username"></el-input>
+                </section>
+
+                <section class="system-panel system-panel-pad">
+                    <h2 class="system-panel-title"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('history')" /></svg><span>Restaurar</span></h2>
+                    <h3 class="system-subtitle">Base de datos</h3>
+                    <p class="system-hint">Para restaurar una base de datos ejecuta el siguiente comando.</p>
+                    <div class="system-code">
+                        <code>mysql -u [user] -p [database_name] &lt; [filename].sql</code>
+                        <button type="button" class="system-code-copy" aria-label="Copiar comando" @click="copy('mysql -u [user] -p [database_name] < [filename].sql')"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('copy')" /></svg></button>
                     </div>
-                    <div class="form-group" :class="{'has-danger': errors.password}">
-                        <label class="control-label">Contraseña</label>
-                        <el-input v-model="form.password"></el-input>
+                    <h3 class="system-subtitle">Archivos</h3>
+                    <p class="system-hint">Para restaurar los archivos descargados copia las carpetas dentro de la carpeta del cliente.</p>
+                    <div class="system-code">
+                        <pre><code v-for="folder in folders" :key="folder">cp [path_del_zip]/{{ folder }} storage/app/tenancy/tenants/tenancy_[subdominio del cliente]
+</code></pre>
                     </div>
-                    <div v-if="newLastZip !== ''" class="form-group">
-                        <el-button @click.prevent="uploadFtp()" :loading="loading_upload">Enviar</el-button>
-                    </div>
-                </form>
+                    <p class="system-hint">Repetir para todas las carpetas que están dentro del .zip.</p>
+                </section>
             </div>
+
+            <section class="system-panel system-panel-pad system-ftp">
+                <h2 class="system-panel-title"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('server')" /></svg><span>Enviar por FTP</span></h2>
+                <p class="system-hint">Envía el último backup generado. Por seguridad, sus datos FTP no son guardados.</p>
+                <form autocomplete="off" @submit.prevent="uploadFtp()">
+                    <div class="system-field" :class="{'has-danger': errors.host}">
+                        <label for="ftp-host">Servidor</label>
+                        <el-input id="ftp-host" v-model="form.host" placeholder="ftp.dominio.com"></el-input>
+                        <small class="form-control-feedback" v-if="errors.host" v-text="errors.host[0]"></small>
+                    </div>
+                    <div class="system-field" :class="{'has-danger': errors.port}">
+                        <label for="ftp-port">Puerto</label>
+                        <el-input id="ftp-port" class="system-narrow" v-model="form.port" placeholder="21"></el-input>
+                        <small class="form-control-feedback" v-if="errors.port" v-text="errors.port[0]"></small>
+                    </div>
+                    <div class="system-field" :class="{'has-danger': errors.username}">
+                        <label for="ftp-user">Usuario</label>
+                        <el-input id="ftp-user" v-model="form.username"></el-input>
+                        <small class="form-control-feedback" v-if="errors.username" v-text="errors.username[0]"></small>
+                    </div>
+                    <div class="system-field" :class="{'has-danger': errors.password}">
+                        <label for="ftp-pass">Contraseña</label>
+                        <el-input id="ftp-pass" type="password" v-model="form.password" autocomplete="new-password"></el-input>
+                        <small class="form-control-feedback" v-if="errors.password" v-text="errors.password[0]"></small>
+                    </div>
+                    <button type="submit" class="system-button system-button-primary" :disabled="loading_upload || !newLastZip">
+                        <svg class="sys-icon" aria-hidden="true"><use :href="$icon('send')" /></svg>{{ loading_upload ? 'Enviando…' : 'Enviar último backup' }}
+                    </button>
+                    <p v-if="!newLastZip" class="system-hint">Genera un backup para poder enviarlo.</p>
+                </form>
+            </section>
         </div>
     </div>
 </template>
@@ -77,6 +114,14 @@ import $ from 'jquery'
 
 export default {
     props: ['storageSize','discUsed', 'lastZip', 'clients'],
+    computed: {
+        discLabel() {
+            return this.cleanSize(this.discUsed)
+        },
+        storageLabel() {
+            return this.cleanSize(this.storageSize)
+        }
+    },
     data() {
         return {
             newLastZipDate: '',
@@ -97,10 +142,11 @@ export default {
                 status: '',
             },
             newLastZip: '',
+            clientError: false,
+            folders: ['signed', 'unsigned', 'cdr', 'pdf'],
             formBackups: {
                 type: 'todos',
             },
-            errors: {},
         }
     },
     created() {
@@ -127,7 +173,34 @@ export default {
             this.newLastZip = this.lastZip;
             this.onGenerateNnameLastFile();
         },
+        cleanSize(value) {
+            const text = String(value || '').split('\n').map(line => line.trim()).filter(line => line && !/^avail/i.test(line)).join(' ')
+            return text || 'Sin datos'
+        },
+        copy(text) {
+            const done = () => this.$message.success('Comando copiado')
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(done, () => this.$message.warning('Copia el comando manualmente'))
+                return
+            }
+            const area = document.createElement('textarea')
+            area.value = text
+            area.setAttribute('readonly', '')
+            area.style.position = 'fixed'
+            area.style.opacity = '0'
+            document.body.appendChild(area)
+            area.select()
+            let copied = false
+            try { copied = document.execCommand('copy') } catch (e) { copied = false }
+            document.body.removeChild(area)
+            copied ? done() : this.$message.warning('Copia el comando manualmente')
+        },
         async start() {
+            this.clientError = false
+            if (this.formBackups.type === 'individual' && !this.formBackups.hostname_id) {
+                this.clientError = true
+                return
+            }
             this.initContent()
             this.loading_submit = true
             this.backupDb()
@@ -156,10 +229,11 @@ export default {
                 if (status === 422) {
                     this.errors = error.response.data;
                 } else if (status !== 200) {
-                    this.db.error = error.response.data.message
+                    this.db.error = error.response.data.message || 'No se pudo generar el backup.'
                     this.db.status = 'false'
                 }
-            }).finally(() => this.loading_submit = false);
+                this.loading_submit = false
+            });
         },
         backupFiles() {
             this.$http.post(`/${this.resource}/files`, this.formBackups)
@@ -178,9 +252,10 @@ export default {
                     if (status === 422) {
                         this.errors = error.response.data;
                     } else if (status !== 200) {
-                        this.db.error = error.response.data.message
+                        this.db.error = error.response.data.message || 'No se pudieron respaldar los archivos.'
                         this.db.status = 'false'
                     }
+                    this.loading_submit = false
                 })
 
         },

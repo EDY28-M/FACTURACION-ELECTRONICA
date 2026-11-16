@@ -39,7 +39,7 @@
                         <th v-if="columns.contract.visible">Contrato</th>
                         <!-- <th>Estado</th> -->
                         <th class="text-center">Moneda</th>
-                        <th class="text-center"></th>
+                        <th class="text-center">Pagos</th>
                         <th class="text-right" v-if="columns.total_exportation.visible">T.Exportación</th>
                         <th class="text-right" v-if="columns.total_free.visible">T.Gratuito</th>
                         <th class="text-right" v-if="columns.total_unaffected.visible">T.Inafecta</th>

@@ -31,8 +31,6 @@ require('./vendor/waves')
 require('./vendor/custom')
 
 $(function () {
-    const listElements = document.getElementsByClassName('nav-active');
-    if (listElements.length > 0) {
-        listElements[0].scrollIntoView();
-    }
+    // Note: scrollIntoView on nav-active caused the entire page window to jump down
+    // on module navigation and reload in admin templates. Disabled to prevent layout jumping.
 });

@@ -2,17 +2,19 @@
 
 namespace Modules\Dashboard\Helpers;
 
-use App\Models\Tenant\Document;
-use App\Models\Tenant\SaleNote;
-use App\Models\Tenant\Person;
-use App\Models\Tenant\DocumentItem;
-use App\Models\Tenant\SaleNoteItem;
-use App\Models\Tenant\Purchase;
-use App\Models\Tenant\Item;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Purchases summary, best-selling items and top customers for the dashboard.
+ *
+ * Everything is aggregated in SQL (GROUP BY) so memory does not grow with the number of documents or items.
+ */
 class DashboardSalePurchase
 {
+    const STATES = ['01', '03', '05', '07', '13'];
+    const SALE_DOCUMENT_TYPES = ['01', '03', '08'];
+    const TOP = 10;
     public function data($request)
     {
         $establishment_id = $request['establishment_id'];
@@ -57,82 +59,151 @@ class DashboardSalePurchase
         ];
     }
 
+    private function db()
+    {
+        return DB::connection('tenant');
+    }
+
+    /** SQL expression: amount converted to PEN with the document's sale exchange rate. */
+    private function penSql($total, $currency, $rate)
+    {
+        return "(CASE WHEN {$currency} = 'USD' THEN {$total} * {$rate} ELSE {$total} END)";
+    }
+
+    private function saleTypesSql($column)
+    {
+        return "{$column} IN ('" . implode("','", self::SALE_DOCUMENT_TYPES) . "')";
+    }
+
+    /** Documents (any type) of the establishment in the range, issued states only. */
+    private function documentsQuery($establishment_id, $d_start, $d_end)
+    {
+        $query = $this->db()->table('documents as d')
+            ->where('d.establishment_id', $establishment_id)
+            ->whereIn('d.state_type_id', self::STATES);
+
+        if ($d_start && $d_end) {
+            $query->whereBetween('d.date_of_issue', [$d_start, $d_end]);
+        }
+
+        return $query;
+    }
+
+    /** Sale notes that were not converted into documents, in the range, issued states only. */
+    private function saleNotesQuery($establishment_id, $d_start, $d_end)
+    {
+        $query = $this->db()->table('sale_notes as sn')
+            ->where('sn.establishment_id', $establishment_id)
+            ->where('sn.changed', false)
+            ->whereIn('sn.state_type_id', self::STATES);
+
+        if ($d_start && $d_end) {
+            $query->whereBetween('sn.date_of_issue', [$d_start, $d_end]);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Sorts rows descending by $column keeping the original (first appearance) order on ties,
+     * the way Collection::sortByDesc did, and returns them re-indexed.
+     */
+    private function sortDesc(array $rows, $column)
+    {
+        $values = [];
+        foreach ($rows as $index => $row) {
+            $values[$index] = $row[$column];
+        }
+        arsort($values);
+
+        $sorted = [];
+        foreach (array_keys($values) as $index) {
+            $sorted[] = $rows[$index];
+        }
+
+        return $sorted;
+    }
+
     private function top_customers($establishment_id, $d_start, $d_end, $enabled_transaction_customer){
 
-        // $documents = Document::get();
-        // $sale_notes = SaleNote::get();
-        if($d_start && $d_end){
+        $docTotal = $this->penSql('d.total', 'd.currency_type_id', 'd.exchange_rate_sale');
+        $isSale = $this->saleTypesSql('d.document_type_id');
 
-            $documents = Document::query()->where('establishment_id', $establishment_id)
-                                    ->whereIn('state_type_id', ['01','03','05','07','13'])
-                                    ->whereBetween('date_of_issue', [$d_start, $d_end])->get();
+        $documents = $this->documentsQuery($establishment_id, $d_start, $d_end)
+            ->selectRaw("d.customer_id, MIN(d.id) AS first_id,
+                SUM(CASE WHEN {$isSale} THEN 1 ELSE 0 END) AS qty_sale,
+                SUM(CASE WHEN d.document_type_id = '07' THEN 1 ELSE 0 END) AS qty_credit,
+                SUM(CASE WHEN {$isSale} THEN {$docTotal} ELSE 0 END) AS total_sale,
+                SUM(CASE WHEN d.document_type_id = '07' THEN d.total ELSE 0 END) AS total_credit")
+            ->groupBy('d.customer_id')
+            ->orderBy('first_id')
+            ->get();
 
+        $snTotal = $this->penSql('sn.total', 'sn.currency_type_id', 'sn.exchange_rate_sale');
 
-            $sale_notes = SaleNote::query()->where([['establishment_id', $establishment_id],['changed',false]])
-                                    ->whereIn('state_type_id', ['01','03','05','07','13'])
-                                    ->whereBetween('date_of_issue', [$d_start, $d_end])->get();
-        }else{
+        $saleNotes = $this->saleNotesQuery($establishment_id, $d_start, $d_end)
+            ->selectRaw("sn.customer_id, MIN(sn.id) AS first_id,
+                SUM(CASE WHEN sn.prefix = 'NV' THEN 1 ELSE 0 END) AS qty_note,
+                SUM(CASE WHEN sn.prefix = 'NV' THEN {$snTotal} ELSE 0 END) AS total_note")
+            ->groupBy('sn.customer_id')
+            ->orderBy('first_id')
+            ->get();
 
-            $documents = Document::query()->where('establishment_id', $establishment_id)
-                    ->whereIn('state_type_id', ['01','03','05','07','13'])->get();
-
-
-            $sale_notes = SaleNote::query()->where([['establishment_id', $establishment_id],['changed',false]])
-                    ->whereIn('state_type_id', ['01','03','05','07','13'])->get();
-
+        // Merge per customer. Documents come first, then sale notes, as in the former single collection.
+        $customers = [];
+        foreach ($documents as $row) {
+            $customers[$row->customer_id] = [
+                'customer_id' => $row->customer_id,
+                'quantity' => (int) $row->qty_sale - (int) $row->qty_credit,
+                'difference' => (float) $row->total_sale - (float) $row->total_credit,
+            ];
+        }
+        foreach ($saleNotes as $row) {
+            if (!isset($customers[$row->customer_id])) {
+                $customers[$row->customer_id] = ['customer_id' => $row->customer_id, 'quantity' => 0, 'difference' => 0.0];
+            }
+            $customers[$row->customer_id]['quantity'] += (int) $row->qty_note;
+            $customers[$row->customer_id]['difference'] += (float) $row->total_note;
         }
 
-        foreach ($sale_notes as $sn) {
-            $documents->push($sn);
-        }
-
-        $all_records = $documents;
-
-        $group_customers = $all_records->groupBy('customer_id');
-
-        $top_customers = collect([]);
-
-        foreach ($group_customers as $customers) {
-
-            // $customers es un cliente con todos sus documentos generados
-            // dd($customers[0]->total);
-
-            $transaction_quantity_sale = $customers->whereIn('document_type_id', ['01','03','08'])->count() + $customers->where('prefix', 'NV')->count();
-            $transaction_quantity_credit_note =$customers->where('document_type_id', '07')->count();
-
-            $transaction_quantity = $transaction_quantity_sale - $transaction_quantity_credit_note;
-
-            $customer = Person::where('type','customers')->find($customers[0]->customer_id);
-
-            $totals = $customers->whereIn('document_type_id', ['01','03','08'])->sum(function ($row) {
-                return $this->calculateTotalCurrency($row->currency_type_id, $row->exchange_rate_sale, $row->total);//count($product['colors']);
-            });    //('total');
-
-
-            //totales en documents
-            $totals_sale_note = $customers->where('prefix', 'NV')->sum(function ($row) {
-                return $this->calculateTotalCurrency($row->currency_type_id, $row->exchange_rate_sale, $row->total);//count($product['colors']);
-            });
-
-
-            $total_credit_note = $customers->where('document_type_id','07')->sum('total');
-
-            $difference = ($totals + $totals_sale_note) - $total_credit_note;
-
-            if($difference > 0)
-                $top_customers->push([
-                    'total' => number_format($difference,2, ".", ""),
-                    'name' => $customer->name,
-                    'number' => $customer->number,
-                    'transaction_quantity' => $transaction_quantity,
-                ]);
-
+        $rows = [];
+        foreach ($customers as $customer) {
+            if ($customer['difference'] > 0) {
+                $customer['total'] = number_format($customer['difference'], 2, ".", "");
+                $customer['transaction_quantity'] = $customer['quantity'];
+                $rows[] = $customer;
+            }
         }
 
         $order_column = ($enabled_transaction_customer) ? 'transaction_quantity' : 'total';
-        $sorted = $top_customers->sortByDesc($order_column);
+        $sorted = $this->sortDesc($rows, $order_column);
 
-        return $sorted->values()->take(10);
+        $top = [];
+        foreach (array_chunk($sorted, self::TOP) as $batch) {
+            $people = $this->db()->table('persons')
+                ->where('type', 'customers')
+                ->whereIn('id', array_column($batch, 'customer_id'))
+                ->get(['id', 'name', 'number'])
+                ->keyBy('id');
+
+            foreach ($batch as $customer) {
+                $person = $people->get($customer['customer_id']);
+                if (!$person) {
+                    continue;
+                }
+                $top[] = [
+                    'total' => $customer['total'],
+                    'name' => $person->name,
+                    'number' => $person->number,
+                    'transaction_quantity' => $customer['transaction_quantity'],
+                ];
+                if (count($top) >= self::TOP) {
+                    break 2;
+                }
+            }
+        }
+
+        return collect($top);
 
     }
 
@@ -140,25 +211,25 @@ class DashboardSalePurchase
 
     private function purchase_totals($establishment_id, $d_start, $d_end)
     {
-        // $purchases = Purchase::get();
-        $purchases = Purchase::query()->whereIn('state_type_id', ['01','03','05','07','13'])->where('establishment_id', $establishment_id)->get();
+        // Purchases are not limited by the selected range: they feed a yearly (by month of the year) chart.
+        $base = $this->db()->table('purchases')
+            ->whereIn('state_type_id', self::STATES)
+            ->where('establishment_id', $establishment_id);
 
-        $purchases_total = $purchases->where('currency_type_id', 'PEN')->sum('total');
+        $summary = (clone $base)->selectRaw("
+            COALESCE(SUM(CASE WHEN currency_type_id = 'PEN' THEN total WHEN currency_type_id = 'USD' THEN total * exchange_rate_sale ELSE 0 END), 0) AS purchases_total,
+            COALESCE(SUM(total_perception), 0) AS perception_total")->first();
 
-        $purchase_dollr = $purchases->where('currency_type_id', 'USD');
-
-        foreach ($purchase_dollr as $pr) {
-            $purchases_total +=  $pr->total * $pr->exchange_rate_sale;
-        }
-        $purchases_total_perception = round($purchases->sum('total_perception'),2);
-
+        $purchases_total = (float) $summary->purchases_total;
+        $purchases_total_perception = round((float) $summary->perception_total, 2);
 
         $data_array = ['Ene', 'Feb','Mar', 'Abr','May', 'Jun','Jul', 'Ago','Sep', 'Oct', 'Nov', 'Dic'];
 
-        $purchases_by_month = $purchases->groupBy(function($date) {
-                                return Carbon::parse($date->date_of_issue)->format('m');
-                            });
-
+        $by_month = (clone $base)
+            ->selectRaw('MONTH(date_of_issue) AS m, SUM(total) AS total, COALESCE(SUM(total_perception), 0) AS perception')
+            ->groupByRaw('MONTH(date_of_issue)')
+            ->get()
+            ->keyBy('m');
 
         return [
             'totals' => [
@@ -171,7 +242,7 @@ class DashboardSalePurchase
                 'datasets' => [
                     [
                         'label' => 'Total percepciones',
-                        'data' => $this->arrayPurchasesbyMonth($purchases_by_month, 'total_perception'),
+                        'data' => $this->arrayPurchasesbyMonth($by_month, 'perception'),
                         'backgroundColor' => 'rgb(255, 99, 132)',
                         'borderColor' => 'rgb(255, 99, 132)',
                         'borderWidth' => 1,
@@ -180,7 +251,7 @@ class DashboardSalePurchase
                     ],
                     [
                         'label' => 'Total compras',
-                        'data' => $this->arrayPurchasesbyMonth($purchases_by_month, 'total'),
+                        'data' => $this->arrayPurchasesbyMonth($by_month, 'total'),
                         'backgroundColor' => 'rgb(54, 162, 235)',
                         'borderColor' => 'rgb(54, 162, 235)',
                         'borderWidth' => 1,
@@ -206,147 +277,107 @@ class DashboardSalePurchase
 
     private function items_by_sales($establishment_id, $d_start, $d_end, $enabled_move_item){
 
-        // $document_items = DocumentItem::get();
-        // $sale_note_items = SaleNoteItem::get();
-        if($d_start && $d_end){
+        // Every item line carries the amount of its whole document (not of the line), as before.
+        $docTotal = $this->penSql('d.total', 'd.currency_type_id', 'd.exchange_rate_sale');
+        $isSale = $this->saleTypesSql('d.document_type_id');
 
-            $documents = Document::query()->where('establishment_id', $establishment_id)
-                        ->whereIn('state_type_id', ['01','03','05','07','13'])
-                        ->whereBetween('date_of_issue', [$d_start, $d_end])->get();
+        $documents = $this->documentsQuery($establishment_id, $d_start, $d_end)
+            ->join('document_items as di', 'di.document_id', '=', 'd.id')
+            ->selectRaw("di.item_id,
+                MIN(CONCAT(LPAD(d.id, 12, '0'), LPAD(di.id, 12, '0'))) AS first_seen,
+                SUM(CASE WHEN {$isSale} THEN {$docTotal} ELSE 0 END) AS total_sale,
+                SUM(CASE WHEN {$isSale} THEN 0 ELSE {$docTotal} END) AS total_credit,
+                SUM(CASE WHEN {$isSale} THEN di.quantity ELSE -di.quantity END) AS move_quantity")
+            ->groupBy('di.item_id')
+            ->orderBy('first_seen')
+            ->get();
 
+        $snTotal = $this->penSql('sn.total', 'sn.currency_type_id', 'sn.exchange_rate_sale');
 
-            $sale_notes = SaleNote::query()->where([['establishment_id', $establishment_id],['changed',false]])
-                        ->whereIn('state_type_id', ['01','03','05','07','13'])
-                        ->whereBetween('date_of_issue', [$d_start, $d_end])->get();
-        }else{
+        $saleNotes = $this->saleNotesQuery($establishment_id, $d_start, $d_end)
+            ->join('sale_note_items as sni', 'sni.sale_note_id', '=', 'sn.id')
+            ->selectRaw("sni.item_id,
+                MIN(CONCAT(LPAD(sn.id, 12, '0'), LPAD(sni.id, 12, '0'))) AS first_seen,
+                SUM({$snTotal}) AS total_sale,
+                SUM(sni.quantity) AS move_quantity")
+            ->groupBy('sni.item_id')
+            ->orderBy('first_seen')
+            ->get();
 
-            $documents = Document::query()->where('establishment_id', $establishment_id)
-                        ->whereIn('state_type_id', ['01','03','05','07','13'])->get();
-
-
-            $sale_notes = SaleNote::query()->where([['establishment_id', $establishment_id],['changed',false]])
-                        ->whereIn('state_type_id', ['01','03','05','07','13'])->get();
-
+        // Merge per item. Document lines come first, then sale note lines, as in the former single collection.
+        $items = [];
+        foreach ($documents as $row) {
+            $items[$row->item_id] = [
+                'item_id' => $row->item_id,
+                'sale' => (float) $row->total_sale,
+                'credit' => (float) $row->total_credit,
+                'move' => (float) $row->move_quantity,
+            ];
         }
-
-        // dd($documents->count(),$sale_notes->count());
-
-        $document_items = collect([]);
-        $sale_note_items = collect([]);
-
-        foreach ($documents as $doc) {
-            foreach ($doc->items as $item) {
-                $document_items->push($item);
+        foreach ($saleNotes as $row) {
+            if (!isset($items[$row->item_id])) {
+                $items[$row->item_id] = ['item_id' => $row->item_id, 'sale' => 0.0, 'credit' => 0.0, 'move' => 0.0];
             }
+            $items[$row->item_id]['sale'] += (float) $row->total_sale;
+            $items[$row->item_id]['move'] += (float) $row->move_quantity;
         }
 
-        foreach ($sale_notes as $s_notes) {
-            foreach ($s_notes->items as $item) {
-                $sale_note_items->push($item);
-            }
-        }
-
-
-        foreach ($sale_note_items as $sni) {
-            $document_items->push($sni);
-        }
-
-        $all_items = $document_items;
-        $group_items = $all_items->groupBy('item_id');
-
-        $items_by_sales = collect([]);
-
-        foreach ($group_items as $items) {
-            // dd($items);
-
-            $item = Item::where('status',true)->find($items[0]->item_id);
-
-
-            $totals = 0;
-            $total_credit_note = 0;
-            $move_quantity = 0;
-
-            foreach ($items as $it) {
-
-                if($it->document){
-
-                    if(in_array($it->document->document_type_id,['01','03','08'])){
-
-
-                        $totals += $this->calculateTotalCurrency($it->document->currency_type_id, $it->document->exchange_rate_sale, $it->document->total);
-                        $move_quantity += $it->quantity;
-
-                    }else{
-
-                        $total_credit_note += $this->calculateTotalCurrency($it->document->currency_type_id, $it->document->exchange_rate_sale, $it->document->total);
-                        $move_quantity -= $it->quantity;
-
-                    }
-
-                }else{
-
-                    $totals += $this->calculateTotalCurrency($it->sale_note->currency_type_id, $it->sale_note->exchange_rate_sale, $it->sale_note->total);
-                    $move_quantity += $it->quantity;
-
-                }
-
-            }
-
-            $difference = $totals - $total_credit_note;
-
-            if($item && $difference > 0){
-                $items_by_sales->push([
-                    'total' => number_format($difference, 2, ".", ""),
-                    'description' => $item->description,
-                    'internal_id' => $item->internal_id,
-                    'move_quantity' => number_format($move_quantity, 2, ".", ""),
-                   // 'currency' => $item->currency_type->symbol
-                ]);
+        $rows = [];
+        foreach ($items as $item) {
+            $difference = $item['sale'] - $item['credit'];
+            if ($difference > 0) {
+                $item['total'] = number_format($difference, 2, ".", "");
+                $item['move_quantity'] = number_format($item['move'], 2, ".", "");
+                $rows[] = $item;
             }
         }
 
         $order_column = ($enabled_move_item) ? 'move_quantity' : 'total';
-        $sorted = $items_by_sales->sortByDesc($order_column);
+        $sorted = $this->sortDesc($rows, $order_column);
 
-        return $sorted->values()->take(10);
+        $top = [];
+        foreach (array_chunk($sorted, self::TOP) as $batch) {
+            $catalog = $this->db()->table('items')
+                ->where('status', true)
+                ->whereIn('id', array_column($batch, 'item_id'))
+                ->get(['id', 'description', 'internal_id'])
+                ->keyBy('id');
+
+            foreach ($batch as $item) {
+                $record = $catalog->get($item['item_id']);
+                if (!$record) {
+                    continue;
+                }
+                $top[] = [
+                    'total' => $item['total'],
+                    'description' => $record->description,
+                    'internal_id' => $record->internal_id,
+                    'move_quantity' => $item['move_quantity'],
+                ];
+                if (count($top) >= self::TOP) {
+                    break 2;
+                }
+            }
+        }
+
+        return collect($top);
 
     }
 
     /**
-     * @param $purchases
+     * @param \Illuminate\Support\Collection $by_month rows keyed by month number (1-12)
+     * @param string $column
      * @return array
      */
-    private function arrayPurchasesbyMonth($purchases_by_month, $total){
+    private function arrayPurchasesbyMonth($by_month, $column){
 
-        return [
-            isset($purchases_by_month['01']) ? round($purchases_by_month['01']->sum($total), 2) : 0,
-            isset($purchases_by_month['02']) ? round($purchases_by_month['02']->sum($total), 2) : 0,
-            isset($purchases_by_month['03']) ? round($purchases_by_month['03']->sum($total), 2) : 0,
-            isset($purchases_by_month['04']) ? round($purchases_by_month['04']->sum($total), 2) : 0,
-            isset($purchases_by_month['05']) ? round($purchases_by_month['05']->sum($total), 2) : 0,
-            isset($purchases_by_month['06']) ? round($purchases_by_month['06']->sum($total), 2) : 0,
-            isset($purchases_by_month['07']) ? round($purchases_by_month['07']->sum($total), 2) : 0,
-            isset($purchases_by_month['08']) ? round($purchases_by_month['08']->sum($total), 2) : 0,
-            isset($purchases_by_month['09']) ? round($purchases_by_month['09']->sum($total), 2) : 0,
-            isset($purchases_by_month['10']) ? round($purchases_by_month['10']->sum($total), 2) : 0,
-            isset($purchases_by_month['11']) ? round($purchases_by_month['11']->sum($total), 2) : 0,
-            isset($purchases_by_month['12']) ? round($purchases_by_month['12']->sum($total), 2) : 0
-        ];
+        $result = [];
+        for ($month = 1; $month <= 12; $month++) {
+            $result[] = $by_month->has($month) ? round((float) $by_month->get($month)->{$column}, 2) : 0;
+        }
+
+        return $result;
 
     }
-
-    private function calculateTotalCurrency($currency_type_id, $exchange_rate_sale,  $total)
-    {
-        if($currency_type_id == 'USD')
-        {
-            return $total * $exchange_rate_sale;
-        }
-        else{
-            return $total;
-        }
-    }
-
-
-
 
 }

@@ -1,5 +1,5 @@
 <template>
-    <div class="container-fluid p-0">
+    <div class="container-fluid p-0 tn-pos">
         <div class="row page-header pr-0" style="height:auto">
             <Keypress
                 key-event="keyup"
@@ -13,7 +13,7 @@
         <h2 class="text-sm pr-5">T/C 3.321</h2>
         <h2 class="text-sm">{{user.name}}</h2>
       </div> -->
-            <div class="col-md-4">
+            <div class="col-md-4 tn-pos-bar-search">
                 <!-- <h2 class="text-sm">POS</h2> -->
                 <h2>
                     <el-switch
@@ -23,7 +23,7 @@
                     ></el-switch>
                 </h2>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-4 tn-pos-bar-views">
                 <h2>
                     <el-tooltip
                         class="item"
@@ -92,12 +92,12 @@
                     </el-tooltip>
                 </h2>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-4 tn-pos-bar-meta">
                 <div class="right-wrapper">
-                    <h2 class="text-sm pr-5">
+                    <h2 class="text-sm pr-5 tn-pos-rate">
                         T/C {{ form.exchange_rate_sale }}
                     </h2>
-                    <h2 class="text-sm  pull-right">{{ user.name }}</h2>
+                    <!-- The signed-in user is already shown in the tenant header -->
                 </div>
             </div>
         </div>
@@ -160,9 +160,10 @@
                         <div
                             v-for="(item, index) in categories"
                             @click="filterCategorie(item.id, true)"
-                            :style="{ backgroundColor: item.color }"
+                            :style="{ '--cat': item.color }"
                             :key="index"
-                            class="col-sm-3 pointer"
+                            :class="{ 'is-active': (item.id || '') === (category_selected || '') }"
+                            class="col-sm-3 pointer tn-pos-cat"
                         >
                             {{ item.name }}
                         </div>
@@ -175,9 +176,8 @@
                         <div class="col-md-2" :key="index">
                             <div @click="filterCategorie(item.id)" class="card">
                                 <div
-                                    :style="{ backgroundColor: item.color }"
-                                    class="card-body pointer"
-                                    style="font-weight: bold;color: white;font-size: 18px;"
+                                    :style="{ '--cat': item.color }"
+                                    class="card-body pointer tn-pos-cat"
                                 >
                                     {{ item.name }}
                                 </div>
@@ -210,7 +210,9 @@
                                         {{ item.description }}
                                     </p>
                                     <img
-                                        :src="item.image_url"
+                                        :src="item.image_url_small || item.image_url"
+                                        loading="lazy"
+                                        decoding="async"
                                         class="img-thumbail img-custom"
                                     />
                                     <p
@@ -525,7 +527,7 @@
                 </div>
             </div>
             <div
-                class="col-lg-4 col-md-6 bg-white m-0 p-0"
+                class="col-lg-4 col-md-6 m-0 p-0 tn-pos-cart"
                 style="height: calc(100vh - 110px)"
             >
                 <div class="h-75 bg-light" style="overflow-y: auto">
@@ -672,7 +674,7 @@
                             class="col-md-12"
                             style="display: flex; flex-direction: column; align-items: flex-end;"
                         >
-                            <table>
+                            <table class="tn-pos-totals">
                                 <tr
                                     v-if="form.total_exonerated > 0"
                                     class="font-weight-semibold  m-0"
@@ -683,7 +685,7 @@
                                     <td class="font-weight-semibold">:</td>
                                     <td class="text-right text-blue">
                                         {{ currency_type.symbol }}
-                                        {{ form.total_exonerated }}
+                                        {{ toAmount(form.total_exonerated) }}
                                     </td>
                                 </tr>
                                 <tr
@@ -696,7 +698,7 @@
                                     <td class="font-weight-semibold">:</td>
                                     <td class="text-right text-blue">
                                         {{ currency_type.symbol }}
-                                        {{ form.total_free }}
+                                        {{ toAmount(form.total_free) }}
                                     </td>
                                 </tr>
                                 <tr
@@ -709,7 +711,7 @@
                                     <td class="font-weight-semibold">:</td>
                                     <td class="text-right text-blue">
                                         {{ currency_type.symbol }}
-                                        {{ form.total_unaffected }}
+                                        {{ toAmount(form.total_unaffected) }}
                                     </td>
                                 </tr>
                                 <tr
@@ -722,7 +724,7 @@
                                     <td class="font-weight-semibold">:</td>
                                     <td class="text-right text-blue">
                                         {{ currency_type.symbol }}
-                                        {{ form.total_taxed }}
+                                        {{ toAmount(form.total_taxed) }}
                                     </td>
                                 </tr>
                                 <tr
@@ -733,7 +735,7 @@
                                     <td class="font-weight-semibold">:</td>
                                     <td class="text-right text-blue">
                                         {{ currency_type.symbol }}
-                                        {{ form.total_igv }}
+                                        {{ toAmount(form.total_igv) }}
                                     </td>
                                 </tr>
                                 <tr
@@ -744,7 +746,7 @@
                                     <td class="font-weight-semibold">:</td>
                                     <td class="text-right text-blue">
                                         {{ currency_type.symbol }}
-                                        {{ form.total_plastic_bag_taxes }}
+                                        {{ toAmount(form.total_plastic_bag_taxes) }}
                                     </td>
                                 </tr>
                             </table>
@@ -786,19 +788,18 @@
             </div> -->
                     </div>
                     <div
-                        class="row text-white m-0 p-0 h-50 d-flex align-items-center"
+                        class="row m-0 p-0 h-50 d-flex align-items-center tn-pos-pay"
                         @click="clickPayment"
                         v-bind:class="[
-                            form.total > 0 ? 'bg-info pointer' : 'bg-dark'
+                            form.total > 0 ? 'is-ready pointer' : 'is-empty'
                         ]"
                     >
                         <div class="col-6 text-center">
-                            <i class="fas fa-chevron-circle-right fa fw h5"></i>
-                            <span class="font-weight-semibold h5">PAGO</span>
+                            <span class="font-weight-semibold h5">Cobrar</span>
                         </div>
                         <div class="col-6 text-center">
                             <h5 class="font-weight-semibold h5">
-                                {{ currency_type.symbol }} {{ form.total }}
+                                {{ currency_type.symbol }} {{ toAmount(form.total) }}
                             </h5>
                         </div>
                     </div>
@@ -947,7 +948,8 @@ export default {
 
     data() {
         return {
-            place: "cat",
+            // Opens on "Todos": every product, no category tab bar (still reachable from the view toggles).
+            place: "prod",
             history_item_id: null,
             search_item_by_barcode: false,
             warehousesDetail: [],
@@ -984,6 +986,9 @@ export default {
         };
     },
     async created() {
+        // Products do not depend on the rest of the bootstrap data, so fetch them in parallel with it.
+        const recordsLoaded = this.filterCategorie(null);
+
         await this.initForm();
         await this.getTables();
         this.events();
@@ -997,6 +1002,8 @@ export default {
         }
 
         await this.selectDefaultCustomer();
+
+        await recordsLoaded;
     },
 
     computed: {
@@ -1033,6 +1040,11 @@ export default {
         }
     },
     methods: {
+        // Display only: totals are numbers that may arrive as 153.9; show 153.90.
+        toAmount(value) {
+            const amount = Number(value);
+            return Number.isFinite(amount) ? amount.toFixed(2) : value;
+        },
         keyupEnterQuantity() {
             this.initFocus();
         },
@@ -1070,20 +1082,10 @@ export default {
                 );
             }
         },
-        filterCategorie(id, mod = false) {
-            if (id) {
-                this.category_selected = id;
-                this.getRecords();
-            } else {
-                this.category_selected = "";
-                this.getRecords();
-            }
-
-            if (mod) {
-                this.place = "cat2";
-            } else {
-                this.place = "prod";
-            }
+        async filterCategorie(id, mod = false) {
+            this.category_selected = id ? id : "";
+            this.place = mod ? "cat2" : "prod";
+            await this.getRecords();
         },
         getRecords() {
             this.loading = true;

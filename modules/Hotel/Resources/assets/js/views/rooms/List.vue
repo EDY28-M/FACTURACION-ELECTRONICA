@@ -93,15 +93,15 @@
           <table class="table">
             <thead>
               <tr>
-                <th></th>
+                <th>#</th>
                 <th>Habitación</th>
                 <th>Categoría</th>
                 <th>Piso</th>
                 <th>Tarifas</th>
                 <th>Estado</th>
-                <th></th>
+                <th>Cambiar estado</th>
                 <th>Visible</th>
-                <th></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>

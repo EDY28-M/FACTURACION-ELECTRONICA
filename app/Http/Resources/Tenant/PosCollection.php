@@ -42,6 +42,7 @@ class PosCollection extends ResourceCollection
                 'edit_sale_unit_price' => number_format($row->sale_unit_price, $configuration->decimal_quantity, ".", ""),
                 'aux_sale_unit_price' => number_format($row->sale_unit_price, $configuration->decimal_quantity, ".", ""),
                 'image_url' => ($row->image !== 'imagen-no-disponible.jpg') ? asset('storage' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'items' . DIRECTORY_SEPARATOR . $row->image) : asset("/logo/{$row->image}"),
+                'image_url_small' => $row->imageSmallUrl(),
                 'warehouses' => collect($row->warehouses)->transform(function ($row) {
                     return [
                         'warehouse_description' => $row->warehouse->description,

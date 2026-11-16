@@ -6,8 +6,8 @@
     <article class="auth__form">
         <form class="form-material" id="loginform" method="POST" action="{{ route('password.email') }}">
             @include('tenant.auth.partials.form_logo')
-            <h1 class="auth__title">Bienvenido a<br>{{ $company->trade_name }}</h1>
-            <p>Ingrese su correo electrónico y le enviaremos instrucciones para restablecer su contraseña</p>
+            <h1 class="auth__title">Recupera tu contraseña</h1>
+            <p>Escribe tu correo y te enviaremos un enlace para crear una nueva.</p>
             @if (session('status'))
                 <br>
                 <div class="alert alert-success" role="alert">
@@ -17,8 +17,9 @@
             @csrf
 
             <div class="form-group">
+                <label for="email">Correo electrónico</label>
                 <div class="">
-                    <input id="email" type="email" class="form-control{{ $errors->has('email') ? ' is-invalid' : '' }}" name="email" value="{{ old('email') }}" required placeholder="Correo electrónico">
+                    <input id="email" type="email" class="form-control{{ $errors->has('email') ? ' is-invalid' : '' }}" name="email" value="{{ old('email') }}" required autofocus autocomplete="email" placeholder="tu@empresa.pe">
 
                     @if ($errors->has('email'))
                         <span class="invalid-feedback" role="alert">
@@ -27,11 +28,11 @@
                     @endif
                 </div>
             </div>
-            <div class="form-group text-center">
-                <button class="btn btn-signin btn-block" type="submit">ENVIAR LINK</button>
+            <div class="form-group">
+                <button class="btn btn-signin btn-block" type="submit">Enviar enlace</button>
                 <br>
                 <a href="{{ url('login') }}" class="btn btn-link">
-                    <i class="fa fa-arrow-left mr-2"></i> Regresar al login
+                    Volver a iniciar sesión
                 </a>
             </div>
             @include('tenant.auth.partials.socials')

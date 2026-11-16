@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="sidebar-light sidebar-left-big-icons dashboard-system">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="sidebar-light dashboard-system">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -51,22 +51,24 @@
 
     <link rel="stylesheet" href="{{asset('porto-light/vendor/jquery-loading/dist/jquery.loading.css')}}" />
 
+    <link rel="stylesheet" href="{{ asset('css/system-theme.css') }}?v={{ filemtime(public_path('css/system-theme.css')) }}" />
+
     @stack('styles')
 
 
+    <script>window.SYSTEM_ICONS_URL = "{{ asset('images/system-icons.svg') }}?v={{ filemtime(public_path('images/system-icons.svg')) }}";</script>
     <script src="{{ asset('porto-light/vendor/modernizr/modernizr.js') }}"></script>
-
     <style>
         .descarga {
             color:black;
             padding:5px;
         }
         html.sidebar-light:not(.dark) ul.nav-main > li.nav-active > a {
-            color: #0088CC;
+            color: #ffffff;
         }
 
         ul.nav-main > li.nav-active > a {
-            box-shadow: 2px 0 0 #0088CC inset;
+            box-shadow: 3px 0 0 #e03a4e inset;
         }
     </style>
 </head>
@@ -131,11 +133,12 @@
 
     @stack('scripts')
 
-    <script src="{{ asset('js/manifest.js') }}"></script>
-    <script src="{{ asset('js/vendor.js') }}"></script>
+    <script src="{{ mix('js/manifest.js') }}"></script>
+    <script src="{{ mix('js/vendor.js') }}"></script>
     <script src="{{ mix('js/app.js') }}"></script>
     <!-- Theme Base, Components and Settings -->
     <script src="{{asset('porto-light/js/theme.js')}}"></script>
     <!-- <script src="//code.tidio.co/1vliqewz9v7tfosw5wxiktpkgblrws5w.js"></script> -->
+    <script src="{{ asset('js/system-shell.js') }}?v={{ filemtime(public_path('js/system-shell.js')) }}"></script>
 </body>
 </html>

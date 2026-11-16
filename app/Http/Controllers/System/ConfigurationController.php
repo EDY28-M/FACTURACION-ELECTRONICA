@@ -13,7 +13,20 @@ class ConfigurationController extends Controller
 
     public function index()
     {
-        $configuration = Configuration::first();
+        $config = Configuration::first();
+        $internalLookup = $config->token_apiruc === 'false';
+        $configuration = [
+            'login' => $config->login,
+            'use_login_global' => $config->use_login_global,
+            'status' => [
+                'certificate' => (bool) $config->certificate,
+                'soap_user' => (bool) $config->soap_username,
+                'culqi_public' => (bool) $config->token_public_culqui,
+                'culqi_private' => (bool) $config->token_private_culqui,
+                'ruc' => $internalLookup || ($config->url_apiruc && $config->token_apiruc),
+                'ruc_partial' => $internalLookup || $config->url_apiruc || $config->token_apiruc,
+            ],
+        ];
         return view('system.configuration.index', compact('configuration'));
     }
 

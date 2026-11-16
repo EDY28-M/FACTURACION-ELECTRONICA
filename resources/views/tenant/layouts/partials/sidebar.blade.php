@@ -1,30 +1,42 @@
-<aside id="sidebar-left" class="sidebar-left">
-    <div class="sidebar-header">
-        <a href="{{route('tenant.dashboard.index')}}" class="logo pt-2 pt-md-0">
-            @if($vc_company->logo)
-                <img src="{{ asset('storage/uploads/logos/'.$vc_company->logo) }}" alt="Logo" />
-            @else
-                <img src="{{asset('logo/700x300.jpg')}}" alt="Logo" />
-            @endif
-        </a>
-        <div class="d-md-none toggle-sidebar-left" data-toggle-class="sidebar-left-opened" data-target="html" data-fire-event="sidebar-left-opened">
-            <i class="fas fa-bars" aria-label="Toggle sidebar"></i>
-        </div>
-    </div>
-    <div class="nano">
-        <div class="nano-content">
-            <nav id="menu" class="nav-main" role="navigation">
-                <ul class="nav nav-main">
+@php
+    // Group headings only render when at least one item of the group can render (same module gates as the items).
+    $tnIsIntegrator = auth()->user()->type == 'integrator';
+    $tnShowSell = in_array('documents', $vc_modules)
+        || (! $tnIsIntegrator && in_array('pos', $vc_modules))
+        || in_array('ecommerce', $vc_modules)
+        || in_array('persons', $vc_modules);
+    $tnShowManage = in_array('items', $vc_modules)
+        || (! $tnIsIntegrator && (in_array('purchases', $vc_modules) || in_array('inventory', $vc_modules)))
+        || in_array('establishments', $vc_modules)
+        || (in_array('advanced', $vc_modules) && $vc_company->soap_type_id != '03');
+    $tnShowAnalyze = in_array('reports', $vc_modules) || in_array('accounting', $vc_modules) || in_array('finance', $vc_modules);
+    $tnShowAccount = in_array('configuration', $vc_modules) || in_array('cuenta', $vc_modules);
+    $tnBrand = trim((string) ($vc_company->trade_name ?: $vc_company->name)) ?: 'Facturación';
+    $tnInitial = mb_strtoupper(mb_substr($tnBrand, 0, 1));
+@endphp
+<aside id="sidebar-left" class="rail" aria-label="Menú principal">
+    <a class="rail-brand" href="{{ route('tenant.dashboard.index') }}" data-tip="{{ $tnBrand }}">
+        @if($vc_company->logo)
+            <span class="mark mark-logo"><img src="{{ asset('storage/uploads/logos/'.$vc_company->logo) }}" alt=""></span>
+        @else
+            <span class="mark" aria-hidden="true">{{ $tnInitial }}</span>
+        @endif
+        <b>{{ $tnBrand }}</b>
+    </a>
+    <div class="nano-content">
+        <nav id="menu" class="rail-nav" role="navigation">
+            <ul class="nav-main">
                     @if(in_array('dashboard', $vc_modules))
                     <li class="{{ ($path[0] === 'dashboard')?'nav-active':'' }}">
-                        <a class="nav-link" href="{{ route('tenant.dashboard.index') }}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-airplay"><path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"></path><polygon points="12 15 17 21 7 21 12 15"></polygon></svg>
-                            <span>DASHBOARD</span>
+                        <a class="nav-link" data-tip="Dashboard" href="{{ route('tenant.dashboard.index') }}">
+                            @include('tenant.layouts.partials.icon', ['name' => 'layout-dashboard'])
+                            <span class="rail-label">Dashboard</span>
                         </a>
                     </li>
                     @endif
-
-                    {{-- Ventas --}}
+@if($tnShowSell)
+                    <li class="nav-description">Vender</li>
+@endif
                     @if(in_array('documents', $vc_modules))
                     <li class="
                         nav-parent
@@ -43,11 +55,12 @@
                         {{ ($path[0] === 'user-commissions')?'nav-active nav-expanded':'' }}
                         {{ ($path[0] === 'regularize-shipping')?'nav-active nav-expanded':'' }}
                         ">
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                            <span>VENTAS</span>
+                        <a class="nav-link" data-tip="Ventas" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'receipt-text'])
+                            <span class="rail-label">Ventas</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children" style="">
+                        <ul class="nav-children" data-title="Ventas">
                             @if(auth()->user()->type != 'integrator' && $vc_company->soap_type_id != '03')
                                 @if(in_array('documents', $vc_modules))
                                     @if(in_array('new_document', $vc_module_levels))
@@ -107,9 +120,10 @@
                                         {{ ($path[0] === 'voided')?'nav-active nav-expanded':'' }}
                                         ">
                                         <a class="nav-link" href="#">
-                                            Resúmenes y Anulaciones
-                                        </a>
-                                        <ul class="nav nav-children">
+                                                <span class="rail-label">Resúmenes y Anulaciones</span>
+                                                @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                                            </a>
+                                        <ul class="nav-children">
                                             <li class="{{ ($path[0] === 'summaries')?'nav-active':'' }}">
                                                 <a class="nav-link" href="{{route('tenant.summaries.index')}}">
                                                     Resúmenes
@@ -147,12 +161,18 @@
                                         {{ ($path[0] === 'production-orders')?'nav-active nav-expanded':'' }}
                                         ">
                                         <a class="nav-link" href="#">
-                                            Contratos
-                                        </a>
-                                        <ul class="nav nav-children">
-                                            <li class="{{ ($path[0] === 'contracts')?'nav-active':'' }}">
+                                                <span class="rail-label">Contratos</span>
+                                                @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                                            </a>
+                                        <ul class="nav-children">
+                                            <li class="{{ ($path[0] === 'contracts' && ($path[1] ?? '') !== 'recurrent')?'nav-active':'' }}">
                                                 <a class="nav-link" href="{{route('tenant.contracts.index')}}">
                                                     Listado
+                                                </a>
+                                            </li>
+                                            <li class="{{ ($path[0] === 'contracts' && ($path[1] ?? '') === 'recurrent')?'nav-active':'' }}">
+                                                <a class="nav-link" href="{{route('tenant.contracts.recurrent')}}">
+                                                    Facturación recurrente
                                                 </a>
                                             </li>
                                             <li class="{{ ($path[0] === 'production-orders')?'nav-active':'' }}">
@@ -187,9 +207,10 @@
                                         {{ ($path[0] === 'user-commissions')?'nav-active nav-expanded':'' }}
                                         ">
                                         <a class="nav-link" href="#">
-                                            Comisiones
-                                        </a>
-                                        <ul class="nav nav-children">
+                                                <span class="rail-label">Comisiones</span>
+                                                @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                                            </a>
+                                        <ul class="nav-children">
                                             <li class="{{ ($path[0] === 'user-commissions')?'nav-active':'' }}">
                                                 <a class="nav-link" href="{{route('tenant.user_commissions.index')}}">
                                                     Vendedores
@@ -210,19 +231,18 @@
                         </ul>
                     </li>
                     @endif
-
-                    {{-- POS --}}
                     @if(auth()->user()->type != 'integrator')
                         @if(in_array('pos', $vc_modules))
                         <li class="nav-parent
                         {{ ($path[0] === 'pos')?'nav-active nav-expanded':'' }}
                         {{ ($path[0] === 'cash')?'nav-active nav-expanded':'' }}
                         ">
-                            <a class="nav-link" href="#">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-shopping-cart"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
-                                <span>POS</span>
-                            </a>
-                            <ul class="nav nav-children">
+                            <a class="nav-link" data-tip="POS" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'monitor'])
+                            <span class="rail-label">POS</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                        </a>
+                            <ul class="nav-children" data-title="POS">
                                 <li class="{{ ($path[0] === 'pos'  )?'nav-active':'' }}">
                                     <a class="nav-link" href="{{route('tenant.pos.index')}}">Punto de venta</a>
                                 </li>
@@ -233,17 +253,16 @@
                         </li>
                         @endif
                     @endif
-
-                    {{-- Tienda virtual --}}
                     @if(in_array('ecommerce', $vc_modules))
                     <li class="nav-parent
                         {{ in_array($path[0], ['ecommerce','items_ecommerce', 'tags', 'promotions', 'orders', 'configuration'])?'nav-active nav-expanded':'' }}"
                     >
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-home"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                            <span>Tienda Virtual</span>
+                        <a class="nav-link" data-tip="Tienda virtual" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'store'])
+                            <span class="rail-label">Tienda virtual</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children">
+                        <ul class="nav-children" data-title="Tienda virtual">
                             <li class="">
                                 <a class="nav-link" onclick="window.open( '{{ route("tenant.ecommerce.index") }} ')">Ir a Tienda</a>
                             </li>
@@ -265,8 +284,29 @@
                         </ul>
                     </li>
                     @endif
-
-                    {{-- Productos --}}
+                    @if(in_array('persons', $vc_modules))
+                    <li class="nav-parent
+                        {{ ($path[0] === 'persons' && $path[1] === 'customers')?'nav-active nav-expanded':'' }}
+                        {{ $path[0] === 'person-types' ? 'nav-active nav-expanded' : '' }}
+                        ">
+                        <a class="nav-link" data-tip="Clientes" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'users'])
+                            <span class="rail-label">Clientes</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                        </a>
+                        <ul class="nav-children" data-title="Clientes">
+                            <li class="{{ ($path[0] === 'persons' && $path[1] === 'customers')?'nav-active':'' }}">
+                                <a class="nav-link" href="{{route('tenant.persons.index', ['type' => 'customers'])}}">Clientes</a>
+                            </li>
+                            <li class="{{ ($path[0] === 'person-types')?'nav-active':'' }}">
+                                <a class="nav-link" href="{{route('tenant.person_types.index')}}">Tipos de clientes</a>
+                            </li>
+                        </ul>
+                    </li>
+                    @endif
+@if($tnShowManage)
+                    <li class="nav-description">Gestionar</li>
+@endif
                     @if(in_array('items', $vc_modules))
                     <li class="nav-parent
                         {{ ($path[0] === 'items')?'nav-active nav-expanded':'' }}
@@ -276,11 +316,12 @@
                         {{ ($path[0] === 'item-lots')?'nav-active nav-expanded':'' }}
                         {{ ($path[0] === 'item-sets')?'nav-active nav-expanded':'' }}
                         ">
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-grid"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                            <span>Productos/Servicios</span>
+                        <a class="nav-link" data-tip="Productos y servicios" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'package'])
+                            <span class="rail-label">Productos y servicios</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children">
+                        <ul class="nav-children" data-title="Productos y servicios">
                             <li class="{{ ($path[0] === 'items')?'nav-active':'' }}">
                                 <a class="nav-link" href="{{route('tenant.items.index')}}">Productos</a>
                             </li>
@@ -302,28 +343,7 @@
                         </ul>
                     </li>
                     @endif
-                    {{-- Clientes --}}
-                    @if(in_array('persons', $vc_modules))
-                    <li class="nav-parent
-                        {{ ($path[0] === 'persons' && $path[1] === 'customers')?'nav-active nav-expanded':'' }}
-                        {{ $path[0] === 'person-types' ? 'nav-active nav-expanded' : '' }}
-                        ">
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-user-check"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
-                            <span>Clientes</span>
-                        </a>
-                        <ul class="nav nav-children">
-                            <li class="{{ ($path[0] === 'persons' && $path[1] === 'customers')?'nav-active':'' }}">
-                                <a class="nav-link" href="{{route('tenant.persons.index', ['type' => 'customers'])}}">Clientes</a>
-                            </li>
-                            <li class="{{ ($path[0] === 'person-types')?'nav-active':'' }}">
-                                <a class="nav-link" href="{{route('tenant.person_types.index')}}">Tipos de clientes</a>
-                            </li>
-                        </ul>
-                    </li>
-                    @endif
-
-                    @if(auth()->user()->type != 'integrator')
+@if(auth()->user()->type != 'integrator')
                         @if(in_array('purchases', $vc_modules))
                         <li class="
                             nav-parent
@@ -334,11 +354,12 @@
                             {{ ($path[0] === 'purchase-orders')?'nav-active nav-expanded':'' }}
                             {{ ($path[0] === 'fixed-asset')?'nav-active nav-expanded':'' }}
                             ">
-                            <a class="nav-link" href="#">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-shopping-bag"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
-                                <span>Compras</span>
-                            </a>
-                            <ul class="nav nav-children" style="">
+                            <a class="nav-link" data-tip="Compras" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'shopping-bag'])
+                            <span class="rail-label">Compras</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                        </a>
+                            <ul class="nav-children" data-title="Compras">
 
 
 
@@ -370,9 +391,10 @@
                                     {{ ($path[0] === 'purchase-quotations')?'nav-active nav-expanded':'' }}
                                     ">
                                     <a class="nav-link" href="#">
-                                        Proveedores
-                                    </a>
-                                    <ul class="nav nav-children">
+                                            <span class="rail-label">Proveedores</span>
+                                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                                        </a>
+                                    <ul class="nav-children">
 
                                         <li class="{{ ($path[0] === 'persons' && $path[1] === 'suppliers')?'nav-active':'' }}">
                                             <a class="nav-link" href="{{route('tenant.persons.index', ['type' => 'suppliers'])}}">
@@ -391,9 +413,10 @@
                                     {{ ($path[0] === 'fixed-asset' )?'nav-active nav-expanded':'' }}
                                     ">
                                     <a class="nav-link" href="#">
-                                        Activos fijos
-                                    </a>
-                                    <ul class="nav nav-children">
+                                            <span class="rail-label">Activos fijos</span>
+                                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                                        </a>
+                                    <ul class="nav-children">
 
                                         <li class="{{ ($path[0] === 'fixed-asset' && $path[1] === 'items')?'nav-active':'' }}">
                                             <a class="nav-link" href="{{route('tenant.fixed_asset_items.index')}}">
@@ -410,17 +433,18 @@
                             </ul>
                         </li>
                         @endif
-
-                        {{-- Inventario --}}
+@endif
+@if(auth()->user()->type != 'integrator')
                         @if(in_array('inventory', $vc_modules))
                         <li class="nav-parent
                             {{ (in_array($path[0], ['inventory', 'moves', 'transfers', 'devolutions']) |($path[0] === 'reports' && in_array($path[1], ['kardex', 'inventory', 'valued-kardex'])))?'nav-active nav-expanded':'' }}
                         ">
-                            <a class="nav-link" href="#">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-archive"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
-                                <span>Inventario</span>
-                            </a>
-                            <ul class="nav nav-children">
+                            <a class="nav-link" data-tip="Inventario" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'warehouse'])
+                            <span class="rail-label">Inventario</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                        </a>
+                            <ul class="nav-children" data-title="Inventario">
                                 <li class="{{ ($path[0] === 'inventory')?'nav-active':'' }}">
                                     <a class="nav-link" href="{{route('inventory.index')}}">Movimientos</a>
                                 </li>
@@ -445,16 +469,15 @@
                             </ul>
                         </li>
                         @endif
-
-                    @endif
-
+@endif
                     @if(in_array('establishments', $vc_modules))
                     <li class="nav-parent {{ in_array($path[0], ['users', 'establishments'])?'nav-active nav-expanded':'' }}">
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-users"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                            <span>Usuarios/Locales & Series</span>
+                        <a class="nav-link" data-tip="Usuarios, locales y series" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'user-cog'])
+                            <span class="rail-label">Usuarios, locales y series</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children" style="">
+                        <ul class="nav-children" data-title="Usuarios, locales y series">
                             <li class="{{ ($path[0] === 'users')?'nav-active':'' }}">
                                 <a class="nav-link" href="{{route('tenant.users.index')}}">Usuarios</a>
                             </li>
@@ -464,7 +487,6 @@
                         </ul>
                     </li>
                     @endif
-
                     @if(in_array('advanced', $vc_modules) && $vc_company->soap_type_id != '03')
                     <li class="
                         nav-parent
@@ -476,11 +498,12 @@
                         {{ ($path[0] === 'order-forms')?'nav-active nav-expanded':'' }}
 
                         ">
-                        <a class="nav-link" href="#">
-                            <i class="fas fa-receipt" aria-hidden="true"></i>
-                            <span>Comprobantes avanzados</span>
+                        <a class="nav-link" data-tip="Comprobantes avanzados" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'files'])
+                            <span class="rail-label">Comprobantes avanzados</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children" style="">
+                        <ul class="nav-children" data-title="Comprobantes avanzados">
                             <li class="{{ ($path[0] === 'retentions')?'nav-active':'' }}">
                                 <a class="nav-link" href="{{route('tenant.retentions.index')}}">
                                     Retenciones
@@ -504,9 +527,10 @@
                                 {{ ($path[0] === 'dispatchers')?'nav-active nav-expanded':'' }}
                                 ">
                                 <a class="nav-link" href="#">
-                                    Ordenes de pedido
-                                </a>
-                                <ul class="nav nav-children">
+                                        <span class="rail-label">Ordenes de pedido</span>
+                                        @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                                    </a>
+                                <ul class="nav-children">
 
                                     <li class="{{ ($path[0] === 'order-forms')?'nav-active':'' }}">
                                         <a class="nav-link" href="{{route('tenant.order_forms.index')}}">
@@ -531,25 +555,28 @@
                         </ul>
                     </li>
                     @endif
+@if($tnShowAnalyze)
+                    <li class="nav-description">Analizar</li>
+@endif
                     @if(in_array('reports', $vc_modules))
-                    <li class="{{  ($path[0] === 'reports' && in_array($path[1], ['purchases', 'search','sales','customers','items', 'general-items','consistency-documents', 'quotations', 'sale-notes','cash','commissions','document-hotels', 'validate-documents', 'document-detractions','commercial-analysis', 'order-notes-consolidated', 'order-notes-general', 'sales-consolidated', 'user-commissions', 'fixed-asset-purchases', 'massive-downloads'])) ? 'nav-active' : ''}} {{ $path[0] === 'list-reports' ? 'nav-active' : '' }}">
-                        <a class="nav-link" href="{{ url('list-reports') }}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-pie-chart"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
-                            <span>Reportes</span>
+                    <li class="{{  ($path[0] === 'reports' && in_array($path[1], ['purchases', 'search','sales','customers','items', 'general-items','consistency-documents', 'quotations', 'sale-notes','cash','commissions','document-hotels', 'validate-documents', 'document-detractions','commercial-analysis', 'order-notes-consolidated', 'order-notes-general', 'sales-consolidated', 'user-commissions', 'fixed-asset-purchases', 'massive-downloads', 'sire'])) ? 'nav-active' : ''}} {{ $path[0] === 'list-reports' ? 'nav-active' : '' }}">
+                        <a class="nav-link" data-tip="Reportes" href="{{ url('list-reports') }}">
+                            @include('tenant.layouts.partials.icon', ['name' => 'chart-pie'])
+                            <span class="rail-label">Reportes</span>
                         </a>
                     </li>
                     @endif
-
                     @if(in_array('accounting', $vc_modules))
                     <li class="
                         nav-parent
                         {{ ($path[0] === 'account')?'nav-active nav-expanded':'' }}
                         ">
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-bar-chart-2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                            <span>Contabilidad</span>
+                        <a class="nav-link" data-tip="Contabilidad" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'calculator'])
+                            <span class="rail-label">Contabilidad</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children" style="">
+                        <ul class="nav-children" data-title="Contabilidad">
                             <li class="{{(($path[0] === 'account') && ($path[1] === 'format')) ? 'nav-active' : ''}}">
                                 <a class="nav-link" href="{{ route('tenant.account_format.index') }}">Exportar reporte</a>
                             </li>
@@ -562,17 +589,17 @@
                         </ul>
                     </li>
                     @endif
-
                     @if(in_array('finance', $vc_modules))
 
                     <li class="nav-parent
                         {{ $path[0] === 'finances' && in_array($path[1], ['global-payments', 'balance','payment-method-types', 'unpaid', 'to-pay', 'income', 'movements']) ? 'nav-active nav-expanded' : ''}}"
                     >
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-dollar-sign"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                            <span>Finanzas</span>
+                        <a class="nav-link" data-tip="Finanzas" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'wallet'])
+                            <span class="rail-label">Finanzas</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children" style="">
+                        <ul class="nav-children" data-title="Finanzas">
                             <li class="{{(($path[0] === 'finances') && ($path[1] == 'movements')) ? 'nav-active' : ''}}">
                                 <a class="nav-link" href="{{route('tenant.finances.movements.index')}}">Movimientos</a>
                             </li>
@@ -597,24 +624,26 @@
                         </ul>
                     </li>
                     @endif
-
+@if($tnShowAccount)
+                    <li class="nav-description">Cuenta</li>
+@endif
                     @if(in_array('configuration', $vc_modules))
                     <li class="{{in_array($path[0], ['list-platforms', 'list-cards', 'list-currencies', 'list-bank-accounts', 'list-banks', 'list-attributes', 'list-detractions', 'list-units', 'list-payment-methods', 'list-incomes', 'list-payments', 'company_accounts', 'list-vouchers-type',     'companies', 'advanced', 'tasks', 'inventories','bussiness_turns','offline-configurations','series-configurations','configurations', 'login-page', 'list-settings']) ? 'nav-active' : ''}}">
-                        <a class="nav-link" href="{{ url('list-settings') }}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                            <span>Configuración</span>
+                        <a class="nav-link" data-tip="Configuración" href="{{ url('list-settings') }}">
+                            @include('tenant.layouts.partials.icon', ['name' => 'settings-2'])
+                            <span class="rail-label">Configuración</span>
                         </a>
                     </li>
                     @endif
-
                     @if(in_array('cuenta', $vc_modules))
                     <li class=" nav-parent
                         {{ ($path[0] === 'cuenta')?'nav-active nav-expanded':'' }}">
-                        <a class="nav-link" href="#">
-                            <i class="fas fa-dollar-sign" aria-hidden="true"></i>
-                            <span>Mis Pagos</span>
+                        <a class="nav-link" data-tip="Mis pagos" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'credit-card'])
+                            <span class="rail-label">Mis pagos</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children">
+                        <ul class="nav-children" data-title="Mis pagos">
                             <li class="{{ (($path[0] === 'cuenta') && ($path[1] === 'configuration')) ?'nav-active':'' }}">
                                 <a class="nav-link" href="{{route('tenant.configuration.index')}}">
                                     Configuracion
@@ -629,17 +658,18 @@
                         </ul>
                     </li>
                     @endif
-                    @if(in_array('hotels', $vc_modules) || in_array('documentary-procedure', $vc_modules))
+@if(in_array('hotels', $vc_modules) || in_array('documentary-procedure', $vc_modules))
                     <li class="nav-description">Módulos extras</li>
-                    @endif
+@endif
                     @if(in_array('hotels', $vc_modules))
                     <li class=" nav-parent
                         {{ ($path[0] === 'hotels') ? 'nav-active nav-expanded' : '' }}">
-                        <a class="nav-link" href="#">
-                            <i class="fas fa-building" aria-hidden="true"></i>
-                            <span>Hoteles</span>
+                        <a class="nav-link" data-tip="Hoteles" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'bed-double'])
+                            <span class="rail-label">Hoteles</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children">
+                        <ul class="nav-children" data-title="Hoteles">
                             <li class="{{ (($path[0] === 'hotels') && ($path[1] === 'reception')) ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ url('hotels/reception') }}">Recepción</a>
                             </li>
@@ -660,11 +690,12 @@
                     @endif
                     @if(in_array('documentary-procedure', $vc_modules))
                     <li class=" nav-parent {{ ($path[0] === 'documentary-procedure') ? 'nav-active nav-expanded' : '' }}">
-                        <a class="nav-link" href="#">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-folder"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                            <span>Trámite documentario</span>
+                        <a class="nav-link" data-tip="Trámite documentario" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'folder-open'])
+                            <span class="rail-label">Trámite documentario</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
                         </a>
-                        <ul class="nav nav-children">
+                        <ul class="nav-children" data-title="Trámite documentario">
                             <li class="{{ (($path[0] === 'documentary-procedure') && ($path[1] === 'offices')) ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('documentary.offices') }}">Oficinas</a>
                             </li>
@@ -683,18 +714,24 @@
                         </ul>
                     </li>
                     @endif
-                </ul>
-            </nav>
-        </div>
-        <script>
-            // Maintain Scroll Position
-            if (typeof localStorage !== 'undefined') {
-                if (localStorage.getItem('sidebar-left-position') !== null) {
-                    var initialPosition = localStorage.getItem('sidebar-left-position'),
-                        sidebarLeft = document.querySelector('#sidebar-left .nano-content');
-                    sidebarLeft.scrollTop = initialPosition;
-                }
-            }
-        </script>
+            </ul>
+        </nav>
     </div>
+    <button class="rail-toggle" id="railToggle" type="button" data-tip="Contraer menú" aria-label="Contraer menú">
+        @include('tenant.layouts.partials.icon', ['name' => 'panel-left-close', 'class' => 'i-close'])
+        @include('tenant.layouts.partials.icon', ['name' => 'panel-left-open', 'class' => 'i-open'])
+        <span class="rail-label">Contraer menú</span>
+    </button>
 </aside>
+<div class="rail-scrim" id="railScrim"></div>
+<div class="rail-tip" id="railTip" role="tooltip"></div>
+<script>
+    // Restore the sidebar scroll position before first paint.
+    (function () {
+        try {
+            var pos = localStorage.getItem('sidebar-left-position');
+            var box = document.querySelector('#sidebar-left .nano-content');
+            if (pos !== null && box) { box.scrollTop = pos; }
+        } catch (e) {}
+    })();
+</script>

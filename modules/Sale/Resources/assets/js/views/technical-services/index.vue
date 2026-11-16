@@ -24,7 +24,7 @@
                         <th>N° Serie</th>
                         <th>Costo</th>
                         <!-- <th>Pago adelantado</th> -->
-                        <th></th>
+                        <th>Pagos</th>
                         <th>Saldo</th>
                         <th class="text-center">Ver</th>
                         <th class="text-right">Acciones</th>

@@ -176,7 +176,7 @@
                                     <th>Moneda</th>
                                     <th class="text-right">Por pagar</th>
                                     <th class="text-right">Total</th>
-                                    <th></th>
+                                    <th>Pagos</th>
                                 </tr>
                                 </thead>
                                 <tbody>

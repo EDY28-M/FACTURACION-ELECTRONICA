@@ -10,9 +10,9 @@
     {{--    <title>{{ config('app.name', 'Facturación Electrónica') }}</title>--}}
     <title>Facturación Electrónica</title>
 
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800|Shadows+Into+Light" rel="stylesheet" type="text/css">
-    <link rel="preconnect" href="https://fonts.gstatic.com">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ asset('porto-light/vendor/bootstrap/css/bootstrap.css') }}" />
     <link rel="stylesheet" href="{{ asset('porto-light/vendor/animate/animate.css') }}" />
@@ -23,6 +23,9 @@
     @if (file_exists(public_path('theme/custom_styles.css')))
         <link rel="stylesheet" href="{{ asset('theme/custom_styles.css') }}" />
     @endif
+    <link rel="stylesheet" href="{{ asset('css/tenant-auth.css') }}?v={{ @filemtime(public_path('css/tenant-auth.css')) }}" />
+    {{-- Motion starts only once frames are painting; the static state is already complete --}}
+    <script>if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(function () { document.documentElement.classList.add('anim'); });</script>
 
     {{-- @if (file_exists(public_path('theme/background/bkg_store.jpeg')))
         <style>
@@ -40,7 +43,7 @@
 
 </head>
 
-<body>
+<body class="tn-auth">
 
     <div class="app">
         @yield('content')

@@ -215,7 +215,7 @@
                                             <th>Moneda</th>
                                             <th class="text-right">Por cobrar</th>
                                             <th class="text-right">Total</th>
-                                            <th></th>
+                                            <th>Pagos</th>
                                         </tr>
                                         </thead>
                                         <tbody>

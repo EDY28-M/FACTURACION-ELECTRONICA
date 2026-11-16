@@ -1,65 +1,99 @@
 @extends('system.layouts.auth')
 
 @section('content')
+    @php
+        $emailError = $errors->first('email');
+        $passwordError = $errors->first('password');
+    @endphp
 
-    <section class="body-sign">
-        <div class="center-sign">
-            <div class="">
-                <div class="card card-header card-primary" style="background:#0088CC">
-                    <p class="card-title text-center">Acceso al Sistema</p>
-                    <h1 class="display-3 position-absolute text-left font-weight-bold" style="left: 90%; margin-top: -35px; color: rgba(255,255,255,.1);">4</h1>
-                </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ route('login') }}">
-                        @csrf
-                        <div class="form-group mb-3">
-                            <label>Correo electrónico</label>
-                            <div class="input-group">
-                                <input id="email" type="email" name="email" class="form-control form-control-lg" value="{{ old('email') }}">
-                                <span class="input-group-append">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-user"></i>
-                                    </span>
-                                </span>
-                            </div>
-                            @if ($errors->has('email'))
-                                <label class="error">
-                                    <strong>{{ $errors->first('email') }}</strong>
-                                </label>
-                            @endif
-                        </div>
-                        <div class="form-group mb-3 {{ $errors->has('password') ? ' error' : '' }}">
-                            <label>Contraseña</label>
-                            <div class="input-group">
-                                <input name="password" type="password" class="form-control form-control-lg">
-                                <span class="input-group-append">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-lock"></i>
-                                    </span>
-                                </span>
-                            </div>
-                            @if ($errors->has('password'))
-                                <label class="error">
-                                    <strong>{{ $errors->first('password') }}</strong>
-                                </label>
-                            @endif
-                        </div>
-                        <div class="row">
-                            <div class="col-sm-8">
-                                <div class="checkbox-custom checkbox-default">
-                                    <input name="remember" id="RememberMe" type="checkbox" {{ old('remember') ? 'checked' : '' }}>
-                                    <label for="RememberMe">Recordarme</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-4 text-right">
-                                <button type="submit" class="btn btn-primary mt-2">Iniciar sesión</button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            <p class="text-center text-muted mt-3 mb-3">&copy; Copyright {{ date('Y') }}. Todos los derechos reservados</p>
-        </div>
-    </section>
+    <main class="auth-shell">
+        <section class="auth-card" aria-labelledby="auth-title">
+            <header class="auth-header">
+                <a class="auth-logo" href="{{ url('/') }}">
+                    <span class="auth-logo-mark">
+                        <svg viewBox="0 0 36 36" aria-hidden="true"><rect x="3" y="7" width="20" height="26" rx="4" fill="#2445D6"/><rect x="13" y="3" width="20" height="26" rx="4" fill="#DA3448"/><rect x="17.5" y="10" width="11" height="2.6" rx="1.3" fill="#fff"/><rect x="17.5" y="15.5" width="7" height="2.6" rx="1.3" fill="#fff"/></svg>
+                    </span>
+                    <span class="auth-logo-text">Facturador<strong>Pro</strong></span>
+                </a>
+                <h1 id="auth-title">Iniciar sesión</h1>
+            </header>
 
+            @if ($emailError || $passwordError)
+                <div class="auth-alert" role="alert">
+                    <span>{{ $emailError ?: $passwordError }}</span>
+                </div>
+            @endif
+
+            <form class="auth-form" method="POST" action="{{ route('login') }}" novalidate>
+                @csrf
+                <div class="auth-field">
+                    <label for="email">Correo electrónico</label>
+                    <div class="auth-input {{ $emailError ? 'is-invalid' : '' }}">
+                        <svg class="auth-icon auth-field-icon" aria-hidden="true"><use href="{{ asset('images/system-icons.svg') }}?v={{ filemtime(public_path('images/system-icons.svg')) }}#mail"></use></svg>
+                        <input id="email" type="email" name="email" value="{{ old('email') }}" autocomplete="username" autofocus required
+                               placeholder="nombre@empresa.com" @if ($emailError) aria-invalid="true" aria-describedby="email-error" @endif>
+                    </div>
+                    @if ($emailError)
+                        <p class="auth-error" id="email-error">{{ $emailError }}</p>
+                    @endif
+                </div>
+
+                <div class="auth-field">
+                    <label for="password">Contraseña</label>
+                    <div class="auth-input {{ $passwordError ? 'is-invalid' : '' }}">
+                        <svg class="auth-icon auth-field-icon" aria-hidden="true"><use href="{{ asset('images/system-icons.svg') }}?v={{ filemtime(public_path('images/system-icons.svg')) }}#lock-keyhole"></use></svg>
+                        <input id="password" type="password" name="password" autocomplete="current-password" required
+                               placeholder="Ingresa tu contraseña"
+                               @if ($passwordError) aria-invalid="true" aria-describedby="password-error" @endif>
+                        <button type="button" class="auth-toggle" data-toggle-password aria-label="Mostrar contraseña" aria-pressed="false">
+                            <svg class="auth-icon" aria-hidden="true"><use href="{{ asset('images/system-icons.svg') }}?v={{ filemtime(public_path('images/system-icons.svg')) }}#eye"></use></svg>
+                        </button>
+                    </div>
+                    @if ($passwordError)
+                        <p class="auth-error" id="password-error">{{ $passwordError }}</p>
+                    @endif
+                </div>
+
+                <label class="auth-check" for="RememberMe">
+                    <input name="remember" id="RememberMe" type="checkbox" {{ old('remember') ? 'checked' : '' }}>
+                    <span>Recordarme en este equipo</span>
+                </label>
+
+                <button type="submit" class="auth-submit">
+                    <span>Iniciar sesión</span>
+                    <svg class="auth-icon auth-submit-arrow" aria-hidden="true"><use href="{{ asset('images/system-icons.svg') }}?v={{ filemtime(public_path('images/system-icons.svg')) }}#arrow-right"></use></svg>
+                </button>
+            </form>
+
+            <footer class="auth-card-footer">
+                <span class="auth-status">
+                    <span class="auth-status-dot" aria-hidden="true"></span>
+                    Panel de administración
+                </span>
+                <span class="auth-badge">
+                    <svg class="auth-icon" aria-hidden="true"><use href="{{ asset('images/system-icons.svg') }}?v={{ filemtime(public_path('images/system-icons.svg')) }}#shield-check"></use></svg>
+                    Acceso seguro
+                </span>
+            </footer>
+        </section>
+    </main>
 @endsection
+
+@push('scripts')
+    <script>
+        (function () {
+            var button = document.querySelector('[data-toggle-password]');
+            var input = document.getElementById('password');
+            if (!button || !input) return;
+            var icon = button.querySelector('use');
+            var base = icon.getAttribute('href').split('#')[0];
+            button.addEventListener('click', function () {
+                var show = input.type === 'password';
+                input.type = show ? 'text' : 'password';
+                button.setAttribute('aria-pressed', String(show));
+                button.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+                icon.setAttribute('href', base + (show ? '#eye-off' : '#eye'));
+            });
+        })();
+    </script>
+@endpush

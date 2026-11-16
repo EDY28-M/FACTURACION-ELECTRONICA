@@ -1,18 +1,23 @@
 @extends('tenant.layouts.app')
 
 @section('content')
+@php
+    $tnHomePath = in_array('dashboard', $vc_modules ?? [])
+        ? 'dashboard'
+        : (App\Support\Access\AccessMap::fromConfig()->firstAllowedPath($vc_modules ?? [], $vc_module_levels ?? []) ?? 'list-reports');
+@endphp
 <div class="page-header pr-0">
     <h2>
-        <a href="/dashboard">
+        <a href="{{ url($tnHomePath) }}">
             <i class="fas fa-home"></i>
         </a>
     </h2>
     <ol class="breadcrumbs">
         <li class="active">
-            <span>Dashboard</span>
+            <span>Reportes</span>
         </li>
         <li>
-            <span class="text-muted">Reportes</span>
+            <span class="text-muted">Ventas, compras, inventario y caja en un solo lugar</span>
         </li>
     </ol>
 </div>
@@ -31,7 +36,7 @@
                         <a href="{{route('tenant.validate_documents.index')}}">Validador de documentos</a>
                     </li>
                     @endif
-                    @if(in_array('hotel', $vc_business_turns))
+                    @if(in_array('hotel', $vc_business_turns) && in_array('hotels', $vc_modules ?? []))
                     <li>
                         <a href="{{route('tenant.reports.document_hotels.index')}}">Giro negocio hoteles</a>
                     </li>
@@ -42,9 +47,11 @@
                     <li>
                         <a href="{{route('tenant.reports.massive-downloads.index')}}">Descarga masiva - documentos</a>
                     </li>
+                    @if($vc_company->soap_type_id != '03')
                     <li>
                         <a href="{{route('tenant.reports.sire_rvie.index')}}">SIRE - Registro de ventas (RVIE)</a>
                     </li>
+                    @endif
                 </ul>
             </div>
         </div>
@@ -60,9 +67,11 @@
                     <li>
                         <a href="{{route('tenant.reports.fixed-asset-purchases.index')}}">Activos fijos</a>
                     </li>
+                    @if($vc_company->soap_type_id != '03')
                     <li>
                         <a href="{{route('tenant.reports.sire_rce.index')}}">SIRE - Registro de compras (RCE)</a>
                     </li>
+                    @endif
                 </ul>
             </div>
         </div>

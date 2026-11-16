@@ -2,7 +2,7 @@
     <div class="row col-lg-12 m-0 p-0" v-loading="loading_submit">
       <Keypress key-event="keyup" :key-code="113" @success="handleFn113" />
 
-        <div class="col-lg-4 col-md-6 bg-white m-0 p-0" style="height: calc(100vh - 110px)">
+        <div class="col-lg-4 col-md-6 bg-white m-0 p-0 tn-pos-receipt" style="height: calc(100vh - 110px)">
             <div class="h-75 bg-light" style="overflow-y: auto">
 
                 <div class="row pl-3 py-2 border-bottom m-0 p-0 bg-white">
@@ -24,21 +24,21 @@
                         </div>
                         <div class="col-4 p-l-0">
                             <!-- <p class="font-weight-semibold m-b-0">{{currencyTypeActive.symbol}} 240.00</p> -->
-                            <h4 class="font-weight-semibold m-0 text-center">{{currencyTypeActive.symbol}} {{item.total}}</h4>
+                            <h4 class="font-weight-semibold m-0 text-center">{{currencyTypeActive.symbol}} {{ toAmount(item.total) }}</h4>
                         </div>
                     </div>
                 </template>
 
 
             </div>
-            <div class="h-25 bg-info" style="overflow-y: auto">
+            <div class="h-25 bg-info tn-pos-receipt-foot" style="overflow-y: auto">
                 <template v-if="form.total_plastic_bag_taxes > 0">
                     <div class="row m-0 p-0 bg-white h-17 d-flex align-items-center">
                         <div class="col-sm-6 py-1">
                             <p class="font-weight-semibold mb-0">SUBTOTAL</p>
                         </div>
                         <div class="col-sm-6 py-1 text-right">
-                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ form.total_taxed }}</p>
+                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total_taxed) }}</p>
                         </div>
                     </div>
                     <div class="row m-0 p-0 bg-white h-17 d-flex align-items-center">
@@ -46,7 +46,7 @@
                             <p class="font-weight-semibold mb-0">IGV</p>
                         </div>
                         <div class="col-sm-6 py-1 text-right">
-                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{form.total_igv}}</p>
+                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total_igv) }}</p>
                         </div>
                     </div>
                     <div class="row m-0 p-0 bg-white h-17 d-flex align-items-center">
@@ -54,7 +54,7 @@
                             <p class="font-weight-semibold mb-0">ICBPER</p>
                         </div>
                         <div class="col-sm-6 py-1 text-right">
-                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{form.total_plastic_bag_taxes}}</p>
+                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total_plastic_bag_taxes) }}</p>
                         </div>
                     </div>
                 </template>
@@ -64,7 +64,7 @@
                             <p class="font-weight-semibold mb-0">SUBTOTAL</p>
                         </div>
                         <div class="col-sm-6 py-1 text-right">
-                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ form.total_taxed }}</p>
+                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total_taxed) }}</p>
                         </div>
                     </div>
                     <div class="row m-0 p-0 bg-white h-25 d-flex align-items-center">
@@ -72,7 +72,7 @@
                             <p class="font-weight-semibold mb-0">IGV</p>
                         </div>
                         <div class="col-sm-6 py-1 text-right">
-                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{form.total_igv}}</p>
+                            <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total_igv) }}</p>
                         </div>
                     </div>
                 </template>
@@ -85,12 +85,12 @@
                         <p class="font-weight-semibold mb-0">{{currencyTypeActive.symbol}} 4.00</p>
                     </div>
                 </div> -->
-                <div class="row m-0 p-0 h-50 d-flex align-items-center">
+                <div class="row m-0 p-0 h-50 d-flex align-items-center tn-pos-receipt-total">
                     <div class="col-sm-6 py-2">
                         <p class="font-weight-semibold mb-0 text-white">TOTAL</p>
                     </div>
                     <div class="col-sm-6 py-2 text-right">
-                        <p class="font-weight-semibold mb-0 text-white">{{currencyTypeActive.symbol}} {{ form.total }}</p>
+                        <p class="font-weight-semibold mb-0 text-white">{{currencyTypeActive.symbol}} {{ toAmount(form.total) }}</p>
                     </div>
                 </div>
             </div>
@@ -125,7 +125,7 @@
 
                         <div class="card-body text-center">
                                 <p class="my-0"><small>Monto a cobrar</small></p>
-                                <h1 class="mb-2 mt-0">{{currencyTypeActive.symbol}} {{ form.total }}</h1>
+                                <h1 class="mb-2 mt-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total) }}</h1>
                         </div>
                     </div>
                 </div>
@@ -151,7 +151,7 @@
                                     <!-- <el-input v-model="difference" :disabled="true">
                                         <template slot="prepend">{{currencyTypeActive.symbol}}</template>
                                     </el-input> -->
-                                    <h4 class="control-label font-weight-semibold m-0 text-center m-b-0">{{currencyTypeActive.symbol}} {{difference}}</h4>
+                                    <h4 class="control-label font-weight-semibold m-0 text-center m-b-0">{{currencyTypeActive.symbol}} {{ toAmount(difference) }}</h4>
                                 </div>
                             </div>
                             </div>
@@ -417,6 +417,11 @@
             // console.log(this.currencyTypeActive)
         },
         methods: {
+            // Display only: amounts may arrive as 153.9; show 153.90.
+            toAmount(value) {
+                const amount = Number(value);
+                return Number.isFinite(amount) ? amount.toFixed(2) : value;
+            },
             handleFn113(){
                 const code = this.form.document_type_id
                 if(code == '01')
@@ -839,11 +844,6 @@
                 }
             },
             async clickPayment(){
-                // if(this.has_card && !this.form_payment.card_brand_id) return this.$message.error('Seleccione una tarjeta');
-
-                if(!moment(moment().format("YYYY-MM-DD")).isSame(this.form.date_of_issue)){
-                   return this.$message.error('La fecha de emisión no coincide con la del día actual');
-                }
                 // SUNAT: boletas above S/ 700.00 must identify the customer; keep the cart untouched
                 if (this.form.document_type_id === '03' && boletaNeedsIdentification(
                     this.form.total,
@@ -855,6 +855,11 @@
                     return this.$message.error(BOLETA_IDENTIFICATION_MESSAGE);
                 }
 
+                // if(this.has_card && !this.form_payment.card_brand_id) return this.$message.error('Seleccione una tarjeta');
+
+                if(!moment(moment().format("YYYY-MM-DD")).isSame(this.form.date_of_issue)){
+                   return this.$message.error('La fecha de emisión no coincide con la del día actual');
+                }
 
                 if(!this.form.series_id)
                 {

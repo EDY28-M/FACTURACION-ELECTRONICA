@@ -1,62 +1,55 @@
 <template>
-    <div class="card">
-        <div class="card-header bg-info">
-            <h3 class="my-0">Certificado PSE - Datos Sunat</h3>
-        </div>
-        <div class="card-body">
-            <div class="title border-bottom pt-0">
-                <h4>Certificado</h4>
+    <div>
+        <div
+            class="system-dropzone"
+            :class="{'is-loaded': record, 'is-dragover': isDragover}"
+            @dragover.prevent="onDragOver"
+            @dragleave.prevent="onDragLeave"
+            @drop.prevent="onDropFile"
+        >
+            <svg class="sys-icon sys-icon-md" aria-hidden="true"><use :href="$icon('file-up')" /></svg>
+            <div class="system-dropzone-copy">
+                <template v-if="record">
+                    <strong class="system-mono">{{ record }}</strong>
+                    <small>Certificado cargado. Puedes arrastrar o seleccionar otro .pfx para reemplazarlo.</small>
+                </template>
+                <template v-else>
+                    <strong>Sube el certificado .pfx</strong>
+                    <small>Arrastra aquí tu archivo .pfx o selecciónalo desde tu equipo</small>
+                </template>
             </div>
-            <div class="table-responsive pt-2" v-if="record">
-                <table class="table">
-                    <thead>
-                    <tr>
-                        <th>Archivo</th>
-                        <th class="text-right">Acciones</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                        <td>{{ record }}</td>
-                        <td class="text-right">
-                            <button type="button" class="btn waves-effect waves-light btn-xs btn-danger"
-                                    @click.prevent="clickDelete">Eliminar</button>
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="row pt-2" v-else>
-                <div class="col-md-12">
-                    <el-button  type="primary" @click="clickCreate">Subir Certificado .pfx</el-button>
-                </div>
-            </div>
-            <div class="title border-bottom">
-                <h4>Usuario Secundario SUNAT</h4>
-            </div>
-            <div class="row">
-                <div class="col-md-6 py-2">
-                    <div class="form-group">
-                        <label class="control-label">Usuario</label>
-                        <el-input v-model="soap_username"></el-input>
-                        <div class="sub-title text-muted"><small>RUC + Usuario. Ejemplo: 01234567890ELUSUARIO</small></div>
-                    </div>
-                </div>
-                <div class="col-md-6 py-2">
-                    <div class="form-group">
-                        <label class="control-label">Contraseña</label>
-                        <el-input v-model="soap_password"></el-input>
-                    </div>
-                </div>
-                <div class="col-md-12 py-2">
-                    <div class="form-group">
-                        <el-button type="primary" native-type="submit" @click.prevent="clickSaveSoapUser">Guardar</el-button>
-                    </div>
-                </div>
+            <div class="system-dropzone-actions">
+                <button type="button" class="system-button" @click="clickCreate">
+                    <svg class="sys-icon" aria-hidden="true"><use :href="$icon('upload')" /></svg>Seleccionar .pfx
+                </button>
+                <button v-if="record" type="button" class="system-button system-button-danger" @click.prevent="clickDelete">
+                    Eliminar
+                </button>
             </div>
         </div>
-        <certificates-form :showDialog.sync="showDialog"
-                           :recordId="recordId"></certificates-form>
+
+        <h3 class="system-subtitle">Usuario secundario SUNAT</h3>
+        <form class="system-form-grid" autocomplete="off" @submit.prevent="clickSaveSoapUser">
+            <div class="system-field">
+                <label for="soap-user">Usuario</label>
+                <el-input id="soap-user" class="system-mono-input" v-model="soap_username" placeholder="01234567890ELUSUARIO"></el-input>
+                <small class="system-field-hint">RUC + usuario</small>
+            </div>
+            <div class="system-field">
+                <label for="soap-pass">Contraseña</label>
+                <el-input id="soap-pass" type="password" v-model="soap_password" autocomplete="new-password"></el-input>
+            </div>
+            <div class="system-form-actions">
+                <button type="submit" class="system-button system-button-primary" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
+            </div>
+        </form>
+
+        <certificates-form
+            :showDialog.sync="showDialog"
+            :recordId="recordId"
+            :initial-file="droppedFile"
+            @clear-initial-file="droppedFile = null"
+        ></certificates-form>
     </div>
 </template>
 
@@ -73,10 +66,12 @@
                 showDialog: false,
                 resource: 'certificates',
                 recordId: null,
-                record: {},
-                soap_username:null,
-                soap_password:null,
-
+                record: null,
+                soap_username: null,
+                soap_password: null,
+                saving: false,
+                isDragover: false,
+                droppedFile: null
             }
         },
         created() {
@@ -86,8 +81,29 @@
             this.getData()
         },
         methods: {
+            onDragOver() {
+                this.isDragover = true
+            },
+            onDragLeave() {
+                this.isDragover = false
+            },
+            onDropFile(event) {
+                this.isDragover = false
+                const files = event && event.dataTransfer && event.dataTransfer.files
+                    ? event.dataTransfer.files
+                    : []
+                if (!files.length) return
+                const file = files[0]
+                if (!/\.(pfx|p12)$/i.test(file.name || '')) {
+                    this.$message.error('Selecciona un archivo .pfx o .p12 válido.')
+                    return
+                }
+                this.droppedFile = file
+                this.showDialog = true
+            },
             clickSaveSoapUser()
             {
+                 this.saving = true
                  let soap_username = this.soap_username
                  let soap_password = this.soap_password
 
@@ -96,6 +112,7 @@
                         if (response.data.success) {
 
                              this.$message.success(response.data.message)
+                             this.$emit('status', {soap_user: !!this.soap_username})
 
                         } else {
 
@@ -108,7 +125,7 @@
 
                     })
                     .then(() => {
-
+                        this.saving = false
                     })
 
             },
@@ -118,10 +135,11 @@
                         this.record = response.data.certificate
                         this.soap_username = response.data.soap_username
                         this.soap_password = response.data.soap_password
-                        //this.config_system_env = response.data.config_system_env
+                        this.$emit('status', {certificate: !!this.record, soap_user: !!this.soap_username, certificate_file: this.record || ''})
                     })
             },
             clickCreate() {
+                this.droppedFile = null
                 this.showDialog = true
             },
             clickDelete() {

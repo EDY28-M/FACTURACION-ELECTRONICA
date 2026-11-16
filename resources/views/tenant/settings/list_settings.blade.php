@@ -1,18 +1,23 @@
 @extends('tenant.layouts.app')
 
 @section('content')
+@php
+    $tnHomePath = in_array('dashboard', $vc_modules ?? [])
+        ? 'dashboard'
+        : (App\Support\Access\AccessMap::fromConfig()->firstAllowedPath($vc_modules ?? [], $vc_module_levels ?? []) ?? 'list-settings');
+@endphp
 <div class="page-header pr-0">
     <h2>
-        <a href="/dashboard">
+        <a href="{{ url($tnHomePath) }}">
             <i class="fas fa-home"></i>
         </a>
     </h2>
     <ol class="breadcrumbs">
         <li class="active">
-            <span>Dashboard</span>
+            <span>Configuración</span>
         </li>
         <li>
-            <span class="text-muted">Reportes</span>
+            <span class="text-muted">Empresa, comprobantes, usuarios y preferencias del sistema</span>
         </li>
     </ol>
 </div>

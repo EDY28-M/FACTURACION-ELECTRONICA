@@ -1,93 +1,96 @@
 <template>
-    <el-dialog :title="titleDialog" :visible="showDialog" @close="close" @open="create">
-        <form autocomplete="off" @submit.prevent="submit">
-            <div class="form-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="form-group" :class="{'has-danger': errors.name}">
-                            <label class="control-label">Nombre</label>
-                            <el-input v-model="form.name" :maxlength="11"></el-input>
-                            <small class="form-control-feedback" v-if="errors.name" v-text="errors.name[0]"></small>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group" :class="{'has-danger': errors.pricing}">
-                            <label class="control-label">Precio</label>
-                            <el-input v-model="form.pricing"></el-input>
-                            <small class="form-control-feedback" v-if="errors.pricing" v-text="errors.pricing[0]"></small>
-                        </div>
-                    </div>
+    <el-dialog :title="titleDialog" :visible="showDialog" width="880px" custom-class="system-plan-dialog" :close-on-click-modal="false"
+               append-to-body @close="close" @open="create" @closed="$emit('closed')">
+        <form id="plan-form" class="system-plan-form" autocomplete="off" novalidate @submit.prevent="submit">
+            <div class="system-plan-fields">
+                <div class="system-field" :class="{'has-danger': errors.name}">
+                    <label for="plan-name">Nombre</label>
+                    <el-input id="plan-name" v-model="form.name" :maxlength="11" placeholder="Ej. Básico"></el-input>
+                    <small class="form-control-feedback" v-if="errors.name" v-text="errors.name[0]"></small>
                 </div>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="form-group" :class="{'has-danger': errors.limit_users || errorLUser.limit_users}">
-                            <label class="control-label">Límite de usuarios</label>
-                            <el-input v-model="limit_users" @input="validateLUsers"  :disabled="users_unlimited"></el-input>
-                            <el-checkbox v-model="users_unlimited" @change="setUnlimitUsers">Ilimitado</el-checkbox><br>
-                            <small class="form-control-feedback d-block" v-if="errors.limit_users" v-text="errors.limit_users[0]"></small>
-                            <small class="form-control-feedback" v-if="errorLUser.limit_users" v-text="errorLUser.limit_users[0]"></small> 
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-group" :class="{'has-danger': errors.limit_documents || errorLDocument.limit_documents}">
-                            <label class="control-label">Límite de documentos</label>
-                            <el-input v-model="limit_documents" @input="validateLDocuments" :disabled="documents_unlimited"></el-input>
-                            <el-checkbox v-model="documents_unlimited" @change="setUnlimitDocuments">Ilimitado</el-checkbox><br>
-                            <small class="form-control-feedback d-block" v-if="errors.limit_documents" v-text="errors.limit_documents[0]"></small>
-                            <small class="form-control-feedback" v-if="errorLDocument.limit_documents" v-text="errorLDocument.limit_documents[0]"></small>
-                        </div>
-                    </div>
+
+                <div class="system-field" :class="{'has-danger': errors.pricing}">
+                    <label for="plan-pricing">Precio</label>
+                    <el-input id="plan-pricing" v-model="form.pricing" placeholder="0.00"><template slot="prepend">S/</template></el-input>
+                    <small class="form-control-feedback" v-if="errors.pricing" v-text="errors.pricing[0]"></small>
                 </div>
-                <!-- <div class="row">
-                    <div class="col-md-12 mt-3">
-                        <div class="form-group" :class="{'has-danger': (errors.plan_documents)}">
-                            <label class="control-label font-weight-bold mb-0">Habilitar documentos electrónicos</label> 
 
-                            <el-checkbox-group v-model="form.plan_documents"  >
-                                <el-checkbox v-for="(city,ind) in plan_documents" class="plan_documents" :label="city.id"  :key="ind">{{city.description}}</el-checkbox>
-                            </el-checkbox-group>
-
-                            <small class="form-control-feedback" v-if="errors.plan_documents" v-text="errors.plan_documents[0]"></small> 
-                        </div>
+                <div class="system-field" :class="{'has-danger': errors.limit_users || errorLUser.limit_users}">
+                    <label id="plan-users-label">Usuarios</label>
+                    <div class="system-segmented" role="group" aria-labelledby="plan-users-label">
+                        <button type="button" :class="{'is-active': users_unlimited}" :aria-pressed="String(!!users_unlimited)" @click="setUsers(true)">Ilimitados</button>
+                        <button type="button" :class="{'is-active': !users_unlimited}" :aria-pressed="String(!users_unlimited)" @click="setUsers(false)">Con límite</button>
                     </div>
-                   
-                </div> -->
+                    <el-input v-if="!users_unlimited" v-model="limit_users" @input="validateLUsers" placeholder="Máximo de usuarios" aria-label="Máximo de usuarios"></el-input>
+                    <small class="form-control-feedback" v-if="errors.limit_users" v-text="errors.limit_users[0]"></small>
+                    <small class="form-control-feedback" v-if="errorLUser.limit_users" v-text="errorLUser.limit_users[0]"></small>
+                </div>
+
+                <div class="system-field" :class="{'has-danger': errors.limit_documents || errorLDocument.limit_documents}">
+                    <label id="plan-docs-label">Comprobantes</label>
+                    <div class="system-segmented" role="group" aria-labelledby="plan-docs-label">
+                        <button type="button" :class="{'is-active': documents_unlimited}" :aria-pressed="String(!!documents_unlimited)" @click="setDocuments(true)">Ilimitados</button>
+                        <button type="button" :class="{'is-active': !documents_unlimited}" :aria-pressed="String(!documents_unlimited)" @click="setDocuments(false)">Con límite</button>
+                    </div>
+                    <el-input v-if="!documents_unlimited" v-model="limit_documents" @input="validateLDocuments" placeholder="Máximo de comprobantes" aria-label="Máximo de comprobantes"></el-input>
+                    <small class="form-control-feedback" v-if="errors.limit_documents" v-text="errors.limit_documents[0]"></small>
+                    <small class="form-control-feedback" v-if="errorLDocument.limit_documents" v-text="errorLDocument.limit_documents[0]"></small>
+                </div>
             </div>
-            <div class="form-actions text-right pt-2">
-                <el-button @click.prevent="close()">Cancelar</el-button>
-                <el-button type="primary" native-type="submit" :loading="loading_submit">Guardar</el-button>
+
+            <div class="system-plan-preview-col">
+                <p class="system-aside-title">Vista previa</p>
+                <article class="system-receipt" aria-label="Vista previa">
+                    <div class="system-receipt-top">
+                        <p class="system-receipt-meta"><span>{{ form.name || 'Nombre del plan' }}</span><b>N° {{ recordId ? String(recordId).padStart(4, '0') : '0000' }}</b></p>
+                        <p class="system-receipt-price"><span class="cur">S/</span><span class="int">{{ preview.int }}</span><span class="dec">.{{ preview.dec }}</span></p>
+                    </div>
+                    <div class="system-receipt-bottom">
+                        <dl class="system-receipt-rows">
+                            <div><dt>Usuarios</dt><i class="leader" aria-hidden="true"></i><dd><span class="system-plan-limit">{{ limitText(users_unlimited, limit_users) }}</span></dd></div>
+                            <div><dt>Comprobantes</dt><i class="leader" aria-hidden="true"></i><dd><span class="system-plan-limit">{{ limitText(documents_unlimited, limit_documents) }}</span></dd></div>
+                        </dl>
+                    </div>
+                </article>
             </div>
         </form>
+
+        <div slot="footer" class="system-dialog-foot">
+            <button type="button" class="system-button" @click.prevent="close()">Descartar</button>
+            <button type="submit" form="plan-form" class="system-button system-button-primary" :disabled="loading_submit">
+                {{ loading_submit ? 'Guardando…' : (recordId ? 'Guardar cambios' : 'Crear plan') }}
+            </button>
+        </div>
     </el-dialog>
 </template>
 
-<style>
-.plan_documents{ display:block ; margin: 15px 0 ;}
-</style>
-
 <script>
-
-    import {EventBus} from '../../../helpers/bus'
-
     export default {
-        props: ['showDialog', 'recordId','plan_documents'],
+        props: ['showDialog', 'recordId'],
         data() {
             return {
                 loading_submit: false,
-                titleDialog: null,
+                titleDialog: 'Nuevo plan',
                 resource: 'plans',
-                documents_unlimited:null,
-                users_unlimited:null,
-                limit_users:null,
-                limit_documents:null,
+                documents_unlimited: false,
+                users_unlimited: false,
+                limit_users: null,
+                limit_documents: null,
                 errors: {},
-                errorLDocument:{},
-                errorLUser:{},
-                form: {}, 
+                errorLDocument: {},
+                errorLUser: {},
+                form: {},
+            }
+        },
+        computed: {
+            preview() {
+                const amount = Number(this.form.pricing)
+                const [int, dec] = (isFinite(amount) ? amount : 0).toFixed(2).split('.')
+                return {int: Number(int).toLocaleString('es-PE'), dec}
             }
         },
         created() {
-            this.initForm() 
+            this.initForm()
         },
         methods: {
             initForm() {
@@ -104,26 +107,28 @@
                     pricing: null,
                     limit_users: null,
                     limit_documents: null,
-                    plan_documents:[]
+                    plan_documents: []
                 }
+            },
+            limitText(unlimited, value) {
+                if (unlimited) return 'Ilimitados'
+                return value ? 'Hasta ' + Number(value).toLocaleString('es-PE') : 'Sin definir'
             },
             create() {
-
-                this.titleDialog = (this.recordId)? 'Editar plan':'Nuevo plan'
+                this.titleDialog = this.recordId ? 'Editar plan' : 'Nuevo plan'
                 if (this.recordId) {
                     this.$http.get(`/${this.resource}/record/${this.recordId}`).then(response => {
-                            this.setData(response.data.data)
-                        })
+                        this.setData(response.data.data)
+                    })
                 }
             },
-            submit() {   
-
-                if(this.validateLUsers().limit_users || this.validateLDocuments().limit_documents)
+            submit() {
+                if (this.validateLUsers().limit_users || this.validateLDocuments().limit_documents)
                     return
-                    
+
                 this.transform()
 
-                this.loading_submit = true  
+                this.loading_submit = true
                 this.$http.post(`${this.resource}`, this.form)
                     .then(response => {
                         if (response.data.success) {
@@ -136,7 +141,7 @@
                     })
                     .catch(error => {
                         if (error.response.status === 422) {
-                            this.errors = error.response.data 
+                            this.errors = error.response.data
                         } else {
                             console.log(error.response)
                         }
@@ -144,64 +149,40 @@
                     .then(() => {
                         this.loading_submit = false
                     })
-                    
             },
-            setData(data){
-
+            setData(data) {
                 this.form = data
                 this.form.plan_documents = Object.values(data.plan_documents)
-                this.users_unlimited = (data.limit_users == 0) ? true : false
-                this.documents_unlimited = (data.limit_documents == 0) ? true : false                
-                this.limit_users = (this.users_unlimited) ? "∞": data.limit_users
-                this.limit_documents = (this.documents_unlimited) ? "∞":  data.limit_documents
-
+                this.users_unlimited = data.limit_users == 0
+                this.documents_unlimited = data.limit_documents == 0
+                this.limit_users = this.users_unlimited ? null : data.limit_users
+                this.limit_documents = this.documents_unlimited ? null : data.limit_documents
             },
-            transform(){
-
-                if(this.users_unlimited){
-                    this.form.limit_users = 0
-                }else{
-                    this.form.limit_users = this.limit_users
-                }
-
-                if(this.documents_unlimited){
-                    this.form.limit_documents = 0
-                }else{
-                    this.form.limit_documents = this.limit_documents
-                }
-                
+            transform() {
+                this.form.limit_users = this.users_unlimited ? 0 : this.limit_users
+                this.form.limit_documents = this.documents_unlimited ? 0 : this.limit_documents
             },
-            validateLDocuments(){
-
-                this.errorLDocument = {} 
-
-                if(!this.documents_unlimited){
-                    if(this.limit_documents < 1)
-                        this.$set(this.errorLDocument, 'limit_documents', ['limite de documentos debe ser mayor a cero']);
-                } 
-
-                return this.errorLDocument 
-            },            
-            
-            validateLUsers(){
-
-                this.errorLUser = {}  
-                 
-                if(!this.users_unlimited){
-                    if(this.limit_users < 1)
-                        this.$set(this.errorLUser, 'limit_users', ['limite de usuarios debe ser mayor a cero']);
+            validateLDocuments() {
+                this.errorLDocument = {}
+                if (!this.documents_unlimited && !(Number(this.limit_documents) >= 1)) {
+                    this.$set(this.errorLDocument, 'limit_documents', ['El límite de comprobantes debe ser mayor a cero'])
                 }
-
-                return this.errorLUser 
-            },            
-            setUnlimitDocuments(){
-                this.limit_documents = (this.documents_unlimited) ? "∞" : null
-                this.form.limit_documents = (this.limit_documents == "∞") ? 0 : this.limit_documents
+                return this.errorLDocument
             },
-            setUnlimitUsers(){
-                this.limit_users = (this.users_unlimited) ? "∞" : null
-                this.form.limit_users = (this.limit_users == "∞") ? 0 : this.limit_users
-
+            validateLUsers() {
+                this.errorLUser = {}
+                if (!this.users_unlimited && !(Number(this.limit_users) >= 1)) {
+                    this.$set(this.errorLUser, 'limit_users', ['El límite de usuarios debe ser mayor a cero'])
+                }
+                return this.errorLUser
+            },
+            setUsers(unlimited) {
+                this.users_unlimited = unlimited
+                this.errorLUser = {}
+            },
+            setDocuments(unlimited) {
+                this.documents_unlimited = unlimited
+                this.errorLDocument = {}
             },
             close() {
                 this.$emit('update:showDialog', false)

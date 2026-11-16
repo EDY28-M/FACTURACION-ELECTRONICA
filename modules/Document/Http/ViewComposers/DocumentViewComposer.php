@@ -7,7 +7,8 @@ class DocumentViewComposer
 {
     public function compose($view)
     {
-        $view->vc_document = Document::whereNotSent()->count();
+        // Same filters as the not-sent list it links to: sellers only count their own documents.
+        $view->vc_document = auth()->check() ? Document::whereNotSent()->whereTypeUser()->count() : 0;
 
         $view->vc_document_regularize_shipping = Document::whereRegularizeShipping()->count();
 

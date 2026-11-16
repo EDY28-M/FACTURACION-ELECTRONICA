@@ -1,0 +1,2888 @@
+@font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/ibm-plex-mono-latin.woff2") format("woff2");
+}
+
+html:not(.dashboard-system) {
+    --tenant-ground: #f1f4f9;
+    --tenant-surface: #ffffff;
+    --tenant-surface-subtle: #f3f7fe;
+    --tenant-navy: #0e1b2e;
+    --tenant-blue: #2f6fdf;
+    --tenant-blue-hover: #2559bd;
+    --tenant-blue-soft: rgba(47, 111, 223, 0.1);
+    --tenant-rail: #eaf1fd;
+    --tenant-ink: #0e1b2e;
+    --tenant-ink-secondary: #3a4a60;
+    --tenant-muted: #5f6e83;
+    --tenant-border: #e4eaf3;
+    --tenant-border-strong: #d3dceb;
+    --tenant-hairline: #eef2f8;
+    --tenant-row-hover: #f6f8fc;
+    --tenant-radius: 18px;
+    --tenant-shadow: 0 1px 2px rgba(14, 27, 46, 0.04), 0 10px 28px -18px rgba(14, 27, 46, 0.22);
+    --tenant-shadow-pop: 0 2px 6px rgba(14, 27, 46, 0.06), 0 18px 40px -16px rgba(14, 27, 46, 0.28);
+    --tenant-header-h: 72px;
+    --tenant-rail-w: 288px;
+    --tenant-rail-mini-w: 80px;
+    --tenant-font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --tenant-font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    --tenant-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html.dark:not(.dashboard-system) {
+    --tenant-ground: #0f1a2c;
+    --tenant-surface: #16233a;
+    --tenant-surface-subtle: #1c2d49;
+    --tenant-rail: #121f35;
+    --tenant-ink: #e6edf7;
+    --tenant-ink-secondary: #c2cde0;
+    --tenant-muted: #93a3ba;
+    --tenant-border: #243a5e;
+    --tenant-border-strong: #314973;
+    --tenant-hairline: #20324f;
+    --tenant-row-hover: #1c2d49;
+    --tenant-blue: #5b8def;
+    --tenant-blue-hover: #7aa4f5;
+    --tenant-blue-soft: rgba(91, 141, 239, 0.18);
+    --tenant-shadow: none;
+    --tenant-shadow-pop: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Persistent App Shell GPU top loading progress bar */
+html.tenant-nav-loading::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--tenant-blue, #2445d6);
+    z-index: 2500;
+    pointer-events: none;
+    transform-origin: left center;
+    animation: tenant-shell-progress 0.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes tenant-shell-progress {
+    0% {
+        transform: scaleX(0.15);
+        opacity: 0.75;
+    }
+    60% {
+        transform: scaleX(0.85);
+        opacity: 1;
+    }
+    100% {
+        transform: scaleX(1);
+        opacity: 0.25;
+    }
+}
+
+/* Canvas, typography & numeric discipline */
+html:not(.dashboard-system),
+html:not(.dashboard-system) body,
+html:not(.dashboard-system) .inner-wrapper {
+    background-color: var(--tenant-ground);
+}
+
+html:not(.dashboard-system) body {
+    font-family: var(--tenant-font-sans);
+    color: var(--tenant-ink);
+    -webkit-font-smoothing: antialiased;
+}
+
+html:not(.dashboard-system) .tabular-nums,
+html:not(.dashboard-system) .cart-item-count,
+html:not(.dashboard-system) .badge,
+html:not(.dashboard-system) .table td,
+html:not(.dashboard-system) .el-table td,
+html:not(.dashboard-system) .el-input-number,
+html:not(.dashboard-system) .el-pagination,
+html:not(.dashboard-system) input[type="number"] {
+    font-variant-numeric: tabular-nums;
+}
+
+html:not(.dashboard-system) code,
+html:not(.dashboard-system) pre,
+html:not(.dashboard-system) .font-mono {
+    font-family: var(--tenant-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- App shell: sidebar rail (288px / 80px icon rail / overlay drawer) + top bar ---------- */
+html {
+    --rw: 288px;
+    --tn-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --tn-sky: #1f6fe5;
+    --tn-sky-hover: #195fc7;
+    --tn-sky-text: #175cc4;
+    --tn-sky-wash: #f3f7fe;
+    --tn-sky-soft: #e3edfd;
+    --tn-sky-mid: #9dbff4;
+    --tn-icon: #7182a0;
+    --tn-hover: rgba(255, 255, 255, 0.7);
+    --tn-divider: rgba(31, 111, 229, 0.1);
+    --tn-bad: #b4362f;
+}
+
+html.rail-mini {
+    --rw: 80px;
+}
+
+html.dark {
+    --tn-sky: #5b8def;
+    --tn-sky-hover: #7aa4f5;
+    --tn-sky-text: #9dbff4;
+    --tn-sky-wash: #1c2d49;
+    --tn-sky-soft: #243a5e;
+    --tn-sky-mid: #314973;
+    --tn-icon: #8ea0bc;
+    --tn-hover: rgba(255, 255, 255, 0.06);
+    --tn-divider: rgba(255, 255, 255, 0.08);
+    --tn-bad: #ff8f86;
+}
+
+.tn-icon {
+    width: 18px;
+    height: 18px;
+    flex: none;
+    stroke-width: 1.75;
+}
+
+html #sidebar-left.rail {
+    position: fixed;
+    z-index: 1030;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--rw);
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 22px 12px 14px;
+    border: 0;
+    background: var(--tenant-rail);
+    box-shadow: none;
+    transition: width 0.28s var(--tn-ease), box-shadow 0.28s var(--tn-ease), padding 0.28s var(--tn-ease);
+}
+
+html #sidebar-left .rail-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 40px;
+    padding: 0 10px;
+    overflow: hidden;
+    color: var(--tenant-ink);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+html #sidebar-left .rail-brand .mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    overflow: hidden;
+    border-radius: 11px;
+    background: var(--tn-sky);
+    color: #ffffff;
+    font-family: var(--tenant-font-display);
+    font-size: 21px;
+    font-weight: 600;
+}
+
+html #sidebar-left .rail-brand .mark-logo {
+    background: #ffffff;
+    padding: 3px;
+}
+
+html #sidebar-left .rail-brand .mark-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+html #sidebar-left .rail-brand b {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--tenant-font-display);
+    font-size: 19.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+html #sidebar-left .nano-content {
+    flex: 1;
+    min-height: 0;
+    margin: 22px -4px 0;
+    padding: 0 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--tn-sky-mid) transparent;
+}
+
+html #sidebar-left ul.nav-main,
+html #sidebar-left ul.nav-children {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+html #sidebar-left ul.nav-main li {
+    position: relative;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+html #sidebar-left ul.nav-main li.nav-description {
+    margin: 12px 0 3px;
+    padding: 0 12px;
+    color: var(--tenant-muted);
+    font-size: 13.7px;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+/* Porto paints pseudo-elements (dots, borders, arrows) on these links; the rail draws its own icons */
+html #sidebar-left ul.nav-main a.nav-link::before,
+html #sidebar-left ul.nav-main a.nav-link::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* Top-level items */
+html #sidebar-left ul.nav-main > li > a.nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 38px;
+    margin: 0;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 11px;
+    background: none;
+    box-shadow: none;
+    color: var(--tenant-ink-secondary);
+    font-size: 16.1px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: left;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s var(--tn-ease), color 0.15s var(--tn-ease);
+}
+
+html #sidebar-left ul.nav-main > li > a.nav-link .tn-icon {
+    color: var(--tn-icon);
+    transition: color 0.15s var(--tn-ease), width 0.2s var(--tn-ease), height 0.2s var(--tn-ease);
+}
+
+html #sidebar-left ul.nav-main > li > a.nav-link:hover,
+html #sidebar-left ul.nav-main > li > a.nav-link:focus-visible {
+    padding-left: 12px !important;
+    background: var(--tn-hover);
+    color: var(--tenant-ink);
+    text-decoration: none;
+}
+
+html #sidebar-left ul.nav-main > li > a.nav-link:hover .tn-icon {
+    color: var(--tenant-ink-secondary);
+}
+
+html #sidebar-left ul.nav-main a.nav-link .rail-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+html #sidebar-left ul.nav-main a.nav-link .chev {
+    width: 15px;
+    height: 15px;
+    margin-left: auto;
+    color: var(--tenant-muted);
+    transition: transform 0.2s var(--tn-ease);
+}
+
+html #sidebar-left ul.nav-main li.nav-expanded > a.nav-link .chev,
+html #sidebar-left ul.nav-main li.tn-fly > a.nav-link .chev {
+    transform: rotate(90deg);
+}
+
+/* Current page: white pill for a leaf, stronger label for the section that owns it */
+html #sidebar-left ul.nav-main li.nav-active:not(.nav-parent) > a.nav-link {
+    background: var(--tenant-surface);
+    border-radius: 11px !important;
+    box-shadow: 0 1px 2px rgba(14, 27, 46, 0.05), 0 6px 16px -10px rgba(14, 27, 46, 0.25);
+    color: var(--tenant-ink) !important;
+    font-weight: 600;
+}
+
+html.dark #sidebar-left ul.nav-main li.nav-active:not(.nav-parent) > a.nav-link {
+    background: var(--tenant-surface-subtle);
+    box-shadow: none;
+}
+
+html #sidebar-left ul.nav-main > li.nav-active:not(.nav-parent) > a.nav-link .tn-icon,
+html #sidebar-left ul.nav-main > li.nav-parent.nav-active > a.nav-link .tn-icon {
+    color: var(--tn-sky);
+}
+
+html #sidebar-left ul.nav-main li.nav-parent.nav-active > a.nav-link {
+    background: none;
+    color: var(--tenant-ink);
+    font-weight: 600;
+}
+
+/* Children: inline accordion in the full rail */
+html #sidebar-left ul.nav-main li ul.nav-children {
+    display: none;
+    padding: 0 0 0 30px;
+    border: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html #sidebar-left ul.nav-main li.nav-expanded > ul.nav-children {
+    display: block;
+    animation: tn-reveal 0.2s var(--tn-ease);
+}
+
+html #sidebar-left ul.nav-main li ul.nav-children ul.nav-children {
+    padding-left: 14px;
+}
+
+html #sidebar-left ul.nav-children a.nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 1px 0;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    box-shadow: none;
+    color: var(--tenant-ink-secondary);
+    font-size: 15.6px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background-color 0.15s var(--tn-ease), color 0.15s var(--tn-ease);
+}
+
+html #sidebar-left ul.nav-children a.nav-link:hover,
+html #sidebar-left ul.nav-children a.nav-link:focus-visible {
+    padding-left: 12px !important;
+    background: var(--tn-hover);
+    color: var(--tenant-ink);
+}
+
+html #sidebar-left ul.nav-children li.nav-parent.nav-active > a.nav-link {
+    color: var(--tenant-ink);
+    font-weight: 600;
+}
+
+@keyframes tn-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(-3px);
+    }
+}
+
+html #sidebar-left .rail-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 38px;
+    margin-top: 8px;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 11px;
+    background: none;
+    color: var(--tenant-muted);
+    font-family: inherit;
+    font-size: 16.1px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s var(--tn-ease), color 0.15s var(--tn-ease);
+}
+
+html #sidebar-left .rail-toggle .tn-icon {
+    color: var(--tn-icon);
+}
+
+html #sidebar-left .rail-toggle:hover {
+    background: var(--tn-hover);
+    color: var(--tenant-ink);
+}
+
+html #sidebar-left .rail-toggle .i-open {
+    display: none;
+}
+
+html #sidebar-left .rail-toggle .rail-label {
+    flex: 1;
+}
+
+/* ----- Icon rail ----- */
+html.rail-mini:not(.rail-peek) #sidebar-left.rail {
+    padding: 22px 16px 14px;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-brand {
+    padding: 0 2px;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-brand b,
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link .rail-label,
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link .chev,
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle .rail-label {
+    display: none;
+}
+
+/* Group headings turn into thin dividers */
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main li.nav-description {
+    height: 2px;
+    margin: 10px 14px;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--tn-divider);
+    font-size: 0;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link,
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle {
+    justify-content: center;
+    width: 48px;
+    height: 46px;
+    min-height: 0;
+    margin: 0 auto 2px;
+    padding: 0;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link:hover,
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link:focus-visible {
+    padding-left: 0 !important;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle {
+    margin-top: 8px;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link .tn-icon,
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle .tn-icon {
+    width: 22px;
+    height: 22px;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle .i-close {
+    display: none;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle .i-open {
+    display: block;
+}
+
+/* Submenus open as a flyout next to the rail (the inline accordion stays closed) */
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li.nav-expanded > ul.nav-children {
+    display: none;
+    animation: none;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li.tn-fly > ul.nav-children {
+    display: block;
+    position: fixed;
+    z-index: 1040;
+    left: calc(var(--rw) + 6px);
+    width: 240px;
+    max-height: calc(100vh - 24px);
+    padding: 8px;
+    overflow-y: auto;
+    border-radius: 16px;
+    background: var(--tenant-surface);
+    box-shadow: var(--tenant-shadow-pop);
+    animation: tn-fly 0.18s var(--tn-ease);
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > ul.nav-children::before {
+    content: attr(data-title);
+    display: block;
+    padding: 6px 12px;
+    color: var(--tenant-muted);
+    font-size: 14.1px;
+    font-weight: 600;
+}
+
+html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-children a.nav-link:hover {
+    background: var(--tn-sky-wash);
+}
+
+@keyframes tn-fly {
+    from {
+        opacity: 0;
+        transform: translateX(-6px);
+    }
+}
+
+/* ----- Overlay drawer (narrow screens, menu opened by the user) ----- */
+html.rail-peek #sidebar-left.rail {
+    width: 288px;
+    box-shadow: 0 0 0 1px rgba(14, 27, 46, 0.04), 24px 0 60px -24px rgba(14, 27, 46, 0.35);
+}
+
+html .rail-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1029;
+    background: rgba(14, 27, 46, 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s var(--tn-ease);
+}
+
+html.rail-peek .rail-scrim {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+html .rail-tip {
+    position: fixed;
+    z-index: 1100;
+    padding: 7px 11px;
+    border-radius: 9px;
+    background: var(--tenant-navy);
+    color: #ffffff;
+    font-size: 14.6px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-4px, -50%);
+    transition: opacity 0.12s var(--tn-ease), transform 0.12s var(--tn-ease);
+}
+
+html .rail-tip.show {
+    opacity: 1;
+    transform: translate(0, -50%);
+}
+
+/* ----- Content column ----- */
+html .tn-content {
+    min-width: 0;
+    padding-left: var(--rw);
+    transition: padding-left 0.28s var(--tn-ease);
+}
+
+/* No transitions until the first frame is painted, so the initial rail state never animates */
+html.no-trans #sidebar-left.rail,
+html.no-trans .tn-content {
+    transition: none !important;
+}
+
+/* The page body replaces Porto's fixed table layout */
+html .tn-content .inner-wrapper {
+    display: block;
+    min-height: 0;
+    padding: 0;
+    overflow-x: clip;
+    overflow-y: visible;
+}
+
+html .tn-content .content-body {
+    display: block;
+    margin: 0;
+    padding: 8px 40px 64px;
+}
+
+/* ----- Top bar ----- */
+html .header.tn-top {
+    position: sticky;
+    top: 0;
+    left: auto !important;
+    right: auto;
+    z-index: 1020;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 72px;
+    margin: 0 !important;
+    padding: 0 40px;
+    border: 0;
+    background: rgba(241, 244, 249, 0.9);
+    box-shadow: none;
+    -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    backdrop-filter: saturate(1.4) blur(10px);
+    transition: none;
+}
+
+html.dark .header.tn-top {
+    background: rgba(15, 26, 44, 0.9);
+}
+
+html .tn-top .header-right,
+html .tn-top .header-notifications,
+html .tn-top ul.notifications,
+html .tn-top ul.notifications > li {
+    display: contents;
+}
+
+html .tn-top ul.notifications {
+    list-style: none;
+}
+
+html .tn-top a,
+html .tn-top a:hover {
+    text-decoration: none;
+}
+
+html .tn-top .tn-search {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+    max-width: 420px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 0 14px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 12px;
+    background: var(--tenant-surface);
+    color: var(--tenant-muted);
+    font-size: 15.6px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: box-shadow 0.15s var(--tn-ease);
+}
+
+html .tn-top a.tn-search:hover {
+    box-shadow: 0 0 0 1px var(--tenant-border);
+    color: var(--tenant-muted);
+}
+
+html .tn-top span.tn-search {
+    cursor: default;
+}
+
+html .tn-top .tn-search .tn-icon {
+    width: 16px;
+    height: 16px;
+}
+
+html .tn-top .tn-search span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+html .tn-top .tn-env {
+    order: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 13px;
+    border-radius: 999px;
+    font-size: 14.6px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+html .tn-top .tn-env::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+html .tn-top .tn-env--demo {
+    background: #fdf1dc;
+    color: #9a5b00;
+}
+
+html .tn-top .tn-env--prod {
+    background: #e7f5ec;
+    color: #14804a;
+}
+
+html .tn-top .tn-env--int {
+    background: #e6eefc;
+    color: #2458c2;
+}
+
+html.dark .tn-top .tn-env--demo {
+    background: rgba(233, 162, 59, 0.18);
+    color: #f2c177;
+}
+
+html.dark .tn-top .tn-env--prod {
+    background: rgba(20, 128, 74, 0.25);
+    color: #6fd3a0;
+}
+
+html.dark .tn-top .tn-env--int {
+    background: rgba(91, 141, 239, 0.2);
+    color: #9dbff4;
+}
+
+html .tn-top a.tn-env:hover {
+    filter: brightness(0.97);
+}
+
+html .tn-top .tn-spacer {
+    order: 3;
+    flex: 1;
+}
+
+html .tn-top .tn-new {
+    order: 4;
+    position: relative;
+    display: flex;
+    gap: 2px;
+}
+
+html .tn-top .tn-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    margin: 0;
+    padding: 0 15px;
+    border: 0;
+    border-radius: 11px;
+    font-family: inherit;
+    font-size: 15.6px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.14s var(--tn-ease), transform 0.14s var(--tn-ease);
+}
+
+html .tn-top .tn-btn:active {
+    transform: scale(0.98);
+}
+
+html .tn-top .tn-btn .tn-icon {
+    width: 17px;
+    height: 17px;
+    stroke-width: 2.2;
+}
+
+html .tn-top .tn-btn--p,
+html .tn-top .tn-btn--p:hover {
+    color: #ffffff;
+}
+
+html .tn-top .tn-btn--p {
+    background: var(--tn-sky);
+    box-shadow: 0 1px 2px rgba(14, 27, 46, 0.12), 0 4px 10px -6px rgba(14, 27, 46, 0.3);
+}
+
+html .tn-top .tn-btn--p:hover {
+    background: var(--tn-sky-hover);
+}
+
+html .tn-top .tn-new > .tn-btn--p:first-child {
+    border-radius: 11px 4px 4px 11px;
+}
+
+html .tn-top .tn-caret {
+    width: 36px;
+    padding: 0;
+    border-radius: 4px 11px 11px 4px;
+}
+
+html .tn-top .tn-caret .tn-icon {
+    transition: transform 0.2s var(--tn-ease);
+}
+
+html .tn-top .tn-caret[aria-expanded="true"] .tn-icon {
+    transform: rotate(180deg);
+}
+
+html .tn-top .tn-ib {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 11px;
+    background: none;
+    color: var(--tenant-muted);
+    cursor: pointer;
+}
+
+html .tn-top .tn-ib:hover {
+    background: var(--tn-sky-wash);
+    color: var(--tenant-ink);
+}
+
+html .tn-top .tn-moon {
+    order: 5;
+}
+
+html .tn-top ul.notifications .tn-ib {
+    order: 6;
+}
+
+html .tn-top .tn-moon .i-sun,
+html.dark .tn-top .tn-moon .i-moon {
+    display: none;
+}
+
+html.dark .tn-top .tn-moon .i-sun {
+    display: block;
+}
+
+html .tn-top .tn-ib em {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: grid;
+    place-items: center;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--tn-sky);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 12.7px;
+    font-style: normal;
+    font-weight: 600;
+}
+
+html .tn-top .tn-ib em.tn-warn {
+    background: var(--tn-bad);
+}
+
+html.dark .tn-top .tn-ib em.tn-warn {
+    color: #1a0b0a;
+}
+
+html .tn-top .tn-user {
+    order: 7;
+    position: relative;
+    margin-left: 4px;
+}
+
+html .tn-top .tn-user-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 46px;
+    padding: 0 10px 0 5px;
+    border: 0;
+    border-radius: 14px;
+    background: none;
+    color: var(--tenant-ink);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.15s var(--tn-ease);
+}
+
+html .tn-top .tn-user-btn:hover,
+html .tn-top .tn-user-btn[aria-expanded="true"] {
+    background: var(--tn-sky-wash);
+}
+
+html .tn-top .tn-av {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--tn-sky-soft);
+    color: var(--tn-sky-text);
+    font-size: 14.6px;
+    font-weight: 600;
+}
+
+html .tn-top .tn-who {
+    max-width: 180px;
+    text-align: left;
+    line-height: 1.2;
+}
+
+html .tn-top .tn-who b {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15.6px;
+    font-weight: 600;
+}
+
+html .tn-top .tn-who small {
+    color: var(--tenant-muted);
+    font-size: 14.1px;
+}
+
+html .tn-top .tn-user-btn > .tn-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--tenant-muted);
+}
+
+html .tn-top .tn-menu {
+    position: absolute;
+    z-index: 5;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 220px;
+    padding: 8px;
+    border-radius: 16px;
+    background: var(--tenant-surface);
+    box-shadow: var(--tenant-shadow-pop);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.16s var(--tn-ease), transform 0.16s var(--tn-ease), visibility 0s linear 0.16s;
+}
+
+html .tn-top .tn-new .tn-menu {
+    width: 240px;
+}
+
+html .tn-top .tn-user-btn[aria-expanded="true"] + .tn-menu,
+html .tn-top .tn-caret[aria-expanded="true"] + .tn-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+    transition-delay: 0s;
+}
+
+html .tn-top .tn-menu a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    color: var(--tenant-ink-secondary);
+    font-size: 15.6px;
+}
+
+html .tn-top .tn-menu a:hover {
+    background: var(--tn-sky-wash);
+    color: var(--tenant-ink);
+}
+
+html .tn-top .tn-menu a .tn-icon {
+    width: 17px;
+    height: 17px;
+    color: var(--tenant-muted);
+}
+
+html .tn-top .tn-menu a.danger,
+html .tn-top .tn-menu a.danger .tn-icon {
+    color: var(--tn-bad);
+}
+
+@media only screen and (max-width: 767px) {
+    html .tn-content #main-wrapper.content-body {
+        padding-top: 8px;
+    }
+}
+
+@media only screen and (max-width: 760px) {
+    html .header.tn-top {
+        height: 64px;
+        gap: 6px;
+        padding: 0 16px;
+    }
+
+    html .tn-top .tn-search {
+        flex: none;
+        width: 42px;
+        justify-content: center;
+        padding: 0;
+    }
+
+    html .tn-top .tn-search span,
+    html .tn-top .tn-who,
+    html .tn-top .tn-user-btn > .tn-icon,
+    html .tn-top .tn-new > .tn-btn--p:first-child span {
+        display: none;
+    }
+
+    html .tn-top .tn-new > .tn-btn--p:first-child {
+        width: 42px;
+        padding: 0;
+    }
+
+    html .tn-top .tn-user-btn {
+        padding: 0 2px;
+    }
+
+    html .tn-content .content-body {
+        padding: 8px 16px 48px;
+    }
+}
+
+@media only screen and (max-width: 520px) {
+    html.rail-mini {
+        --rw: 64px;
+    }
+
+    /* Phones: the environment pill and the quick-create caret don't fit beside the actions */
+    html .tn-top .tn-env,
+    html .tn-top .tn-new > .tn-caret {
+        display: none;
+    }
+
+    html .tn-top .tn-new > .tn-btn--p:first-child {
+        border-radius: 12px;
+    }
+
+    html .header.tn-top {
+        padding: 0 12px;
+    }
+
+    html.rail-mini:not(.rail-peek) #sidebar-left.rail {
+        padding: 18px 8px 12px;
+    }
+
+    html.rail-mini:not(.rail-peek) #sidebar-left ul.nav-main > li > a.nav-link,
+    html.rail-mini:not(.rail-peek) #sidebar-left .rail-toggle {
+        width: 46px;
+    }
+
+    html .header.tn-top {
+        padding: 0 12px;
+    }
+
+    html .tn-top .tn-moon,
+    html .tn-top .tn-caret {
+        display: none;
+    }
+
+    html .tn-top .tn-new > .tn-btn--p:first-child {
+        border-radius: 11px;
+    }
+
+    html .tn-top .tn-env {
+        padding: 0 10px;
+        font-size: 14.1px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html #sidebar-left *,
+    html #sidebar-left,
+    html .tn-top *,
+    html .tn-content,
+    html .rail-scrim,
+    html .rail-tip {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+@media print {
+    html #sidebar-left.rail,
+    html .header.tn-top,
+    html .rail-scrim,
+    html .rail-tip {
+        display: none !important;
+    }
+
+    html .tn-content {
+        padding-left: 0;
+    }
+}
+
+/* ---------- Content body & page header ---------- */
+html:not(.dashboard-system) .content-body {
+    background-color: var(--tenant-ground);
+}
+
+html .tn-content .page-header {
+    position: static;
+    left: auto;
+    right: auto;
+    top: auto;
+    height: auto;
+    min-height: 50px;
+    margin: 0 0 12px;
+    background-color: var(--tenant-ground);
+    border-bottom: 0;
+    box-shadow: none;
+}
+
+html .tn-content .page-header h2 {
+    border-bottom: 0;
+}
+
+html .tn-content .page-header .breadcrumbs li,
+html .tn-content .page-header .breadcrumbs a,
+html .tn-content .page-header .breadcrumbs span {
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .page-header h2,
+html:not(.dashboard-system) .content-body > h1,
+html:not(.dashboard-system) .content-body > h2 {
+    font-family: var(--tenant-font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--tenant-ink);
+}
+
+/* ---------- Cards & surfaces ---------- */
+html:not(.dashboard-system) .card,
+html:not(.dashboard-system) .panel {
+    border: 0;
+    border-radius: var(--tenant-radius);
+    background-color: var(--tenant-surface);
+    box-shadow: var(--tenant-shadow);
+}
+
+html:not(.dashboard-system) .card-header {
+    border-bottom: 1px solid var(--tenant-hairline);
+    border-radius: var(--tenant-radius) var(--tenant-radius) 0 0;
+    background-color: transparent;
+    padding: 14px 20px;
+    font-weight: 600;
+}
+
+html:not(.dashboard-system) .card-header .card-title {
+    font-size: 17.1px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+html:not(.dashboard-system) .card-body {
+    background-color: transparent;
+    border-radius: 0 0 var(--tenant-radius) var(--tenant-radius);
+}
+
+html:not(.dashboard-system) .card-footer {
+    border-top: 1px solid var(--tenant-hairline);
+    background-color: transparent;
+    border-radius: 0 0 var(--tenant-radius) var(--tenant-radius);
+}
+
+/* ---------- Tables ---------- */
+html:not(.dashboard-system) .table th,
+html:not(.dashboard-system) .el-table th,
+html:not(.dashboard-system) .el-table th.el-table__cell {
+    font-size: 14.1px;
+    font-weight: 600;
+    color: var(--tenant-muted);
+    background-color: var(--tenant-surface);
+    border-bottom: 1px solid var(--tenant-hairline);
+    border-top: 0;
+}
+
+html:not(.dashboard-system) .table td,
+html:not(.dashboard-system) .el-table td {
+    font-size: 15.1px;
+    color: var(--tenant-ink);
+    border-top: 0;
+    border-bottom: 1px solid var(--tenant-hairline);
+    vertical-align: middle;
+}
+
+html:not(.dashboard-system) .el-table th,
+html:not(.dashboard-system) .el-table td,
+html:not(.dashboard-system) .el-table--border th,
+html:not(.dashboard-system) .el-table--border td,
+html:not(.dashboard-system) .table-bordered th,
+html:not(.dashboard-system) .table-bordered td {
+    border-right: 0;
+    border-left: 0;
+}
+
+html:not(.dashboard-system) .el-table,
+html:not(.dashboard-system) .el-table--border {
+    border: 0;
+    background-color: transparent;
+}
+
+html:not(.dashboard-system) .el-table--border::after,
+html:not(.dashboard-system) .el-table--group::after,
+html:not(.dashboard-system) .el-table::before {
+    display: none;
+}
+
+html:not(.dashboard-system) .el-table--enable-row-hover .el-table__body tr:hover > td,
+html:not(.dashboard-system) .table-hover > tbody > tr:hover > td {
+    background-color: var(--tenant-row-hover);
+}
+
+html:not(.dashboard-system) .table-striped > tbody > tr:nth-of-type(odd) > td {
+    background-color: transparent;
+}
+
+/* ---------- Inputs, buttons, dialogs ---------- */
+html:not(.dashboard-system) .el-input__inner,
+html:not(.dashboard-system) .el-textarea__inner,
+html:not(.dashboard-system) .form-control {
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background-color: var(--tenant-surface-subtle);
+    color: var(--tenant-ink);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+html:not(.dashboard-system) .el-input__inner:hover,
+html:not(.dashboard-system) .form-control:hover {
+    border-color: var(--tenant-border-strong);
+}
+
+html:not(.dashboard-system) .el-input__inner:focus,
+html:not(.dashboard-system) .el-textarea__inner:focus,
+html:not(.dashboard-system) .form-control:focus {
+    border-color: var(--tenant-blue);
+    background-color: var(--tenant-surface);
+    box-shadow: 0 0 0 3px var(--tenant-blue-soft);
+}
+
+html:not(.dashboard-system) .el-button {
+    border-radius: 12px;
+    font-family: var(--tenant-font-sans);
+    font-weight: 600;
+}
+
+html:not(.dashboard-system) .el-button--primary,
+html:not(.dashboard-system) .btn-primary {
+    background-color: var(--tenant-blue);
+    border-color: var(--tenant-blue);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) .el-button--primary:hover,
+html:not(.dashboard-system) .el-button--primary:focus,
+html:not(.dashboard-system) .btn-primary:hover,
+html:not(.dashboard-system) .btn-primary:focus {
+    background-color: var(--tenant-blue-hover);
+    border-color: var(--tenant-blue-hover);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) .el-dialog {
+    border-radius: 20px;
+    border: 0;
+    box-shadow: var(--tenant-shadow-pop);
+}
+
+html:not(.dashboard-system) .el-dialog__header {
+    padding: 22px 24px 6px;
+    border-bottom: 0;
+}
+
+html:not(.dashboard-system) .el-dialog__title {
+    font-family: var(--tenant-font-display);
+    font-weight: 600;
+    font-size: 19.5px;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .el-dialog__footer {
+    padding: 8px 24px 22px;
+    border-top: 0;
+}
+
+/* ---------- Module screens: v7 page title, panels, toolbars and controls ---------- */
+/* Page title row: the dashboard shortcut icon goes away, the first crumb becomes the title, the rest a quiet subtitle */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    min-height: 0;
+    margin: 4px 0 20px;
+    padding: 0;
+    background: transparent;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header > h2 {
+    display: none;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs {
+    display: flex;
+    flex: 1 1 320px;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    margin: 0;
+    line-height: 1.2;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li {
+    display: block;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li::after {
+    display: none;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li:first-child,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li:first-child a,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li:first-child span {
+    font-family: var(--tenant-font-display);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li + li,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li + li a,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .breadcrumbs li + li span {
+    font-size: 15.6px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--tenant-muted) !important;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    float: none !important;
+    margin: 0 0 0 auto;
+    position: static;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper > *,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper .btn {
+    margin: 0 !important;
+}
+
+/* Panels: one white surface per screen, generous padding, no Porto stripes */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card {
+    margin-bottom: 20px;
+    border-radius: 22px;
+    overflow: visible;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card.mb-0 {
+    margin-bottom: 0;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card > .card-body,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card > .tab-content {
+    padding: 22px 24px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header.bg-info,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header.bg-primary {
+    background: transparent !important;
+    color: var(--tenant-ink) !important;
+    border-bottom: 0;
+    padding: 20px 24px 4px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header h3,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header h4,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header .card-title,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header.bg-info h3,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header.bg-info h4 {
+    margin: 0;
+    font-family: var(--tenant-font-display);
+    font-size: 19.5px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--tenant-ink) !important;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-header .card-actions {
+    top: 18px;
+    right: 20px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card-footer,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px 22px;
+    margin: 0;
+    border-top: 0;
+    background: transparent;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .form-actions .btn,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .form-actions .el-button {
+    margin: 0;
+}
+
+/* "Mostrar/Ocultar columnas": the legacy rule floats it absolutely over the filter row and table header.
+   Put it in normal flow as a quiet control on its own line, aligned to the card's right padding. */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .data-table-visible-columns {
+    position: static;
+    display: flex;
+    justify-content: flex-end;
+    padding: 20px 24px 0;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .data-table-visible-columns + .card-body {
+    padding-top: 12px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .data-table-visible-columns .el-button {
+    height: 38px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 12px;
+    background-color: var(--tenant-surface-subtle);
+    color: var(--tenant-ink-secondary);
+    box-shadow: none;
+    font-size: 14.6px;
+    font-weight: 600;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .data-table-visible-columns .el-button:hover,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .data-table-visible-columns .el-button:focus {
+    background-color: var(--tenant-blue-soft);
+    color: var(--tenant-blue);
+}
+
+/* Company block on invoice-style forms: the 700x300 placeholder is noise when no logo is set */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .invoice img[src*="700x300"],
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .invoice img[src*="placehold"] {
+    display: none;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .invoice > form > .row:first-child,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .invoice > .row:first-child {
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--tenant-hairline);
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) hr {
+    border-top-color: var(--tenant-hairline);
+}
+
+/* Labels */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .control-label,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .form-group > label,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-form-item__label {
+    margin-bottom: 6px;
+    font-size: 14.6px;
+    font-weight: 500;
+    color: var(--tenant-ink-secondary);
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .control-label a,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .control-label .text-info,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) a.text-info,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .text-info {
+    color: var(--tenant-blue) !important;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .form-group {
+    margin-bottom: 16px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-input__inner,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .form-control {
+    height: 40px;
+    line-height: 40px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-input--small .el-input__inner {
+    height: 34px;
+    line-height: 34px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-input-group__append,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-input-group__prepend {
+    border: 0;
+    border-radius: 12px;
+    background-color: var(--tenant-hairline);
+    color: var(--tenant-ink-secondary);
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-input-group--append .el-input__inner {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-input-group--prepend .el-input__inner {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+/* Tables: a tinted header band with rounded ends instead of grey stripes and rules */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table {
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 8px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > thead > tr > th,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .el-table th.el-table__cell {
+    padding: 11px 14px;
+    background-color: var(--tenant-surface-subtle);
+    border: 0;
+    font-size: 14.1px;
+    font-weight: 600;
+    color: var(--tenant-muted);
+    white-space: nowrap;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > thead > tr > th:first-child {
+    border-radius: 12px 0 0 12px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > thead > tr > th:last-child {
+    border-radius: 0 12px 12px 0;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > tbody > tr > td {
+    padding: 12px 14px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > tbody > tr:last-child > td {
+    border-bottom: 0;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table-responsive {
+    border: 0;
+}
+
+/* Action columns (marked by tenant-tables.js): shrink to the buttons and centre title and buttons together,
+   instead of floating at the far edge with a gap on the left */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > thead > tr > th[data-tn-actions],
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > tbody > tr > td[data-tn-actions] {
+    width: 1%;
+    text-align: center !important;
+    white-space: nowrap;
+}
+
+/* Buttons: Porto teal and waves give way to the portal blue; small row actions become soft tinted chips */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn {
+    border-radius: 12px;
+    font-family: var(--tenant-font-sans);
+    font-weight: 600;
+    box-shadow: none;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-sm {
+    padding: 8px 14px;
+    font-size: 14.6px;
+}
+
+html:not(.dashboard-system) .btn-custom,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-info:not(.btn-xs) {
+    background-color: var(--tenant-blue);
+    border-color: var(--tenant-blue);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) .btn-custom:hover,
+html:not(.dashboard-system) .btn-custom:focus,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-info:not(.btn-xs):hover {
+    background-color: var(--tenant-blue-hover);
+    border-color: var(--tenant-blue-hover);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 10px;
+    font-size: 14.1px;
+    line-height: 30px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-danger {
+    background-color: rgba(224, 93, 93, 0.12);
+    color: #c24545;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-danger:hover {
+    background-color: #e05d5d;
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-info,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-primary {
+    background-color: var(--tenant-blue-soft);
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-info:hover,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-primary:hover {
+    background-color: var(--tenant-blue);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-success {
+    background-color: rgba(20, 128, 74, 0.12);
+    color: #14804a;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-success:hover {
+    background-color: #14804a;
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-xs.btn-warning {
+    background-color: rgba(233, 162, 59, 0.16);
+    color: #a8670f;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-default,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-secondary,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-light {
+    background-color: var(--tenant-surface);
+    border: 1px solid var(--tenant-border);
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-default:hover,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-secondary:hover,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn-light:hover {
+    background-color: var(--tenant-surface-subtle);
+    border-color: var(--tenant-border-strong);
+}
+
+html:not(.dashboard-system) .waves-ripple {
+    display: none !important;
+}
+
+html:not(.dashboard-system) .el-button--default,
+html:not(.dashboard-system) .el-button:not([class*="el-button--"]) {
+    border-color: var(--tenant-border);
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .el-button--default:hover,
+html:not(.dashboard-system) .el-button:not([class*="el-button--"]):hover {
+    background-color: var(--tenant-surface-subtle);
+    border-color: var(--tenant-border-strong);
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-button--danger {
+    background-color: #e05d5d;
+    border-color: #e05d5d;
+}
+
+html:not(.dashboard-system) .el-button--text {
+    color: var(--tenant-blue);
+}
+
+/* Inline "[+ Agregar …]" links read as quiet blue actions */
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) a:not(.btn):not(.nav-link):not(.dropdown-item) {
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
+    color: var(--tenant-blue-hover);
+}
+
+/* Switches, checkboxes, radios, tabs, collapse, pagination, tags */
+html:not(.dashboard-system) .el-switch.is-checked .el-switch__core {
+    background-color: var(--tenant-blue);
+    border-color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-switch__label.is-active {
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-checkbox__inner,
+html:not(.dashboard-system) .el-radio__inner {
+    border-color: var(--tenant-border-strong);
+    border-radius: 5px;
+}
+
+html:not(.dashboard-system) .el-radio__inner {
+    border-radius: 50%;
+}
+
+html:not(.dashboard-system) .el-checkbox__input.is-checked .el-checkbox__inner,
+html:not(.dashboard-system) .el-checkbox__input.is-indeterminate .el-checkbox__inner,
+html:not(.dashboard-system) .el-radio__input.is-checked .el-radio__inner {
+    background-color: var(--tenant-blue);
+    border-color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-checkbox__input.is-checked + .el-checkbox__label,
+html:not(.dashboard-system) .el-radio__input.is-checked + .el-radio__label {
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .el-checkbox__label,
+html:not(.dashboard-system) .el-radio__label {
+    color: var(--tenant-ink-secondary);
+    font-weight: 500;
+}
+
+html:not(.dashboard-system) .el-tabs__nav-wrap::after {
+    height: 0;
+}
+
+html:not(.dashboard-system) .el-tabs__item {
+    font-weight: 600;
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .el-tabs__item.is-active,
+html:not(.dashboard-system) .el-tabs__item:hover {
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-tabs__active-bar {
+    height: 3px;
+    border-radius: 3px;
+    background-color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-tabs--border-card {
+    border: 0;
+    border-radius: 18px;
+    box-shadow: none;
+    background-color: var(--tenant-surface);
+}
+
+html:not(.dashboard-system) .el-tabs--border-card > .el-tabs__header {
+    border: 0;
+    border-radius: 18px 18px 0 0;
+    background-color: var(--tenant-surface-subtle);
+}
+
+html:not(.dashboard-system) .el-tabs--border-card > .el-tabs__header .el-tabs__item {
+    border: 0;
+}
+
+html:not(.dashboard-system) .el-tabs--border-card > .el-tabs__header .el-tabs__item.is-active {
+    background-color: var(--tenant-surface);
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-collapse,
+html:not(.dashboard-system) .el-collapse-item__header,
+html:not(.dashboard-system) .el-collapse-item__wrap {
+    border-color: transparent;
+    background-color: transparent;
+}
+
+html:not(.dashboard-system) .el-collapse-item__header {
+    height: 44px;
+    padding: 0 14px;
+    border-radius: 12px;
+    background-color: var(--tenant-surface-subtle);
+    font-weight: 600;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .el-collapse-item__content {
+    padding: 16px 4px 8px;
+}
+
+html:not(.dashboard-system) .el-pagination.is-background .el-pager li,
+html:not(.dashboard-system) .el-pagination.is-background .btn-prev,
+html:not(.dashboard-system) .el-pagination.is-background .btn-next {
+    border-radius: 10px;
+    background-color: var(--tenant-surface-subtle);
+    color: var(--tenant-ink-secondary);
+}
+
+html:not(.dashboard-system) .el-pagination.is-background .el-pager li:not(.disabled).active,
+html:not(.dashboard-system) .page-item.active .page-link {
+    background-color: var(--tenant-blue);
+    border-color: var(--tenant-blue);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) .el-pager li.active,
+html:not(.dashboard-system) .el-pager li:hover {
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-tag {
+    border: 0;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+html:not(.dashboard-system) .badge {
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+html:not(.dashboard-system) .el-select-dropdown,
+html:not(.dashboard-system) .el-picker-panel,
+html:not(.dashboard-system) .el-dropdown-menu,
+html:not(.dashboard-system) .el-autocomplete-suggestion,
+html:not(.dashboard-system) .dropdown-menu {
+    border: 0;
+    border-radius: 14px;
+    box-shadow: var(--tenant-shadow-pop);
+}
+
+html:not(.dashboard-system) .el-select-dropdown__item.selected,
+html:not(.dashboard-system) .el-dropdown-menu__item:hover,
+html:not(.dashboard-system) .dropdown-item:hover {
+    color: var(--tenant-blue);
+    background-color: var(--tenant-surface-subtle);
+}
+
+html:not(.dashboard-system) .el-dialog__body {
+    padding: 20px 22px;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .el-dialog__headerbtn .el-dialog__close:hover {
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-message-box {
+    border: 0;
+    border-radius: 18px;
+    box-shadow: var(--tenant-shadow-pop);
+}
+
+@media (max-width: 767px) {
+    html:not(.dashboard-system) .tn-content .content-body {
+        padding: 8px 14px 48px;
+    }
+
+    html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper {
+        justify-content: flex-start;
+        margin-left: 0;
+    }
+
+    html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card > .card-body,
+    html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .card > .tab-content {
+        padding: 16px;
+    }
+}
+
+
+/* Status pills: Bootstrap solid badges become soft tinted pills. Order matters, rows carry bg-secondary plus the state class. */
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 13.2px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.3;
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-secondary,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-secondary {
+    background-color: #eef2f8 !important;
+    color: #3a4a60 !important;
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-info,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-primary,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-info,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-primary {
+    background-color: rgba(47, 111, 223, 0.12) !important;
+    color: #2559bd !important;
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-success,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-success {
+    background-color: rgba(20, 128, 74, 0.12) !important;
+    color: #14804a !important;
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-warning,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-warning {
+    background-color: rgba(233, 162, 59, 0.18) !important;
+    color: #8a560c !important;
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-danger,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-danger {
+    background-color: rgba(224, 93, 93, 0.13) !important;
+    color: #b83b3b !important;
+}
+
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.bg-dark,
+html:not(.dashboard-system) :is(.content-body, .el-dialog__wrapper) .badge.badge-dark {
+    background-color: rgba(14, 27, 46, 0.1) !important;
+    color: #0e1b2e !important;
+}
+
+html.dark:not(.dashboard-system) .content-body .badge.bg-secondary,
+html.dark:not(.dashboard-system) .el-dialog__wrapper .badge.bg-secondary {
+    background-color: var(--tenant-surface-subtle) !important;
+    color: var(--tenant-ink-secondary) !important;
+}
+
+html.dark:not(.dashboard-system) .content-body .badge.bg-dark,
+html.dark:not(.dashboard-system) .el-dialog__wrapper .badge.bg-dark {
+    background-color: var(--tenant-surface-subtle) !important;
+    color: var(--tenant-ink) !important;
+}
+
+/* Page title actions read as text buttons; the Font Awesome glyphs clash with the rail icons */
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper .btn > i.fa,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper .btn > i.fas,
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .page-header .right-wrapper .btn > i.far {
+    display: none;
+}
+
+/* Section headings inside list cards ("Filtros de búsqueda", "Listado de …") */
+html:not(.dashboard-system) .content-body .card h4.card-title,
+html:not(.dashboard-system) .content-body .card > .card-body > h4,
+html:not(.dashboard-system) .content-body .card > .card-body > h3 {
+    font-family: var(--tenant-font-display);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--tenant-ink);
+}
+
+
+/* Pagination: every page is a soft chip, the current one is solid blue */
+html:not(.dashboard-system) .el-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 0 4px;
+    font-weight: 500;
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .el-pagination .el-pager {
+    display: inline-flex;
+    gap: 4px;
+}
+
+html:not(.dashboard-system) .el-pagination .el-pager li,
+html:not(.dashboard-system) .el-pagination button.btn-prev,
+html:not(.dashboard-system) .el-pagination button.btn-next {
+    min-width: 32px;
+    height: 32px;
+    line-height: 32px;
+    margin: 0;
+    padding: 0 8px;
+    border-radius: 10px;
+    background-color: transparent;
+    color: var(--tenant-ink-secondary);
+    font-size: 14.6px;
+}
+
+html:not(.dashboard-system) .el-pagination .el-pager li:not(.active):hover,
+html:not(.dashboard-system) .el-pagination button.btn-prev:not(:disabled):hover,
+html:not(.dashboard-system) .el-pagination button.btn-next:not(:disabled):hover {
+    background-color: var(--tenant-surface-subtle);
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .el-pagination .el-pager li.active {
+    background-color: var(--tenant-blue);
+    color: #ffffff;
+    cursor: default;
+}
+
+html:not(.dashboard-system) .el-pagination .el-pagination__total {
+    margin-right: 8px;
+    color: var(--tenant-muted);
+}
+
+
+/* ---------- POS ---------- */
+/* Category tiles: white panels with the category colour reduced to a small dot */
+html:not(.dashboard-system) .tn-pos .card:has(> .tn-pos-cat) {
+    margin-bottom: 14px;
+    box-shadow: none;
+    background: transparent;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cat,
+html:not(.dashboard-system) .tn-pos .card > .card-body.tn-pos-cat {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 60px;
+    padding: 12px 16px 12px 34px;
+    border-radius: 16px;
+    background: var(--tenant-surface);
+    box-shadow: var(--tenant-shadow);
+    color: var(--tenant-ink);
+    font-size: 16.1px;
+    font-weight: 600;
+    line-height: 1.3;
+    hyphens: none;
+    overflow-wrap: normal;
+    word-break: normal;
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cat::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 16px;
+    width: 9px;
+    height: 9px;
+    margin-top: -4.5px;
+    border-radius: 50%;
+    background: var(--cat, var(--tenant-blue));
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cat:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--tenant-shadow-pop);
+}
+
+html:not(.dashboard-system) .tn-pos .testimonial-group .tn-pos-cat {
+    min-height: 0;
+    margin: 0 8px 8px 0;
+    padding: 10px 14px 10px 30px;
+    font-size: 15.1px;
+}
+
+html:not(.dashboard-system) .tn-pos .testimonial-group .tn-pos-cat::before {
+    left: 14px;
+}
+
+/* Loading overlay: translucent so the POS layout stays visible instead of a solid white flash */
+html:not(.dashboard-system) .tn-pos .el-loading-mask {
+    background-color: color-mix(in srgb, var(--tenant-ground, #f1f4f9) 55%, transparent);
+    transition: opacity 0.2s ease;
+}
+
+html.dark:not(.dashboard-system) .tn-pos .el-loading-mask {
+    background-color: color-mix(in srgb, var(--tenant-ground, #0f1a2c) 55%, transparent);
+}
+
+/* Selected category tab */
+html:not(.dashboard-system) .tn-pos .testimonial-group .tn-pos-cat.is-active {
+    background: var(--tenant-surface-subtle);
+    box-shadow: inset 0 0 0 1.5px var(--cat, var(--tenant-blue)), var(--tenant-shadow);
+}
+
+/* Product cards */
+html:not(.dashboard-system) .tn-pos .card > .card-body.pointer:not(.tn-pos-cat) {
+    border-radius: 16px;
+    transition: background-color 0.16s ease;
+}
+
+html:not(.dashboard-system) .tn-pos .card > .card-body.pointer:not(.tn-pos-cat):hover {
+    background-color: var(--tenant-surface-subtle);
+}
+
+/* Product cards: price as blue text, actions as a quiet icon row, no "no image" placeholder */
+html:not(.dashboard-system) .tn-pos img[src*="imagen-no-disponible"] {
+    display: none;
+}
+
+html:not(.dashboard-system) .tn-pos .card-footer.bg-primary {
+    padding: 8px 14px;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .tn-pos .card-footer.bg-primary .text-white,
+html:not(.dashboard-system) .tn-pos .card-footer.bg-primary h5,
+html:not(.dashboard-system) .tn-pos .card-footer.bg-primary h4 {
+    color: var(--tenant-blue) !important;
+    font-family: var(--tenant-font-display);
+    font-weight: 600;
+}
+
+html:not(.dashboard-system) .tn-pos .card-footer.bg-primary.btn-group {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px 12px;
+}
+
+html:not(.dashboard-system) .tn-pos .card-footer .btn-primary-pos,
+html:not(.dashboard-system) .tn-pos .card-footer .btn-default {
+    flex: 1 1 0;
+    height: 30px;
+    border: 0;
+    border-radius: 10px;
+    background-color: var(--tenant-surface-subtle) !important;
+    color: var(--tenant-muted) !important;
+    box-shadow: none;
+}
+
+html:not(.dashboard-system) .tn-pos .card-footer .btn-primary-pos:hover,
+html:not(.dashboard-system) .tn-pos .card-footer .btn-default:hover {
+    background-color: var(--tenant-blue-soft) !important;
+    color: var(--tenant-blue) !important;
+}
+
+html:not(.dashboard-system) .tn-pos .card-footer.bg-primary .btn-primary-pos {
+    background-color: transparent !important;
+    color: var(--tenant-muted) !important;
+}
+
+/* Cart column */
+html:not(.dashboard-system) .tn-pos .tn-pos-cart {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 22px;
+    background: var(--tenant-surface);
+    box-shadow: var(--tenant-shadow);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .bg-light {
+    background-color: transparent !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .border-top,
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .border-bottom {
+    border-color: var(--tenant-hairline) !important;
+}
+
+/* The cart fills the viewport under the toolbar: lines scroll, totals and Cobrar stay in view.
+   Bootstrap's h-75/h-25/h-50 (!important) split left a giant, clipped pay button; flex replaces it. */
+html:not(.dashboard-system) .tn-pos .tn-pos-cart {
+    height: calc(100vh - var(--tenant-header-h) - 92px) !important;
+    min-height: 460px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-75 {
+    flex: 1 1 auto;
+    height: auto !important;
+    min-height: 0;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-25 {
+    flex: 0 0 auto;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 14px 16px 16px;
+    border-top: 1px solid var(--tenant-hairline);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-25 > .row {
+    height: auto !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-25 > .row:first-child {
+    padding: 0 0 12px !important;
+    border: 0 !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-25 > .row:first-child > [class*="col-"] {
+    padding: 0;
+    align-items: stretch !important;
+}
+
+/* Cart header: client picker and its three actions share one height */
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-75 > .row:first-child {
+    align-items: center;
+    padding: 16px 10px 10px !important;
+    border: 0 !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-75 > .row:first-child > [class*="col-"] {
+    padding: 0 6px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .el-select {
+    display: block;
+    width: 100%;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-75 > .row:first-child .el-input__inner {
+    height: 38px;
+    line-height: 38px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .btn-group {
+    gap: 6px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .btn-group > .btn,
+html:not(.dashboard-system) .tn-pos .pos-list-items .btn-default {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px !important;
+    background-color: var(--tenant-surface-subtle);
+    color: var(--tenant-ink-secondary);
+    box-shadow: none;
+    font-size: 14.6px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .btn-group > .btn:hover {
+    background-color: var(--tenant-blue-soft);
+    color: var(--tenant-blue);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-cart .btn:has(> .fa-trash):hover {
+    background-color: rgba(224, 93, 93, 0.12);
+    color: #c24545;
+}
+
+/* Cart lines: readable product names, numbers right-aligned on one baseline, quiet delete */
+html:not(.dashboard-system) .tn-pos .tn-pos-cart > .h-75 > .row + .row {
+    padding: 0 4px !important;
+    border: 0 !important;
+}
+
+html:not(.dashboard-system) .tn-pos .pos-list-items td {
+    padding: 8px 4px;
+    vertical-align: middle !important;
+}
+
+html:not(.dashboard-system) .tn-pos .pos-list-items .pos-list-label {
+    padding-top: 0;
+    font-size: 12.7px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .tn-pos .pos-list-items .item-description {
+    margin: 0;
+    font-size: 14.6px;
+    line-height: 1.35;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .tn-pos .pos-list-items small {
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .tn-pos .pos-list-items .el-input__inner {
+    height: 32px;
+    line-height: 32px;
+    padding: 0 8px;
+    font-size: 14.6px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+html:not(.dashboard-system) .tn-pos .pos-list-items .btn-default {
+    width: 32px;
+    height: 32px;
+    background-color: transparent;
+    color: var(--tenant-muted);
+}
+
+/* Totals: label left, amount right, no stray colon column or teal */
+html:not(.dashboard-system) .tn-pos .tn-pos-totals {
+    width: 100%;
+    font-variant-numeric: tabular-nums;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-totals td {
+    padding: 3px 0;
+    font-size: 14.6px;
+    font-weight: 500 !important;
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-totals td:nth-child(2) {
+    display: none;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-totals td:last-child {
+    text-align: right;
+    font-weight: 600 !important;
+    color: var(--tenant-ink) !important;
+}
+
+/* Cobrar: one comfortable bar, label left and amount right */
+html:not(.dashboard-system) .tn-pos .tn-pos-pay {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    height: auto !important;
+    min-height: 56px;
+    margin: 0 !important;
+    padding: 0 20px !important;
+    border-radius: 16px;
+    font-family: var(--tenant-font-sans);
+    font-variant-numeric: tabular-nums;
+    transition: background-color 0.16s ease;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay > [class*="col-"] {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+    padding: 0;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay > :first-child {
+    text-align: left !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay > :last-child {
+    text-align: right !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay > :last-child .h5 {
+    font-family: var(--tenant-font-display);
+    font-size: 20.5px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay.is-ready {
+    background-color: var(--tenant-blue);
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay.is-ready:hover {
+    background-color: var(--tenant-blue-hover);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay.is-empty {
+    background-color: var(--tenant-surface-subtle);
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-pay .h5 {
+    margin: 0;
+    color: inherit;
+    font-size: 18px;
+}
+
+/* Toolbar row on top of the POS */
+html:not(.dashboard-system) .tn-pos > .page-header h2 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    line-height: 1.4;
+    font-size: 16.6px;
+    color: var(--tenant-ink);
+    float: none;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header {
+    flex-wrap: nowrap;
+    margin: 0 0 18px;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header > [class*="col-"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header .btn {
+    margin: 0 !important;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header .btn-custom {
+    min-width: 38px;
+    height: 38px;
+}
+
+/* Payment step: the order summary column matches the cart (same card, same row type, blue total bar) */
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--tenant-header-h) - 92px) !important;
+    min-height: 460px;
+    overflow: hidden;
+    border-radius: 22px;
+    background: var(--tenant-surface) !important;
+    box-shadow: var(--tenant-shadow);
+    font-variant-numeric: tabular-nums;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 {
+    flex: 1 1 auto;
+    height: auto !important;
+    min-height: 0;
+    padding: 6px 4px;
+    background: transparent !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row {
+    align-items: center;
+    padding: 10px 12px !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row:first-child h4 {
+    font-size: 16.6px;
+    font-weight: 600;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row h4 {
+    font-family: var(--tenant-font-sans);
+    font-size: 14.6px;
+    font-weight: 500 !important;
+    line-height: 1.35;
+    color: var(--tenant-ink);
+}
+
+/* Quantity · name · amount */
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row > :first-child {
+    flex: 0 0 40px;
+    max-width: 40px;
+    padding: 0;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row > :first-child h4 {
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row > :nth-child(2) {
+    flex: 1 1 0;
+    max-width: none;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row > :nth-child(2) h4 {
+    text-align: left !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row > :last-child {
+    flex: 0 0 auto;
+    max-width: none;
+    padding: 0 0 0 12px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt > .h-75 > .row + .row > :last-child h4 {
+    text-align: right !important;
+    font-weight: 600 !important;
+    white-space: nowrap;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-foot {
+    flex: 0 0 auto;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 14px 16px 16px;
+    border-top: 1px solid var(--tenant-hairline);
+    background: transparent !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-foot > .row {
+    height: auto !important;
+    background: transparent !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-foot > .row:not(.tn-pos-receipt-total) > [class*="col-"] {
+    padding: 3px 0;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-foot > .row:not(.tn-pos-receipt-total) p {
+    font-size: 14.6px;
+    font-weight: 500 !important;
+    color: var(--tenant-muted);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-foot > .row:not(.tn-pos-receipt-total) > :last-child p {
+    font-weight: 600 !important;
+    color: var(--tenant-ink);
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-total {
+    min-height: 56px;
+    margin-top: 12px !important;
+    padding: 0 20px !important;
+    border-radius: 16px;
+    background-color: var(--tenant-blue) !important;
+    color: #ffffff;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-total > [class*="col-"] {
+    padding: 0;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-total p {
+    font-size: 18px;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-receipt-total > :last-child p {
+    font-family: var(--tenant-font-display);
+    font-size: 20.5px;
+}
+
+/* Toolbar: barcode switch and view buttons read as one group on the left, exchange rate on the right */
+html:not(.dashboard-system) .tn-pos > .page-header {
+    align-items: center;
+    gap: 20px;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header > .tn-pos-bar-search,
+html:not(.dashboard-system) .tn-pos > .page-header > .tn-pos-bar-views {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header > .tn-pos-bar-views {
+    gap: 6px;
+}
+
+html:not(.dashboard-system) .tn-pos > .page-header > .tn-pos-bar-meta {
+    flex: 1 1 auto;
+    max-width: none;
+    justify-content: flex-end;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-bar-views .btn-custom {
+    width: 38px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background-color: var(--tenant-surface) !important;
+    color: var(--tenant-ink-secondary) !important;
+    box-shadow: var(--tenant-shadow);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-bar-views .btn-custom:hover:not(:disabled) {
+    background-color: var(--tenant-blue-soft) !important;
+    color: var(--tenant-blue) !important;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-bar-views .btn-custom:disabled {
+    opacity: 0.45;
+    box-shadow: none;
+    cursor: default;
+}
+
+html:not(.dashboard-system) .tn-pos .tn-pos-rate {
+    padding: 7px 14px !important;
+    border-radius: 999px;
+    background: var(--tenant-surface);
+    font-size: 14.6px !important;
+    font-weight: 600;
+    color: var(--tenant-muted) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Dark mode surfaces ---------- */
+html.dark:not(.dashboard-system) .card,
+html.dark:not(.dashboard-system) .card-header,
+html.dark:not(.dashboard-system) .card-footer {
+    background-color: var(--tenant-surface);
+    border-color: var(--tenant-hairline);
+    color: var(--tenant-ink);
+}
+
+html.dark:not(.dashboard-system) .card-body {
+    background-color: var(--tenant-surface);
+    color: var(--tenant-ink);
+}
+
+html.dark:not(.dashboard-system) .el-table,
+html.dark:not(.dashboard-system) .el-table tr,
+html.dark:not(.dashboard-system) .el-table td,
+html.dark:not(.dashboard-system) .el-table__expanded-cell {
+    background-color: var(--tenant-surface);
+    border-color: var(--tenant-hairline);
+    color: var(--tenant-ink);
+}
+
+html.dark:not(.dashboard-system) .el-table th,
+html.dark:not(.dashboard-system) .el-table th.el-table__cell {
+    background-color: var(--tenant-surface);
+    border-color: var(--tenant-hairline);
+    color: var(--tenant-muted);
+}
+
+html.dark:not(.dashboard-system) .el-table--enable-row-hover .el-table__body tr:hover > td {
+    background-color: var(--tenant-row-hover);
+}
+
+html.dark:not(.dashboard-system) .table > thead > tr > th,
+html.dark:not(.dashboard-system) .table > tbody > tr > th {
+    background-color: var(--tenant-surface);
+    border-color: var(--tenant-hairline);
+    color: var(--tenant-muted);
+}
+
+html.dark:not(.dashboard-system) .table > tbody > tr > td,
+html.dark:not(.dashboard-system) .table > tfoot > tr > td {
+    background-color: var(--tenant-surface);
+    border-color: var(--tenant-hairline);
+    color: var(--tenant-ink);
+}
+
+html.dark:not(.dashboard-system) .el-input__inner,
+html.dark:not(.dashboard-system) .el-textarea__inner,
+html.dark:not(.dashboard-system) .form-control {
+    background-color: var(--tenant-surface-subtle);
+    border-color: transparent;
+    color: var(--tenant-ink);
+}
+
+html.dark:not(.dashboard-system) .el-input__inner::placeholder,
+html.dark:not(.dashboard-system) .form-control::placeholder {
+    color: var(--tenant-muted);
+}
+
+html.dark:not(.dashboard-system) .el-dialog,
+html.dark:not(.dashboard-system) .el-dialog__header,
+html.dark:not(.dashboard-system) .el-dialog__body,
+html.dark:not(.dashboard-system) .el-dialog__footer {
+    background-color: var(--tenant-surface);
+    border-color: var(--tenant-hairline);
+    color: var(--tenant-ink);
+}
+
+html.dark:not(.dashboard-system) .page-header,
+html.dark:not(.dashboard-system) .content-body {
+    background-color: var(--tenant-ground);
+}
+
+html.dark:not(.dashboard-system) .tn-content .table > thead > tr > th,
+html.dark:not(.dashboard-system) .tn-content .el-table th.el-table__cell,
+html.dark:not(.dashboard-system) .el-collapse-item__header {
+    background-color: var(--tenant-surface-subtle);
+}
+
+
+/* ===== Buscador global del header (KeraAI) ===== */
+html .tn-top .tn-search-wrap {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+    max-width: 420px;
+    position: relative;
+}
+html .tn-top .tn-search-wrap .tn-search {
+    width: 100%;
+    max-width: none;
+    cursor: text;
+    overflow: visible;
+}
+html .tn-top .tn-search-wrap.is-focused .tn-search,
+html .tn-top .tn-search-wrap .tn-search:focus-within {
+    box-shadow: 0 0 0 1px var(--tenant-border, #d8dce3);
+}
+html .tn-top .tn-search-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--tenant-text, #2b2f38);
+    font-size: 15.6px;
+    line-height: 42px;
+}
+html .tn-top .tn-search-input::placeholder { color: var(--tenant-muted, #8b93a1); opacity: 1; }
+html .tn-top .tn-search-input::-webkit-search-cancel-button { display: none; }
+html .tn-top .tn-search-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 1400;
+    background: var(--tenant-surface, #fff);
+    border: 1px solid var(--tenant-border, #e4e8ef);
+    border-radius: 14px;
+    box-shadow: 0 18px 44px rgba(20, 28, 45, .16), 0 2px 8px rgba(20, 28, 45, .06);
+    color: var(--tenant-text, #2b2f38);
+    overflow: hidden;
+}
+html .tn-top .tn-search-panel[hidden] { display: none; }
+html .tn-top .tn-search-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    font-size: 13.7px;
+    color: var(--tenant-muted, #8b93a1);
+    border-bottom: 1px solid var(--tenant-border, #eef1f6);
+}
+html .tn-top .tn-search-close {
+    border: 0;
+    background: transparent;
+    color: var(--tenant-muted, #8b93a1);
+    font-size: 21px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+}
+html .tn-top .tn-search-body { max-height: min(60vh, 480px); overflow-y: auto; padding: 6px; }
+html .tn-top .tn-search-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    color: var(--tenant-text, #2b2f38);
+    text-decoration: none;
+    cursor: pointer;
+}
+html .tn-top .tn-search-item:hover,
+html .tn-top .tn-search-item.is-active {
+    background: var(--tenant-hover, #f3f6fb);
+    color: var(--tenant-text, #2b2f38);
+    text-decoration: none;
+}
+html .tn-top .tn-search-item-ico {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--tenant-hover, #f3f6fb);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+html .tn-top .tn-search-item-ico svg { width: 17px; height: 17px; }
+html .tn-top .tn-search-item-txt { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+html .tn-top .tn-search-item-title { font-size: 15.1px; font-weight: 600; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html .tn-top .tn-search-item-sub { font-size: 13.2px; line-height: 15px; color: var(--tenant-muted, #8b93a1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html .tn-top .tn-search-empty { padding: 18px 12px; font-size: 14.6px; color: var(--tenant-muted, #8b93a1); text-align: center; }
+html .tn-top .tn-search-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--tenant-border, #eef1f6);
+    font-size: 12.7px;
+    color: var(--tenant-muted, #8b93a1);
+}
+html .tn-top .tn-search-foot kbd {
+    display: inline-block;
+    min-width: 16px;
+    padding: 1px 4px;
+    margin: 0 1px;
+    border: 1px solid var(--tenant-border, #e4e8ef);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--tenant-surface, #fff);
+    font-family: inherit;
+    font-size: 11.7px;
+    line-height: 13px;
+    text-align: center;
+}
+html .tn-top .tn-search-brand { font-weight: 700; letter-spacing: .02em; }
+@media only screen and (max-width: 760px) {
+    html .tn-top .tn-search-wrap { position: static; flex: 0 0 auto; }
+    html .tn-top .tn-search-wrap .tn-search { width: 42px; padding: 0; justify-content: center; }
+    html .tn-top .tn-search-wrap .tn-search-input { display: none; }
+    html .tn-top .tn-search-wrap.is-open .tn-search { box-shadow: 0 0 0 1px var(--tenant-border, #d8dce3); }
+    html .tn-top .tn-search-wrap.is-open .tn-search-input {
+        display: block;
+        position: fixed;
+        top: 72px;
+        left: 12px;
+        right: 12px;
+        height: 46px;
+        padding: 0 16px;
+        border-radius: 12px;
+        background: var(--tenant-surface, #fff);
+        box-shadow: 0 12px 34px rgba(20, 28, 45, .18);
+        z-index: 1401;
+    }
+    html .tn-top .tn-search-panel { position: fixed; top: 126px; left: 12px; right: 12px; }
+}
+
+/* ---- Larger base text (tenant panel) ----
+   Porto sets body at 13px and Element UI controls at 13-14px; bump the unstyled baseline so
+   every screen reads larger, not only the components restyled above. */
+html:not(.dashboard-system) body {
+    font-size: 14.6px;
+    line-height: 22px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper, .el-popper, .el-select-dropdown) :is(
+    .el-input__inner, .el-textarea__inner, .el-button, .el-select-dropdown__item, .el-dropdown-menu__item,
+    .el-radio__label, .el-checkbox__label, .el-tabs__item, .el-pagination, .el-pagination__total,
+    .el-pagination span:not([class*="el-icon"]), .el-date-table td, .el-date-picker__header-label,
+    .el-form-item__content, .el-message-box__message, .el-collapse-item__header, .el-menu-item,
+    .el-autocomplete-suggestion li, .el-cascader-node, .el-switch__label, .el-tag, .el-upload__text
+) {
+    font-size: 15.1px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) :is(
+    .table td, .table th, .form-control, .btn, .dropdown-menu > li > a, .nav-tabs > li > a, label, .help-block
+) {
+    font-size: 14.6px;
+}
+
+html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) :is(.el-input--small .el-input__inner, .el-button--small, .el-table--small td) {
+    font-size: 14.1px;
+}
+
+html:not(.dashboard-system) .el-dialog__body,
+html:not(.dashboard-system) .el-checkbox__label,
+html:not(.dashboard-system) .el-table {
+    font-size: 14.6px;
+}
+
+/* ---- Settings / reports link cards ---- */
+html:not(.dashboard-system) .card-reports .card-title {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 14px;
+}
+
+html:not(.dashboard-system) .card-reports .card-report-links {
+    padding-left: 22px;
+    margin-bottom: 0;
+}
+
+html:not(.dashboard-system) .card-reports .card-report-links li {
+    font-size: 14.5px;
+    line-height: 1.4;
+    padding: 4px 0;
+}
+
+html:not(.dashboard-system) .card-reports .card-report-links a {
+    font-size: inherit;
+}

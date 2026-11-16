@@ -1,104 +1,149 @@
 <template>
-    <div>
-        <header class="page-header">
-            <h2><a href="/dashboard"><i class="fa fa-list-alt"></i></a></h2>
-            <ol class="breadcrumbs">
-                <li class="active"><span>Planes</span></li>
-            </ol>
-            <div class="right-wrapper pull-right">
-                <button type="button" class="btn btn-custom btn-sm  mt-2 mr-2" @click.prevent="clickCreate()"><i class="fa fa-plus-circle"></i> Nuevo</button>
+    <div class="system-dashboard">
+        <header class="system-page-heading">
+            <div>
+                <h1>Planes</h1>
+                <p>Tarifas y límites que se asignan a cada cliente</p>
+            </div>
+            <div class="system-page-actions">
+                <button type="button" class="system-button system-button-primary" @click="clickCreate(null, $event)">
+                    <svg class="sys-icon" aria-hidden="true"><use :href="$icon('plus')" /></svg>Nuevo plan
+                </button>
             </div>
         </header>
-        
-                <div class="pricing-table row no-gutters mt-3 mb-3">
-					
-                    <template v-for="(row, index) in records">
 
-                        <div  class="col-lg-3 col-sm-6 text-center" style="padding:10px;" :key="index">
-							<div class="plan most-popular">
-								<div class="plan-ribbon-wrapper "></div>
-								<h3>{{row.name}}<span>S/ {{row.pricing}}</span></h3> 
-								<ul>
- 
-                                    <li v-if="row.limit_users === 0"><strong>Usuarios</strong> ilimitados</li>
-                                    <li v-else><strong>{{row.limit_users}}</strong> usuarios</li>
+        <p v-if="loadError" class="system-load-error" role="alert">
+            No se pudieron cargar los planes.
+            <button type="button" @click="getData()">Reintentar</button>
+        </p>
 
-                                    <li v-if="row.limit_documents === 0"><strong>Comprobantes</strong> ilimitados</li>                                
-                                    <li v-else><strong>{{row.limit_documents}}</strong> comprobantes</li>
-                                
-                                    <!-- <template v-for="(plan_document, i) in getDescriptions(row.plan_documents)">
-                                        <li :key="i" v-if="plan_document">{{plan_document.description}}</li>
-                                    </template>                                    -->
-								</ul>                                
-                                <div v-if="!row.locked">
-                                    <button type="button" class="btn waves-effect waves-light btn-xs btn-danger float-right" style="margin-left:6px;" @click.prevent="clickDelete(row.id)"><i class="fas fa-trash"></i> </button>
-                                    <button type="button" class="btn waves-effect waves-light btn-xs btn-primary float-right"  @click.prevent="clickCreate(row.id)"><i class="fas fa-edit"></i> </button><br>
-                                </div>
-							</div>
-						</div>
-                        
-                    </template>
-						
-						  
+        <div class="system-plans-layout">
+        <div class="system-plan-grid">
+            <article v-for="row in records" :key="row.id" class="system-receipt">
+                <div class="system-receipt-top">
+                    <p class="system-receipt-meta"><span>{{ row.name }}</span><b>N° {{ serial(row.id) }}</b></p>
+                    <p class="system-receipt-price" :aria-label="'Precio ' + priceLabel(row.pricing)"><span class="cur">S/</span><span class="int">{{ priceParts(row.pricing).int }}</span><span class="dec">.{{ priceParts(row.pricing).dec }}</span></p>
                 </div>
-            
-        <system-plans-form :showDialog.sync="showDialog"
-                            :plan_documents="plan_documents"
-                             :recordId="recordId"></system-plans-form>
+                <div class="system-receipt-bottom">
+                    <dl class="system-receipt-rows">
+                        <div><dt>Usuarios</dt><i class="leader" aria-hidden="true"></i><dd><limit-value :value="row.limit_users" /></dd></div>
+                        <div><dt>Comprobantes</dt><i class="leader" aria-hidden="true"></i><dd><limit-value :value="row.limit_documents" /></dd></div>
+                    </dl>
+                    <div class="system-receipt-stampline">
+                        <span v-if="row.locked" class="system-stamp is-red">Sistema</span>
+                        <span v-else class="system-stamp">{{ clientsLabel(row.clients_count) }}</span>
+                    </div>
+                    <div v-if="!row.locked" class="system-plan-actions">
+                        <button type="button" class="system-button" @click.prevent="clickCreate(row.id, $event)">
+                            <svg class="sys-icon" aria-hidden="true"><use :href="$icon('pencil')" /></svg>Editar plan
+                        </button>
+                        <button type="button" class="system-button system-icon-only" :aria-label="'Eliminar plan ' + row.name" title="Eliminar plan" @click.prevent="clickDelete(row.id)">
+                            <svg class="sys-icon" aria-hidden="true"><use :href="$icon('trash-2')" /></svg>
+                        </button>
+                    </div>
+                </div>
+            </article>
+
+            <button type="button" class="system-plan-add" @click="clickCreate(null, $event)">
+                <svg class="sys-icon sys-icon-lg" aria-hidden="true"><use :href="$icon('plus')" /></svg>
+                <strong>Nuevo plan</strong>
+                <small>Define tarifa y límites</small>
+            </button>
+        </div>
+        <aside class="system-panel system-panel-pad system-plans-summary" aria-label="Resumen de planes">
+            <h2 class="system-panel-title"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('layers')" /></svg><span>Resumen</span></h2>
+            <p class="system-summary-line"><strong>{{ records.length }}</strong> {{ records.length === 1 ? 'plan' : 'planes' }} · <strong>{{ totalClients }}</strong> {{ totalClients === 1 ? 'cliente asignado' : 'clientes asignados' }}</p>
+            <ul v-if="records.length" class="system-meter-list">
+                <li v-for="row in records" :key="row.id">
+                    <div><span>{{ row.name }}</span><strong>{{ row.clients_count || 0 }}</strong></div>
+                    <i class="system-meter"><b :style="{ width: ((row.clients_count || 0) / Math.max(totalClients, 1)) * 100 + '%' }"></b></i>
+                </li>
+            </ul>
+            <p v-else class="system-hint">Todavía no hay planes.</p>
+        </aside>
+        </div>
+
+        <system-plans-form :showDialog.sync="showDialog" :recordId="recordId" @closed="restoreFocus"></system-plans-form>
     </div>
 </template>
 
 <script>
-
     import PlansForm from './form.vue'
-    import {deletable} from "../../../mixins/deletable" 
+    import {deletable} from "../../../mixins/deletable"
+
+    const LimitValue = {
+        props: ['value'],
+        render(h) {
+            if (this.value === null || this.value === undefined || this.value === '') {
+                return h('span', {class: 'system-plan-limit is-muted'}, 'Sin definir')
+            }
+            if (Number(this.value) === 0) {
+                return h('span', {class: 'system-plan-limit'}, 'Ilimitados')
+            }
+            return h('span', {class: 'system-plan-limit'}, 'Hasta ' + Number(this.value).toLocaleString('es-PE'))
+        }
+    }
 
     export default {
         mixins: [deletable],
-        components: {PlansForm},
+        components: {PlansForm, LimitValue},
         data() {
             return {
                 showDialog: false,
                 resource: 'plans',
                 recordId: null,
-                records: [],                
-                plan_documents: [] ,
-                aux:[]
+                trigger: null,
+                records: [],
+                loadError: false
             }
         },
-        created() {            
-                
+        computed: {
+            totalClients() {
+                return this.records.reduce((total, row) => total + Number(row.clients_count || 0), 0)
+            }
+        },
+        created() {
             this.$eventHub.$on('reloadData', () => {
                 this.getData()
             })
             this.getData()
-            this.getPlanDocuments()
         },
         methods: {
-
-            getPlanDocuments(){
-                this.$http.get(`/${this.resource}/tables`).then(response => {
-                            this.plan_documents = response.data.plan_documents 
-                        })
-            },
             getData() {
+                this.loadError = false
                 this.$http.get(`/${this.resource}/records`)
                     .then(response => {
-                        this.records = response.data.data                         
+                        this.records = response.data.data
+                    })
+                    .catch(() => {
+                        this.loadError = true
                     })
             },
-            getDescriptions(plan_documents){
-
-                let descriptions = []; 
-                Object.values(plan_documents).forEach((itm, i) => {                    
-                    descriptions.push(this.plan_documents[itm-1]) 
-                });
-                return descriptions
+            restoreFocus() {
+                const el = this.trigger
+                this.$nextTick(() => { if (el && document.body.contains(el)) el.focus() })
             },
-            clickCreate(recordId = null) {
+            priceParts(value) {
+                const amount = Number(value)
+                const [int, dec] = (isFinite(amount) ? amount : 0).toFixed(2).split('.')
+                return {int: Number(int).toLocaleString('es-PE'), dec}
+            },
+            priceLabel(value) {
+                const price = this.priceParts(value)
+                return `S/ ${price.int}.${price.dec}`
+            },
+            serial(id) {
+                return String(id).padStart(4, '0')
+            },
+            clientsLabel(count) {
+                const total = Number(count || 0)
+                return `${total} ${total === 1 ? 'cliente' : 'clientes'}`
+            },
+            clickCreate(recordId = null, event = null) {
+                this.trigger = event && event.currentTarget ? event.currentTarget : null
                 this.recordId = recordId
                 this.showDialog = true
-            }, 
+            },
             clickDelete(id) {
                 this.destroy(`/${this.resource}/${id}`).then(() =>
                     this.$eventHub.$emit('reloadData')

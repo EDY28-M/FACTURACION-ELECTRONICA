@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ app()->getLocale() }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="system-auth">
 
 <head>
     <meta charset="utf-8">
@@ -7,29 +7,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    <title>Acceso al sistema | FacturadorPro</title>
 
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800|Shadows+Into+Light" rel="stylesheet" type="text/css">
-
-    <link rel="stylesheet" href="{{ asset('porto-light/vendor/bootstrap/css/bootstrap.css') }}" />
-    <link rel="stylesheet" href="{{ asset('porto-light/vendor/animate/animate.css') }}" />
-    <link rel="stylesheet" href="{{ asset('porto-light/vendor/font-awesome/css/fontawesome-all.min.css') }}" />
-    <link rel="stylesheet" href="{{ asset('porto-light/css/theme.css') }}" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/7.26.29/sweetalert2.min.css" />
-
-    @if (file_exists(public_path('theme/custom_styles.css')))
-        <link rel="stylesheet" href="{{ asset('theme/custom_styles.css') }}" />
-    @endif
+    <link rel="stylesheet" href="{{ asset('css/system-auth.css') }}?v={{ filemtime(public_path('css/system-auth.css')) }}" />
 </head>
 
 <body>
-
-    <div class="app">
-        @yield('content')
-    </div>
+    @yield('content')
 
     @stack('scripts')
-    <!-- <script src="//code.tidio.co/1vliqewz9v7tfosw5wxiktpkgblrws5w.js"></script> -->
 </body>
 
 </html>

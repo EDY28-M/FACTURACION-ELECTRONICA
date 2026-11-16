@@ -1,16 +1,14 @@
-@if ($useLoginGlobal)
-    @if ($login->logo ?? false)
-        @if ($login->show_logo_in_form)
-            <img class="auth__logo-form" src="{{ $login->logo }}" alt="Logo formulario" />
-        @endif
-    @endif
-@else
-    @if ($login->show_logo_in_form)
-        @if($company->logo)
-        <img class="auth__logo-form" src="{{ asset('storage/uploads/logos/' . $company->logo) }}" alt="Logo formulario" width="120" />
-        @else
-        <img class="auth__logo-form" src="{{asset('logo/700x300.jpg')}}" alt="Logo formulario" width="120" />
-        @endif
-    @endif
+{{-- Brand mark above the form: the configured logo when one exists, never a placeholder --}}
+@php
+    $tnFormLogo = null;
+    if ($login->show_logo_in_form ?? false) {
+        if ($useLoginGlobal) {
+            $tnFormLogo = $login->logo ?? null;
+        } elseif ($company->logo) {
+            $tnFormLogo = asset('storage/uploads/logos/' . $company->logo);
+        }
+    }
+@endphp
+@if ($tnFormLogo)
+    <img class="auth__logo-form" src="{{ $tnFormLogo }}" alt="{{ $company->trade_name ?: $company->name }}" />
 @endif
-<br>

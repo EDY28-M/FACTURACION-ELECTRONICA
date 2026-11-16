@@ -21,7 +21,7 @@ class PlanController extends Controller
     
     public function records()
     {
-        $records = Plan::all();
+        $records = Plan::withCount('clients')->get();
 
         return new PlanCollection($records);
     }

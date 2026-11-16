@@ -1,152 +1,179 @@
-<header class="header">
-    <div class="logo-container">
-        {{-- <a href="{{route('tenant.dashboard.index')}}" class="logo pt-2 pt-md-0">
-
-            @if($vc_company->logo)
-                <img src="{{ asset('storage/uploads/logos/'.$vc_company->logo) }}" alt="Logo" />
-            @else
-                <img src="{{asset('logo/700x300.jpg')}}" alt="Logo" />
-            @endif
-        </a> --}}
-        <div class="sidebar-toggle" data-toggle-class="sidebar-left-collapsed" data-target="html"
-             data-fire-event="sidebar-left-toggle">
-             {{-- <img src="{{ asset('images/disc.svg') }}" alt="Sidebar toggle" class="img-fluid" width="20"> --}}
-            <i class="fas fa-bullseye" aria-label="Toggle sidebar"></i>
+@php
+    $tnEnvHref = in_array('configuration', $vc_modules) ? route('tenant.companies.create') : null;
+    if ($vc_company->soap_type_id == '01') {
+        $tnEnv = ['key' => 'demo', 'label' => 'SUNAT · Demo', 'title' => 'SUNAT: entorno de demostración'];
+    } elseif ($vc_company->soap_type_id == '02') {
+        $tnEnv = ['key' => 'prod', 'label' => 'SUNAT · Producción', 'title' => 'SUNAT: entorno de producción'];
+    } else {
+        $tnEnv = ['key' => 'int', 'label' => 'SUNAT · Interno', 'title' => 'Entorno interno'];
+    }
+    if ($tnEnvHref) {
+        $tnEnv['title'] .= ', pulse para ir a configuración';
+    }
+    $tnUserName = trim((string) $vc_user->name);
+    $tnUserParts = preg_split('/\s+/', $tnUserName, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $tnInitials = mb_strtoupper(mb_substr($tnUserParts[0] ?? ($vc_user->email ?? '?'), 0, 1).(isset($tnUserParts[1]) ? mb_substr($tnUserParts[1], 0, 1) : ''));
+    $tnRoles = ['admin' => 'Administrador', 'seller' => 'Vendedor', 'integrator' => 'Integrador'];
+    $tnRole = $tnRoles[$vc_user->type] ?? ucfirst((string) $vc_user->type);
+    $tnLevels = $vc_module_levels ?? [];
+    $tnIsIntegrator = $vc_user->type == 'integrator';
+    $tnNotInternal = $vc_company->soap_type_id != '03';
+    $tnCanOrders = in_array('ecommerce', $vc_modules);
+    $tnCanNotSent = $tnNotInternal && in_array('documents', $vc_modules) && in_array('document_not_sent', $tnLevels);
+    $tnCanRegularize = $tnNotInternal && in_array('documents', $vc_modules) && in_array('regularize_shipping', $tnLevels);
+    $tnCanNewDoc = !$tnIsIntegrator && $tnNotInternal && in_array('documents', $vc_modules) && in_array('new_document', $tnLevels);
+    $tnCanListDoc = $tnNotInternal && in_array('documents', $vc_modules) && in_array('list_document', $tnLevels);
+    $tnCanPos = !$tnIsIntegrator && in_array('pos', $vc_modules);
+    $tnCanEstablishments = in_array('establishments', $vc_modules);
+    $tnCanConfig = in_array('configuration', $vc_modules);
+    $tnHasQuickMenu = $tnCanNewDoc || $tnCanListDoc || $tnCanPos || $tnCanEstablishments || $tnCanConfig;
+@endphp
+<header class="header tn-top">
+    <div class="tn-search-wrap" data-tn-module-search>
+        <div class="tn-search" role="search">
+            @include('tenant.layouts.partials.icon', ['name' => 'search'])
+            <input class="tn-search-input" type="search" placeholder="Buscar módulo o sección"
+                   autocomplete="off" spellcheck="false" aria-label="Buscar módulos y secciones del sistema"
+                   aria-haspopup="listbox" aria-expanded="false">
         </div>
-        <div class="d-md-none toggle-sidebar-left" data-toggle-class="sidebar-left-opened" data-target="html" data-fire-event="sidebar-left-opened">
-            <i class="fas fa-bars" aria-label="Toggle sidebar"></i>
+        <div class="tn-search-panel" hidden>
+            <div class="tn-search-panel-head">
+                <span class="tn-search-status" aria-live="polite"></span>
+                <button type="button" class="tn-search-close" aria-label="Cerrar buscador">&times;</button>
+            </div>
+            <div class="tn-search-body" role="listbox" aria-label="Resultados de búsqueda"></div>
+            <div class="tn-search-foot">
+                <span><kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> abrir · <kbd>Esc</kbd> cerrar</span>
+                <span class="tn-search-brand">KeraAI</span>
+            </div>
         </div>
-
-        <a class="topbar-links" href="{{ route('tenant.documents.create') }}" title="Nueva factura" data-toggle="tooltip" data-placement="bottom">
-            <i class="fas fa-fw fa-plus" aria-hidden="true"></i>
-            <span>FA</span>
-        </a>
-        <a class="topbar-links" href="{{ in_array('pos', $vc_modules) ? route('tenant.pos.index') : '#' }}" title="POS" data-toggle="tooltip" data-placement="bottom">
-            <i class="fas fa-fw fa-plus" aria-hidden="true"></i>
-            <span>POS</span>
-        </a>
-        <a class="topbar-links" href="{{ in_array('configuration', $vc_modules) ? route('tenant.companies.create') : '#' }}" title="Mi empresa" data-toggle="tooltip" data-placement="bottom">
-            <i class="fas fa-fw fa-plus" aria-hidden="true"></i>
-            <span>ME</span>
-        </a>
-        <a class="topbar-links" href="{{ in_array('establishments', $vc_modules) ? route('tenant.establishments.index') : '#' }}" title="Nuevo establecimiento" data-toggle="tooltip" data-placement="bottom">
-            <i class="fas fa-fw fa-plus" aria-hidden="true"></i>
-            <span>ES</span>
-        </a>
-
     </div>
+
     <div class="header-right">
-
-        <ul class="notifications mx-2">
-            @if($vc_company->soap_type_id == "01")
-                <li>
-                    <a href="@if(in_array('configuration', $vc_modules)){{route('tenant.companies.create')}}@else # @endif" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="SUNAT: ENTORNO DE DEMOSTRACIÓN, pulse para ir a configuración">
-                        <i class="fas fa-2x fa-toggle-off mr-2" style="font-size: 20px"></i>
-                        <span>DEMO</span>
-                    </a>
-                </li>
-            @elseif($vc_company->soap_type_id == "02")
-                <li>
-                    <a href="@if(in_array('configuration', $vc_modules)){{route('tenant.companies.create')}}@else # @endif" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="SUNAT: ENTORNO DE PRODUCCIÓN, pulse para ir a configuración">
-                        <i class="text-success fas fa-2x fa-toggle-on mr-2" style="font-size: 20px; color: #28a745 !important"></i>
-                        <span>PROD</span>
-                    </a>
-                </li>
+        {{-- Stable wrapper so tenant-shell.js can resync the environment pill and counts when badges appear or disappear --}}
+        <div class="header-notifications" data-shell-notifications>
+            @if($tnEnvHref)
+                <a href="{{ $tnEnvHref }}" class="tn-env tn-env--{{ $tnEnv['key'] }}" title="{{ $tnEnv['title'] }}">{{ $tnEnv['label'] }}</a>
             @else
+                <span class="tn-env tn-env--{{ $tnEnv['key'] }}" title="{{ $tnEnv['title'] }}">{{ $tnEnv['label'] }}</span>
+            @endif
+
+            <ul class="notifications">
+                @if($tnCanOrders)
                 <li>
-                    <a href="@if(in_array('configuration', $vc_modules)){{route('tenant.companies.create')}}@else # @endif" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="INTERNO: ENTORNO DE PRODUCCIÓN, pulse para ir a configuración">
-                        <i class="text-info fas fa-2x fa-toggle-on mr-2" style="font-size: 20px; color: #398bf7!important;"></i>
-                        <span>INT</span>
+                    <a href="{{ route('tenant_orders_index') }}" class="tn-ib notification-icon" title="Pedidos pendientes" aria-label="Pedidos pendientes">
+                        @include('tenant.layouts.partials.icon', ['name' => 'shopping-cart'])
+                        <em class="num cart-item-count">{{ $vc_orders }}</em>
                     </a>
                 </li>
+                @endif
+                @if($vc_document > 0 && $tnCanNotSent)
+                <li>
+                    <a href="{{ route('tenant.documents.not_sent') }}" class="tn-ib notification-icon" title="Comprobantes pendientes de envío" aria-label="Comprobantes pendientes de envío">
+                        @include('tenant.layouts.partials.icon', ['name' => 'bell'])
+                        <em class="num cart-item-count tn-warn">{{ $vc_document }}</em>
+                    </a>
+                </li>
+                @endif
+                @if($vc_document_regularize_shipping > 0 && $tnCanRegularize)
+                <li>
+                    <a href="{{ route('tenant.documents.regularize_shipping') }}" class="tn-ib notification-icon" title="Comprobantes pendientes de rectificación" aria-label="Comprobantes pendientes de rectificación">
+                        @include('tenant.layouts.partials.icon', ['name' => 'triangle-alert'])
+                        <em class="num cart-item-count tn-warn">{{ $vc_document_regularize_shipping }}</em>
+                    </a>
+                </li>
+                @endif
+            </ul>
+        </div>
+
+        <div class="tn-spacer"></div>
+
+        @if($tnHasQuickMenu)
+        <div class="tn-new">
+            @if($tnCanNewDoc)
+                <a class="tn-btn tn-btn--p" href="{{ route('tenant.documents.create') }}" aria-label="Nueva factura">
+                    @include('tenant.layouts.partials.icon', ['name' => 'plus'])
+                    <span>Nueva factura</span>
+                </a>
+            @elseif($tnCanPos)
+                <a class="tn-btn tn-btn--p" href="{{ route('tenant.pos.index') }}" aria-label="Punto de venta">
+                    @include('tenant.layouts.partials.icon', ['name' => 'monitor'])
+                    <span>Punto de venta</span>
+                </a>
+            @elseif($tnCanListDoc)
+                <a class="tn-btn tn-btn--p" href="{{ route('tenant.documents.index') }}" aria-label="Comprobantes">
+                    @include('tenant.layouts.partials.icon', ['name' => 'receipt'])
+                    <span>Comprobantes</span>
+                </a>
+            @elseif($tnCanEstablishments)
+                <a class="tn-btn tn-btn--p" href="{{ route('tenant.establishments.index') }}" aria-label="Establecimientos">
+                    @include('tenant.layouts.partials.icon', ['name' => 'building-2'])
+                    <span>Establecimientos</span>
+                </a>
+            @else
+                <a class="tn-btn tn-btn--p" href="{{ route('tenant.companies.create') }}" aria-label="Mi empresa">
+                    @include('tenant.layouts.partials.icon', ['name' => 'briefcase'])
+                    <span>Mi empresa</span>
+                </a>
             @endif
-        </ul>
-
-        <span class="separator"></span>
-        <ul class="notifications">
-            <li>
-                <a href="{{ route('settings.change_mode') }}" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="Modo noche">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                </a>
-            </li>
-        </ul>
-        <span class="separator"></span>
-        <ul class="notifications">
-            <li>
-                <a href="{{ route('tenant_orders_index') }}" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="Pedidos pendientes">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-shopping-cart"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
-                    <span class="badge badge-pill badge-info badge-up cart-item-count">{{ $vc_orders }}</span>
-                </a>
-            </li>
-        </ul>
-        @if($vc_document > 0)
-        <span class="separator"></span>
-        <ul class="notifications">
-            <li>
-                <a href="{{route('tenant.documents.regularize_shipping')}}" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="Comprobantes pendientes de envío">
-                    <i class="far fa-bell text-secondary"></i>
-                    <span class="badge badge-pill badge-danger badge-up cart-item-count">{{ $vc_document }}</span>
-                </a>
-            </li>
-        </ul>
+            <button class="tn-btn tn-btn--p tn-caret" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Más accesos rápidos">
+                @include('tenant.layouts.partials.icon', ['name' => 'chevron-down'])
+            </button>
+            <div class="tn-menu" role="menu">
+                @if($tnCanNewDoc)
+                    <a role="menuitem" href="{{ route('tenant.documents.create') }}">
+                        @include('tenant.layouts.partials.icon', ['name' => 'receipt'])Boleta
+                    </a>
+                @endif
+                @if($tnCanListDoc)
+                    <a role="menuitem" href="{{ route('tenant.documents.index') }}" title="Las notas de crédito se emiten desde el listado de comprobantes">
+                        @include('tenant.layouts.partials.icon', ['name' => 'file-minus-2'])Nota de crédito
+                    </a>
+                @endif
+                @if($tnCanPos)
+                    <a role="menuitem" href="{{ route('tenant.pos.index') }}">
+                        @include('tenant.layouts.partials.icon', ['name' => 'monitor'])Punto de venta
+                    </a>
+                @endif
+                @if($tnCanEstablishments)
+                    <a role="menuitem" href="{{ route('tenant.establishments.index') }}">
+                        @include('tenant.layouts.partials.icon', ['name' => 'building-2'])Nuevo establecimiento
+                    </a>
+                @endif
+                @if($tnCanConfig)
+                    <a role="menuitem" href="{{ route('tenant.companies.create') }}">
+                        @include('tenant.layouts.partials.icon', ['name' => 'briefcase'])Mi empresa
+                    </a>
+                @endif
+            </div>
+        </div>
         @endif
 
-        @if($vc_document_regularize_shipping > 0)
-        <span class="separator"></span>
-        <ul class="notifications">
-            <li>
-                <a href="{{route('tenant.documents.regularize_shipping')}}" class="notification-icon text-secondary" data-toggle="tooltip" data-placement="bottom" title="Comprobantes pendientes de rectificación">
-                    <i class="fas fa-exclamation-triangle text-secondary"></i>
-                    <span class="badge badge-pill badge-danger badge-up cart-item-count">{{ $vc_document_regularize_shipping }}</span>
-                </a>
-            </li>
-        </ul>
-        @endif
+        <a href="{{ route('settings.change_mode') }}" data-no-shell class="tn-ib tn-moon" title="Modo noche" aria-label="Modo noche">
+            @include('tenant.layouts.partials.icon', ['name' => 'moon', 'class' => 'i-moon'])
+            @include('tenant.layouts.partials.icon', ['name' => 'sun', 'class' => 'i-sun'])
+        </a>
 
-        <span class="separator"></span>
-        <div id="userbox" class="userbox">
-            <a href="#" data-toggle="dropdown">
-                <div class="profile-info" data-lock-name="{{ $vc_user->email }}" data-lock-email="{{ $vc_user->email }}">
-                    <span class="name">{{ $vc_user->name }}</span>
-                    <span class="role">{{ $vc_user->email }}</span>
-                </div>
-                <figure class="profile-picture">
-                    {{-- <img src="{{asset('img/%21logged-user.jpg')}}" alt="Profile" class="rounded-circle" data-lock-picture="img/%21logged-user.jpg" /> --}}
-                    <div class="border rounded-circle text-center" style="width: 25px;"><i class="fas fa-user"></i></div>
-                </figure>
-                {{-- <i class="fa custom-caret"></i> --}}
-            </a>
-            <div class="dropdown-menu">
-                <ul class="list-unstyled mb-0">
-                    {{-- <li class="divider"></li> --}}
-                    <li>
-                        {{--<a role="menuitem" href="#"><i class="fas fa-user"></i> Perfil</a>--}}
-                        <a role="menuitem" href="{{ route('logout') }}" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
-                            <i class="fas fa-power-off"></i> @lang('app.buttons.logout')
-                        </a>
-                        <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
-                            @csrf
-                        </form>
-                    </li>
-                </ul>
+        <div id="userbox" class="tn-user">
+            <button class="tn-user-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+                <span class="tn-av" aria-hidden="true">{{ $tnInitials }}</span>
+                <span class="tn-who"><b>{{ $tnUserName !== '' ? $tnUserName : $vc_user->email }}</b><small>{{ $tnRole }}</small></span>
+                @include('tenant.layouts.partials.icon', ['name' => 'chevron-down'])
+            </button>
+            <div class="tn-menu" role="menu">
+                @if(in_array('configuration', $vc_modules))
+                    <a role="menuitem" href="{{ url('list-settings') }}">
+                        @include('tenant.layouts.partials.icon', ['name' => 'settings-2'])Configuración
+                    </a>
+                @endif
+                <a role="menuitem" class="danger" href="{{ route('logout') }}" data-no-shell onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                    @include('tenant.layouts.partials.icon', ['name' => 'log-out'])@lang('app.buttons.logout')
+                </a>
+                <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+                    @csrf
+                </form>
             </div>
         </div>
     </div>
 </header>
-{{--
-<div class="container d-none d-sm-block">
-    <div id="switcher-top" class="d-flex justify-content-center switcher-hover">
-        <span class="text-white py-0 px-5 text-center"><i class="fas fa-plus fa-fw"></i>Acceso Rápido</span>
-    </div>
-</div>
-<div class="container d-none d-sm-block">
-    <div id="switcher-list" class="d-flex justify-content-center switcher-hover">
-        <div class="row">
-            <div class="px-3"><a class="py-3" href="{{ route('tenant.documents.create') }}"><i class="fas fa-fw fa-file-invoice" aria-hidden="true"></i> Nuevo Comprobante</a></div>
-            <div class="px-3"><a class="py-3" href="{{ in_array('pos', $vc_modules) ? route('tenant.pos.index') : '#' }}"><i class="fas fa-fw fa-cash-register" aria-hidden="true"></i> POS</a></div>
-            <div style="min-width: 220px;"></div>
-            <div class="px-3"><a class="py-3" href="{{ in_array('configuration', $vc_modules) ? route('tenant.companies.create') : '#' }}"><i class="fas fa-fw fa-industry" aria-hidden="true"></i> Empresa</a></div>
-            <div class="px-3"><a class="py-3" href="{{ in_array('establishments', $vc_modules) ? route('tenant.establishments.index') : '#' }}"><i class="fas fa-fw fa-warehouse" aria-hidden="true"></i> Establecimientos</a></div>
-        </div>
-    </div>
-</div> --}}
+<script defer src="{{ asset('js/tenant-module-search.js') }}?v={{ @filemtime(public_path('js/tenant-module-search.js')) }}"></script>

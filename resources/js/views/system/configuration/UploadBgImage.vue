@@ -1,27 +1,12 @@
 <template>
-  <div>
-    <img
-      :src="imageUrl"
-      alt="Vista previa"
-      class="img-fluid img-thumbnail w-100 mb-3"
-    />
-    <input
-      type="file"
-      @change="onGeneratePreview"
-      ref="inputFile"
-      class="hidden"
-    />
-    <small class="form-control-feedback"
-      >{{ helpText }}</small
-    >
-    <el-button
-      type="primary"
-      class="btn-block"
-      @click="onShowFilePicker"
-      :loading="loading"
-      :disabled="loading"
-      >{{ btnText }}</el-button
-    >
+  <div class="system-upload">
+    <p class="system-upload-title">{{ type === 'bg' ? 'Imagen de fondo' : 'Logo' }}</p>
+    <img v-if="imageUrl" :src="imageUrl" alt="Vista previa" class="system-upload-preview" />
+    <input type="file" accept="image/*" @change="onGeneratePreview" ref="inputFile" class="system-sr-only" tabindex="-1" aria-hidden="true" />
+    <small class="system-field-hint">{{ helpText }}</small>
+    <button type="button" class="system-button" @click="onShowFilePicker" :disabled="loading">
+      <svg class="sys-icon" aria-hidden="true"><use :href="$icon('upload')" /></svg>{{ loading ? 'Subiendo…' : btnText }}
+    </button>
   </div>
 </template>
 
@@ -54,7 +39,7 @@ export default {
           this.helpText = 'Se recomienda una imagen de 700 x 300 con fondo transparente en formato PNG';
       }
     if (this.type === 'bg') {
-        this.btnText = 'Cambiar image de fondo';
+        this.btnText = 'Cambiar imagen de fondo';
     } else {
         this.btnText = 'Cambiar logo';
     }

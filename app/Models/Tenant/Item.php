@@ -92,6 +92,20 @@ class Item extends ModelTenant
         $this->attributes['attributes'] = (is_null($value))?null:json_encode($value);
     }
 
+    /**
+     * 256px rendition for product grids (POS). Falls back to the main image when the
+     * item has no small rendition, e.g. items created before renditions existed.
+     */
+    public function imageSmallUrl()
+    {
+        $placeholder = 'imagen-no-disponible.jpg';
+        $file = ($this->image_small && $this->image_small !== $placeholder) ? $this->image_small : $this->image;
+
+        return ($file && $file !== $placeholder)
+            ? asset('storage/uploads/items/'.$file)
+            : asset('/logo/'.$placeholder);
+    }
+
     public function account()
     {
         return $this->belongsTo(Account::class);

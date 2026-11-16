@@ -51,11 +51,11 @@
           <table class="table">
             <thead>
               <tr>
-                <th></th>
+                <th>#</th>
                 <th>Oficina</th>
                 <th>Descripción</th>
                 <th>Visible</th>
-                <th></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>

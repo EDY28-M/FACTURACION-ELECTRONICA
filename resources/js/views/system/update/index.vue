@@ -1,88 +1,77 @@
 <template>
-    <div class="row">
-        <div class="col-12 col-md-6">
-            <div class="card">
-                <div class="card-body">
-                    <div class="card-title text-center">
-                        <i class="fab fa-gitlab" style="color: rgb(41, 41, 97);"></i>
-                        <p class="">
-                            Versión:{{version}}
-                        </p>
-                        <button type="button" class="btn btn-primary" @click.prevent="start()" :loading="loading_submit">Iniciar proceso</button>
-                    </div>
-                    <div v-if="content.status == true && content.step == 'updating'" id="response-content">
-
-                        <h3>Obteniendo rama del repositorio</h3>
-                        <el-progress :percentage="branch.percent"></el-progress>
-
-                        <div v-if="branch.status == 'success'">
-                            <h4>Rama actual: <strong>{{branch.name}}</strong></h4>
-                            <span class="text-danger">{{branch.error}}</span><br>
-                            <!-- <span class="text-danger">{{branch.status}}</span> -->
-                            <hr>
-                            <h3>Descargando actualización</h3>
-                            <h4>Log: {{pull.content}}</h4>
-                            <span class="text-danger">{{pull.error}}</span><br>
-                            <!-- <span class="text-danger">{{pull.status}}</span> -->
-                        </div>
-
-                        <div v-if="pull.status == 'success'">
-                            <div v-if="pull.updated == false">
-                                <div v-if="artisan.migrate.status == 'success'">
-                                    <hr>
-                                    <h3>Corriendo migraciones en administrador</h3>
-                                    <h4>Log: {{artisan.migrate.content}}</h4>
-                                    <span class="text-danger">{{artisan.migrate.error}}</span><br>
-                                    <!-- <span class="text-danger">{{artisan.migrate.status}}</span> -->
-                                </div>
-
-                                <div v-if="artisan.tenancy_migrate.status == 'success'">
-                                    <hr>
-                                    <h3>Corriendo migraciones en cliente</h3>
-                                    <h4>Log: {{artisan.tenancy_migrate.content}}</h4>
-                                    <span class="text-danger">{{artisan.tenancy_migrate.error}}</span><br>
-                                    <!-- <span class="text-danger">{{artisan.tenancy_migrate.status}}</span> -->
-                                </div>
-
-                                <div v-if="artisan.clear.status == 'success'">
-                                    <hr>
-                                    <h3>Eliminando Caché</h3>
-                                    <h4>Log: {{artisan.clear.content}}</h4>
-                                    <span class="text-danger">{{artisan.clear.error}}</span><br>
-                                    <!-- <span class="text-danger">{{artisan.clear.status}}</span> -->
-                                </div>
-
-                                <div v-if="composer.install.status == 'success'">
-                                    <h3>Actualizando dependencias</h3>
-                                    <h4>Log:</h4>
-                                    <pre>
-                                        {{composer.install.content}}
-                                    </pre>
-                                    <span class="text-danger">{{composer.install.error}}</span><br>
-                                    <!-- <span class="text-danger">{{composer.install.status}}</span> -->
-                                </div>
-                            </div>
-                            <div v-else>
-                                <hr>
-                                <h3>El sistema está actualizado</h3>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    <div class="system-dashboard">
+        <header class="system-page-heading">
+            <div>
+                <h1>Actualizaciones</h1>
+                <p>Versión instalada e historial de cambios</p>
             </div>
+        </header>
+
+        <div class="system-split system-split-even">
+            <section class="system-version-card" aria-label="Versión instalada">
+                <p class="system-version-label"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('git-branch')" /></svg>Versión instalada</p>
+                <strong class="system-version-value" :class="{'is-empty': !versionLabel}">{{ versionLabel || 'Sin información' }}</strong>
+                <div class="system-version-tiles">
+                    <div><span>Última comprobación</span><strong>{{ checkedAt || 'Sin datos' }}</strong></div>
+                    <div><span>Estado</span><strong>{{ statusLabel }}</strong></div>
+                </div>
+                <div class="system-version-actions">
+                    <button type="button" class="system-button system-button-light" :disabled="checking || loading_submit" @click="check()">
+                        <svg class="sys-icon" aria-hidden="true"><use :href="$icon('refresh-cw')" /></svg>{{ checking ? 'Comprobando…' : 'Comprobar' }}
+                    </button>
+                    <button type="button" class="system-button system-button-primary" :disabled="loading_submit" @click.prevent="confirmStart()">
+                        <svg class="sys-icon" aria-hidden="true"><use :href="$icon('download')" /></svg>{{ loading_submit ? 'Actualizando…' : 'Iniciar actualización' }}
+                    </button>
+                </div>
+                <p v-if="message" class="system-version-message" role="status">{{ message }}</p>
+            </section>
+
+            <section class="system-panel system-panel-pad">
+                <h2 class="system-panel-title"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('tag')" /></svg><span>Historial de cambios</span></h2>
+                <div v-if="changelog" class="system-changelog" v-html="changelog"></div>
+                <div v-else class="system-empty-state">
+                    <h2>Sin historial disponible</h2>
+                    <p>Aparecerá después de comprobar actualizaciones.</p>
+                </div>
+            </section>
         </div>
 
-        <div class="col-12 col-md-6" style="">
-            <div class="card">
-                <div class="card-body">
-                    <div class="card-title text-center">
-                        <i class="fas fa-file-alt" style="color: rgb(41, 41, 97);"></i>
-                        <p>Changelog</p>
-                    </div>
-                    <div v-html="changelog" style="max-height: 600px; overflow-y: auto;"></div>
-                </div>
+        <section v-if="content.status == true && content.step == 'updating'" id="response-content" class="system-panel system-panel-pad system-update-log" aria-live="polite">
+            <h2 class="system-panel-title"><svg class="sys-icon" aria-hidden="true"><use :href="$icon('refresh-cw')" /></svg><span>Progreso de la actualización</span></h2>
+
+            <h3>Obteniendo rama del repositorio</h3>
+            <el-progress :percentage="branch.percent"></el-progress>
+
+            <div v-if="branch.status == 'success'">
+                <p>Rama actual: <strong class="system-mono">{{ branch.name }}</strong></p>
+                <h3>Descargando actualización</h3>
+                <pre class="system-code-block">{{ pull.content }}</pre>
             </div>
-        </div>
+            <p class="system-inline-alert" v-if="branch.error || pull.error">{{ branch.error || pull.error }}</p>
+
+            <div v-if="pull.status == 'success'">
+                <div v-if="pull.updated == false">
+                    <template v-if="composer.install.status == 'success'">
+                        <h3>Actualizando dependencias</h3>
+                        <pre class="system-code-block">{{ composer.install.content }}</pre>
+                    </template>
+                    <template v-if="artisan.migrate.status == 'success'">
+                        <h3>Corriendo migraciones en administrador</h3>
+                        <pre class="system-code-block">{{ artisan.migrate.content }}</pre>
+                    </template>
+                    <template v-if="artisan.tenancy_migrate.status == 'success'">
+                        <h3>Corriendo migraciones en cliente</h3>
+                        <pre class="system-code-block">{{ artisan.tenancy_migrate.content }}</pre>
+                    </template>
+                    <template v-if="artisan.clear.status == 'success'">
+                        <h3>Eliminando caché</h3>
+                        <pre class="system-code-block">{{ artisan.clear.content }}</pre>
+                    </template>
+                    <p class="system-inline-alert" v-if="composer.install.error || artisan.migrate.error || artisan.tenancy_migrate.error || artisan.clear.error">{{ composer.install.error || artisan.migrate.error || artisan.tenancy_migrate.error || artisan.clear.error }}</p>
+                </div>
+                <p v-else class="system-inline-ok">El sistema está actualizado.</p>
+            </div>
+        </section>
     </div>
 </template>
 <script>
@@ -98,6 +87,9 @@
                 loading_submit: false,
                 version: '',
                 changelog: '',
+                checking: false,
+                checkedAt: '',
+                message: '',
                 content: {
                     status: false,
                 },
@@ -146,11 +138,37 @@
                 }
             }
         },
+        computed: {
+            versionLabel() {
+                return typeof this.version === 'string' ? this.version.trim() : ''
+            },
+            statusLabel() {
+                if (this.loading_submit) return 'Actualizando'
+                if (this.pull.updated === true) return 'Actualizado'
+                if (this.branch.error || this.pull.error) return 'Con errores'
+                return this.versionLabel ? 'Instalado' : 'Sin información'
+            }
+        },
         created() {
-            this.getVersion()
-            this.getChangelog()
+            this.check()
         },
         methods: {
+            check() {
+                this.checking = true
+                this.message = ''
+                return Promise.all([this.getVersion(), this.getChangelog()]).then(() => {
+                    this.checkedAt = new Intl.DateTimeFormat('es-PE', {dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Lima'}).format(new Date())
+                    this.message = this.versionLabel ? '' : 'No se pudo leer la versión instalada.'
+                    this.checking = false
+                })
+            },
+            confirmStart() {
+                this.$confirm('El sistema descargará e instalará la última versión disponible. Durante el proceso los clientes pueden experimentar interrupciones.', 'Iniciar actualización', {
+                    confirmButtonText: 'Iniciar actualización',
+                    cancelButtonText: 'Cancelar',
+                    type: 'warning'
+                }).then(() => this.start()).catch(() => {})
+            },
             async start() {
                 this.loading_submit = true
                 this.initContent()
@@ -189,31 +207,21 @@
                 this.composer.update.content = ''
             },
             getVersion() {
-                this.$http.get(`/${this.resource}/version`)
+                return this.$http.get(`/${this.resource}/version`)
                 .then(response => {
                     if (response.data !== '') {
                         this.version = response.data
                     }
-                }).catch(error => {
-                    if (error.response.status !== 200) {
-                        this.version.error = error.response.data.message
-                    } else {
-                        console.log(error)
-                    }
+                }).catch(() => {
+                    this.version = ''
                 })
             },
             getChangelog() {
-                this.$http.get(`/${this.resource}/changelog`)
+                return this.$http.get(`/${this.resource}/changelog`)
                 .then(response => {
-                    if (response.data !== '') {
-                        this.changelog = response.data
-                    }
-                }).catch(error => {
-                    if (error.response.status !== 200) {
-                        this.changelog.error = error.response.data.message
-                    } else {
-                        console.log(error)
-                    }
+                    this.changelog = typeof response.data === 'string' ? response.data : ''
+                }).catch(() => {
+                    this.changelog = ''
                 })
             },
             getBranch() {
@@ -234,6 +242,7 @@
                         this.branch.percent = 0
                         this.branch.error = error.response.data.message
                         this.branch.status = 'false'
+                        this.loading_submit = false
                     } else {
                         console.log(error)
                     }
@@ -260,6 +269,7 @@
                     this.pull.percent = 0
                     this.pull.error = 'no ha podido finalizar'
                     this.pull.status = 'false'
+                    this.loading_submit = false
                     console.log(error)
                 })
             },
@@ -283,9 +293,8 @@
                     } else {
                         console.log(error)
                     }
+                    this.loading_submit = false
                 })
-
-                this.loading_submit = false
             },
             execArtisanMigrate() {
                 this.$http.get(`/${this.resource}/artisan/migrate`)
@@ -299,6 +308,7 @@
                         }
                     }
                 }).catch(error => {
+                    this.loading_submit = false
                     if (error.response.status !== 200) {
                         this.artisan.migrate.percent = 0
                         this.artisan.migrate.error = error.response.data.message
@@ -320,6 +330,7 @@
                         }
                     }
                 }).catch(error => {
+                    this.loading_submit = false
                     this.artisan.tenancy_migrate.percent = 0
                     this.artisan.tenancy_migrate.error = error
                     this.artisan.tenancy_migrate.status = false
@@ -334,9 +345,12 @@
                         this.artisan.clear.percent = 100
                         if (response.status === 200) {
                             this.artisan.clear.status = 'success'
+                            this.loading_submit = false
+                            this.getVersion()
                         }
                     }
                 }).catch(error => {
+                    this.loading_submit = false
                     this.artisan.clear.percent = 0
                     this.artisan.clear.error = error
                     this.artisan.clear.status = false

@@ -23,6 +23,7 @@ class PlanCollection extends ResourceCollection
                 'limit_documents' => $row->limit_documents,
                 // 'plan_documents' => $row->plan_documents, 
                 'locked' => (bool) $row->locked, 
+                'clients_count' => $row->clients_count,
             ];
         });
     }

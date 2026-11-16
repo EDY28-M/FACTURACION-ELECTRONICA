@@ -1,68 +1,34 @@
-
- <template>
-    <div class="card">
-      <div class="card-header bg-info">
-        <h3 class="my-0">Culqi</h3>
-      </div>
-      <div class="card-body">
-        <form autocomplete="off" @submit.prevent="submit">
-          <div class="form-body">
-            <div class="row">
-              <div class="col-md-12">
-                <div class="form-group" :class="{'has-danger': errors.token_public_culqui}">
-                  <label class="control-label">
-                    Token Público
-                    <el-tooltip placement="right-start">
-                      <div slot="content">
-                        Token Público.
-                        <a href="#" @click="openCulqi">Culqi</a>
-                      </div>
-                      <i class="fa fa-info-circle"></i>
-                    </el-tooltip>
-                  </label>
-                  <el-input v-model="form.token_public_culqui"></el-input>
-                  <small
-                    class="form-control-feedback"
-                    v-if="errors.token_public_culqui"
-                    v-text="errors.token_public_culqui[0]"
-                  ></small>
-                </div>
-              </div>
-              <div class="col-md-12">
-                <div class="form-group" :class="{'has-danger': errors.token_private_culqui}">
-                  <label class="control-label">Token Privado  <el-tooltip placement="right-start">
-                      <div slot="content">
-                        Token Privado.
-                        <a href="#" @click="openCulqi">Culqi</a>
-                      </div>
-                      <i class="fa fa-info-circle"></i>
-                    </el-tooltip></label>
-                  <el-input v-model="form.token_private_culqui"></el-input>
-                  <small
-                    class="form-control-feedback"
-                    v-if="errors.token_private_culqui"
-                    v-text="errors.token_private_culqui[0]"
-                  ></small>
-                </div>
-              </div>
+<template>
+    <form autocomplete="off" @submit.prevent="submit">
+        <div class="system-form-grid system-form-single">
+            <div class="system-field" :class="{'has-danger': errors.token_public_culqui}">
+                <label for="culqi-public">Token público</label>
+                <el-input id="culqi-public" class="system-mono-input" v-model="form.token_public_culqui" placeholder="pk_live_…"></el-input>
+                <small class="form-control-feedback" v-if="errors.token_public_culqui" v-text="errors.token_public_culqui[0]"></small>
             </div>
-          </div>
-          <div class="form-actions text-right pt-2">
-            <el-button type="primary" native-type="submit" :loading="loading_submit">Guardar</el-button>
-          </div>
-        </form>
-      </div>
-    </div>
+            <div class="system-field" :class="{'has-danger': errors.token_private_culqui}">
+                <label for="culqi-private">Token privado</label>
+                <el-input id="culqi-private" class="system-mono-input" :type="reveal ? 'text' : 'password'" v-model="form.token_private_culqui" placeholder="sk_live_…" autocomplete="off">
+                    <button slot="suffix" type="button" class="system-input-toggle" aria-label="Mostrar u ocultar token" :aria-pressed="String(reveal)" @click="reveal = !reveal">
+                        <svg class="sys-icon" aria-hidden="true"><use :href="$icon((reveal ? 'eye-off' : 'eye'))" /></svg>
+                    </button>
+                </el-input>
+                <small class="form-control-feedback" v-if="errors.token_private_culqui" v-text="errors.token_private_culqui[0]"></small>
+                <small class="system-field-hint">Obtén tus credenciales en <a href="https://www.culqi.com" target="_blank" rel="noopener noreferrer">culqi.com</a>.</small>
+            </div>
+            <div class="system-form-actions">
+                <button type="submit" class="system-button system-button-primary" :disabled="loading_submit">{{ loading_submit ? 'Guardando…' : 'Guardar' }}</button>
+            </div>
+        </div>
+    </form>
 </template>
-
-
-
 
 <script>
 export default {
   data() {
     return {
       loading_submit: false,
+      reveal: false,
       // headers: headers_token,
       resource: "configurations",
       errors: {},
@@ -77,11 +43,15 @@ export default {
     await this.$http.get(`/${this.resource}/record`).then(response => {
         this.form.token_public_culqui = response.data.token_public_culqui;
         this.form.token_private_culqui = response.data.token_private_culqui;
+        this.emitStatus();
     });
   },
   methods: {
-    openCulqi() {
-      window.open("https://www.culqi.com");
+    emitStatus() {
+      this.$emit("status", {
+        culqi_public: !!this.form.token_public_culqui,
+        culqi_private: !!this.form.token_private_culqui
+      });
     },
     initForm() {
       this.errors = {};
@@ -97,6 +67,7 @@ export default {
         .then(response => {
           if (response.data.success) {
             this.$message.success(response.data.message);
+            this.emitStatus();
           } else {
             this.$message.error(response.data.message);
           }

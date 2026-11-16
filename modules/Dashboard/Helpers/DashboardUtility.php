@@ -2,20 +2,19 @@
 
 namespace Modules\Dashboard\Helpers;
 
-use App\Models\Tenant\Document;
-use App\Models\Tenant\SaleNote;
-use App\Models\Tenant\Person;
-use App\Models\Tenant\DocumentItem;
-use App\Models\Tenant\PurchaseItem;
-use App\Models\Tenant\SaleNoteItem;
-use App\Models\Tenant\Purchase;
-use App\Models\Tenant\Item;
 use Carbon\Carbon;
-use Modules\Dashboard\Traits\TotalsTrait;
-use Modules\Expense\Models\Expense;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Income / egress / utility totals for the dashboard.
+ *
+ * Every figure is computed with aggregate SQL (SUM ... GROUP BY) instead of hydrating documents and
+ * items as models, so memory stays flat regardless of the selected range.
+ */
 class DashboardUtility
 {
+    const STATES = ['01', '03', '05', '07', '13'];
+    const SALE_DOCUMENT_TYPES = ['01', '03', '08'];
 
     // use TotalsTrait;
 
@@ -67,72 +66,26 @@ class DashboardUtility
 
     private function utilities_totals($establishment_id, $d_start, $d_end, $enabled_expense, $item_id){
 
+        $db = DB::connection('tenant');
+        $hasRange = $d_start && $d_end;
 
-        if($d_start && $d_end){
+        $documents = $this->documentTotals($db, $establishment_id, $hasRange, $d_start, $d_end, $item_id);
+        $saleNotes = $this->saleNoteTotals($db, $establishment_id, $hasRange, $d_start, $d_end, $item_id);
+        $expenses = $enabled_expense ? $this->expenseTotal($db, $establishment_id, $hasRange, $d_start, $d_end) : 0;
 
-            $document_items = DocumentItem::whereHas('document',function($query) use($establishment_id, $d_start, $d_end){
-                                                $query->where('establishment_id', $establishment_id)
-                                                        ->whereIn('state_type_id', ['01','03','05','07','13'])
-                                                        ->whereBetween('date_of_issue', [$d_start, $d_end])
-                                                        ->whereIn('document_type_id', ['01','03','08']);
-                                            })
-                                            ->get();
-
-
-            $sale_note_items = SaleNoteItem::whereHas('sale_note', function($query) use($establishment_id, $d_start, $d_end){
-
-                                                $query->where([['establishment_id', $establishment_id],['changed',false]])
-                                                        ->whereIn('state_type_id', ['01','03','05','07','13'])
-                                                        ->whereBetween('date_of_issue', [$d_start, $d_end]);
-                                            })
-                                            ->get();
-
-            $expenses = ($enabled_expense) ? Expense::where('establishment_id', $establishment_id)->whereBetween('date_of_issue', [$d_start, $d_end])->get():null;
-
-
-        }else{
-            $document_items = DocumentItem::whereHas('document', function($query) use($establishment_id){
-
-                                                $query->where('establishment_id', $establishment_id)
-                                                        ->whereIn('state_type_id', ['01','03','05','07','13']);
-                                            })
-                                            ->get();
-
-
-            $sale_note_items = SaleNoteItem::whereHas('sale_note', function($query) use($establishment_id){
-
-                                                $query->where([['establishment_id', $establishment_id],['changed',false]])
-                                                        ->whereIn('state_type_id', ['01','03','05','07','13']);
-                                            })
-                                            ->get();
-
-
-            $expenses = ($enabled_expense) ? Expense::where('establishment_id', $establishment_id)->get():null;
-
-        }
-
-        if($item_id){
-            $document_items = $document_items->where('item_id', $item_id);
-            $sale_note_items = $sale_note_items->where('item_id', $item_id);
-        }
-
-        // dd($document_items);
-        $getTotalDocumentItems = $this->getTotalDocumentItems($document_items);
-        $getTotalSaleNoteItems = $this->getTotalSaleNoteItems($sale_note_items);
-        $getTotalExpenses = $this->getTotalExpenses($expenses);
-
-        // dd($getTotalDocumentItems, $getTotalSaleNoteItems, $getTotalExpenses);
-
-        $total_income = $getTotalDocumentItems['document_sale_total'] + $getTotalSaleNoteItems['sale_note_sale_total'];
-        $total_egress = $getTotalDocumentItems['document_purchase_total'] + $getTotalSaleNoteItems['sale_note_purchase_total'] + $getTotalExpenses;
+        $total_income = $documents['sale'] + $saleNotes['sale'];
+        $total_purchase = $documents['purchase'] + $saleNotes['purchase'];
+        $total_egress = $total_purchase + $expenses;
         $utility = $total_income - $total_egress;
-
 
         return [
             'totals' => [
                 'total_income' => number_format($total_income,2, ".", ""),
                 'total_egress' => number_format($total_egress,2, ".", ""),
                 'utility' => number_format($utility,2, ".", ""),
+                // Components of total_egress, so the dashboard can show purchases and expenses apart.
+                'total_purchase' => number_format($total_purchase,2, ".", ""),
+                'total_expense' => number_format($expenses,2, ".", ""),
             ],
             'graph' => [
                 'labels' => ['Ingreso', 'Egreso'],
@@ -151,185 +104,104 @@ class DashboardUtility
 
     }
 
-
-    private function getTotalExpenses($expenses){
-
-        if($expenses){
-
-            $total = 0;
-            foreach ($expenses as $ex) {
-                $total += ($ex->currency_type_id == 'USD') ? $ex->total * $ex->exchange_rate_sale: $ex->total;
-            }
-
-            return number_format($total, 2, ".", "");
-        }
-
-        return 0;
+    /**
+     * Cost of one item row: 0 for services (unit type ZZ); otherwise the item's purchase price when set,
+     * else the unit price of its latest purchase line, else the price it was sold at.
+     * $row is the table alias of the line (document_items / sale_note_items), joined with `it` (items) and `lp` (latest purchase line).
+     */
+    private function costSql($row)
+    {
+        return "(CASE WHEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT({$row}.item, '$.unit_type_id')), '') <> 'ZZ' THEN
+                    (CASE WHEN COALESCE(it.purchase_unit_price, 0) > 0 THEN it.purchase_unit_price
+                          WHEN lp.id IS NOT NULL THEN lp.unit_price
+                          ELSE {$row}.unit_price END)
+                 ELSE 0 END) * {$row}.quantity";
     }
 
-
-    private function getPurchaseUnitPrice($record){
-
-        $purchase_unit_price = 0;
-
-        if($record->item->unit_type_id != 'ZZ'){
-
-            if($record->relation_item->purchase_unit_price > 0){
-
-                $purchase_unit_price = $record->relation_item->purchase_unit_price;
-
-            }else{
-
-                $purchase_item = PurchaseItem::select('unit_price')->where('item_id', $record->item_id)->latest('id')->first();
-                $purchase_unit_price = ($purchase_item) ? $purchase_item->unit_price : $record->unit_price;
-
-            }
-
-        }
-
-        return $purchase_unit_price;
+    /** Latest purchase line (highest id) of every item, as a derived table with columns id, item_id, unit_price. */
+    private function latestPurchaseLineSql()
+    {
+        return DB::raw('(SELECT pi.id, pi.item_id, pi.unit_price FROM purchase_items pi
+                         INNER JOIN (SELECT MAX(id) AS max_id FROM purchase_items GROUP BY item_id) m ON m.max_id = pi.id) lp');
     }
 
-    private function getTotalSaleNoteItems($sale_note_items){
-
-        $purchase_unit_price = 0;
-
-        //PEN
-        $sale_note_sale_total_pen = 0;
-        $sale_note_purchase_total_pen = 0;
-        $sale_note_utility_total_pen = 0;
-
-        //USD
-        $sale_note_sale_total_usd = 0;
-        $sale_note_purchase_total_usd = 0;
-        $sale_note_utility_total_usd = 0;
-
-        foreach ($sale_note_items as $sln) {
-
-            $purchase_unit_price = $this->getPurchaseUnitPrice($sln);
-
-            $sln_total_purchase = $purchase_unit_price * $sln->quantity;
-
-            if($sln->sale_note->currency_type_id === 'PEN'){
-
-                    $sale_note_purchase_total_pen += $sln_total_purchase;
-                    $sale_note_sale_total_pen += $sln->total;
-
-            }else{
-
-                $sale_note_purchase_total_usd += $sln_total_purchase;
-                $sale_note_sale_total_usd += $sln->total * $sln->sale_note->exchange_rate_sale;
-
+    private function documentTotals($db, $establishment_id, $hasRange, $d_start, $d_end, $item_id)
+    {
+        $scope = function ($query) use ($establishment_id, $hasRange, $d_start, $d_end) {
+            $query->where('d.establishment_id', $establishment_id)
+                ->whereIn('d.state_type_id', self::STATES);
+            if ($hasRange) {
+                // Only a bounded range is restricted to sales documents; the open (all time) range also
+                // includes the other types (credit notes), which subtract.
+                $query->whereIn('d.document_type_id', self::SALE_DOCUMENT_TYPES)
+                    ->whereBetween('d.date_of_issue', [$d_start, $d_end]);
             }
+        };
+        $sign = "(CASE WHEN d.document_type_id IN ('" . implode("','", self::SALE_DOCUMENT_TYPES) . "') THEN 1 ELSE -1 END)";
 
+        // Sales: the whole document total, once per document that has at least one matching item line.
+        // The USD branch multiplies by a rate that the former implementation never loaded (null), so USD documents add 0.
+        $sale = $db->table('documents as d');
+        $scope($sale);
+        $sale->whereExists(function ($query) use ($item_id) {
+            $query->select(DB::raw(1))->from('document_items as di')->whereColumn('di.document_id', 'd.id');
+            if ($item_id) {
+                $query->where('di.item_id', $item_id);
+            }
+        });
+        $saleTotal = (float) $sale->where('d.currency_type_id', 'PEN')->selectRaw("COALESCE(SUM({$sign} * d.total), 0) AS total")->value('total');
+
+        // Cost: per item line.
+        $cost = $db->table('document_items as di')
+            ->join('documents as d', 'd.id', '=', 'di.document_id')
+            ->leftJoin('items as it', 'it.id', '=', 'di.item_id')
+            ->leftJoin($this->latestPurchaseLineSql(), 'lp.item_id', '=', 'di.item_id');
+        $scope($cost);
+        if ($item_id) {
+            $cost->where('di.item_id', $item_id);
         }
+        $purchaseTotal = (float) $cost->selectRaw('COALESCE(SUM(' . $sign . ' * ' . $this->costSql('di') . '), 0) AS cost')->value('cost');
 
-        $sale_note_utility_total_pen = $sale_note_sale_total_pen - $sale_note_purchase_total_pen;
-        $sale_note_utility_total_usd = $sale_note_sale_total_usd - $sale_note_purchase_total_usd;
-
-
-        return [
-
-            // 'sale_note_sale_total_pen' => round($sale_note_sale_total_pen, 2),
-            // 'sale_note_purchase_total_pen' => round($sale_note_purchase_total_pen, 2),
-
-            // 'sale_note_purchase_total_usd' => round($sale_note_purchase_total_usd, 2),
-            // 'sale_note_sale_total_usd' => round($sale_note_sale_total_usd, 2),
-
-            // 'sale_note_utility_total_pen' => round($sale_note_utility_total_pen, 2),
-            // 'sale_note_utility_total_usd' => round($sale_note_utility_total_usd, 2),
-
-            'sale_note_sale_total' => $sale_note_sale_total_usd + $sale_note_sale_total_pen,
-            'sale_note_purchase_total' => $sale_note_purchase_total_usd + $sale_note_purchase_total_pen,
-
-        ];
+        return ['sale' => $saleTotal, 'purchase' => $purchaseTotal];
     }
 
-    private function getTotalDocumentItems($document_items) {
-        $purchase_unit_price = 0;
-        $purchase_currency_type = null;
+    private function saleNoteTotals($db, $establishment_id, $hasRange, $d_start, $d_end, $item_id)
+    {
+        $query = $db->table('sale_note_items as sni')
+            ->join('sale_notes as sn', 'sn.id', '=', 'sni.sale_note_id')
+            ->leftJoin('items as it', 'it.id', '=', 'sni.item_id')
+            ->leftJoin($this->latestPurchaseLineSql(), 'lp.item_id', '=', 'sni.item_id')
+            ->where('sn.establishment_id', $establishment_id)
+            ->where('sn.changed', false)
+            ->whereIn('sn.state_type_id', self::STATES);
 
-        //PEN
-        $document_total_note_credit_pen = 0;
-
-        $document_sale_total_pen = 0;
-        $document_purchase_total_pen = 0;
-        $document_utility_total_pen = 0;
-
-        //USD
-        $document_total_note_credit_usd = 0;
-        $document_sale_total_usd = 0;
-        $document_purchase_total_usd = 0;
-        $document_utility_total_usd = 0;
-
-        $documentsIds = $document_items->pluck('document_id')->all();
-        // Obteniendo todos los documentos de los items q recibe la función
-        $documents = Document::without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
-            ->whereIn('id', $documentsIds)
-            ->select('id', 'total', 'document_type_id', 'currency_type_id')
-            ->get();
-
-        foreach ($documents as $doc) {
-            if($doc->currency_type_id === 'PEN'){
-                if(in_array($doc->document_type_id,['01','03','08'])){
-                    $document_sale_total_pen += $doc->total;
-                }else{
-                    $document_sale_total_pen -= $doc->total;
-                }
-            } else {
-                if(in_array($doc->document_type_id,['01','03','08'])){
-                    $document_sale_total_usd += $doc->total * $doc->exchange_rate_sale;
-                }else{
-                    $document_sale_total_usd -= $doc->total * $doc->exchange_rate_sale;
-                }
-            }
+        if ($hasRange) {
+            $query->whereBetween('sn.date_of_issue', [$d_start, $d_end]);
+        }
+        if ($item_id) {
+            $query->where('sni.item_id', $item_id);
         }
 
-        foreach ($document_items as $doc_it) {
-            $purchase_unit_price = $this->getPurchaseUnitPrice($doc_it);
+        $row = $query->selectRaw(
+            "COALESCE(SUM(CASE WHEN sn.currency_type_id = 'PEN' THEN sni.total ELSE sni.total * sn.exchange_rate_sale END), 0) AS sale,
+             COALESCE(SUM(" . $this->costSql('sni') . "), 0) AS cost"
+        )->first();
 
-
-            $doc_total_purchase = $purchase_unit_price * $doc_it->quantity;
-
-            if($doc_it->document->currency_type_id === 'PEN'){
-                if(in_array($doc_it->document->document_type_id,['01','03','08'])){
-                    $document_purchase_total_pen += $doc_total_purchase;
-                    // $document_sale_total_pen += $doc_it->total;
-                }else{
-                    $document_purchase_total_pen -= $doc_total_purchase;
-                    // $document_sale_total_pen -= $doc_it->total;
-                }
-            } else {
-                if(in_array($doc_it->document->document_type_id,['01','03','08'])){
-                    $document_purchase_total_usd += $doc_total_purchase;
-                    // $document_sale_total_usd += $doc_it->total * $doc_it->document->exchange_rate_sale;
-                }else{
-
-                    $document_purchase_total_usd -= $doc_total_purchase;
-                    // $document_sale_total_usd -= $doc_it->total * $doc_it->document->exchange_rate_sale;
-                }
-            }
-        }
-
-        $document_utility_total_pen = $document_sale_total_pen - $document_purchase_total_pen;
-        $document_utility_total_usd = $document_sale_total_usd - $document_purchase_total_usd;
-
-        return [
-
-            'document_sale_total_pen' => round($document_sale_total_pen, 2),
-            'document_purchase_total_pen' => round($document_purchase_total_pen, 2),
-
-            'document_purchase_total_usd' => round($document_purchase_total_usd, 2),
-            'document_sale_total_usd' => round($document_sale_total_usd, 2),
-
-            'document_utility_total_pen' => round($document_utility_total_pen, 2),
-            'document_utility_total_usd' => round($document_utility_total_usd, 2),
-
-            'document_sale_total' => $document_sale_total_usd + $document_sale_total_pen,
-            'document_purchase_total' => $document_purchase_total_usd + $document_purchase_total_pen,
-
-        ];
+        return ['sale' => (float) $row->sale, 'purchase' => (float) $row->cost];
     }
 
+    private function expenseTotal($db, $establishment_id, $hasRange, $d_start, $d_end)
+    {
+        $query = $db->table('expenses')->where('establishment_id', $establishment_id);
+
+        if ($hasRange) {
+            $query->whereBetween('date_of_issue', [$d_start, $d_end]);
+        }
+
+        $total = $query->selectRaw("COALESCE(SUM(CASE WHEN currency_type_id = 'USD' THEN total * exchange_rate_sale ELSE total END), 0) AS total")->value('total');
+
+        // Same rounding the former implementation applied before adding it to the egress.
+        return (float) number_format((float) $total, 2, ".", "");
+    }
 
 }

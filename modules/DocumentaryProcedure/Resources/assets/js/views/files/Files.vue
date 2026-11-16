@@ -98,11 +98,11 @@
           <table class="table">
             <thead>
               <tr>
-                <th></th>
+                <th>#</th>
                 <th>Asunto</th>
                 <th>Fecha/Hora registro</th>
                 <th>Remitente</th>
-                <th></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
