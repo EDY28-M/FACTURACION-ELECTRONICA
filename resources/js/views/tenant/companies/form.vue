@@ -187,6 +187,19 @@
                                 </div>
                             </div>
                         </div>
+                    <div class="row">
+                        <div class="col-md-12 mt-2">
+                            <h4 class="border-bottom">Transporte (GRE Transportista)</h4>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group" :class="{'has-danger': errors.mtc_registration_number}">
+                                <label class="control-label">N° de registro MTC</label>
+                                <el-input v-model="form.mtc_registration_number" :maxlength="20"></el-input>
+                                <div class="sub-title text-muted"><small>Registro otorgado por el MTC al transportista. Obligatorio para emitir guías de remisión transportista.</small></div>
+                                <small class="form-control-feedback" v-if="errors.mtc_registration_number" v-text="errors.mtc_registration_number[0]"></small>
+                            </div>
+                        </div>
+                    </div>
                     <template v-if="form.soap_type_id == '02'">
                         <div class="row">
                             <div class="col-md-12 mt-2">
@@ -327,6 +340,7 @@
                     config_system_env: false,
                     img_firm: null,
                     gre_client_id: null,
+                    mtc_registration_number: null,
                     gre_client_secret: null,
                     has_gre_client_secret: false,
                     sire_client_id: null,

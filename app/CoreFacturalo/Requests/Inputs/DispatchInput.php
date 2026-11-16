@@ -30,6 +30,17 @@ class DispatchInput
         $customer = PersonInput::set($inputs['customer_id']);
         $inputs['type'] = 'dispatch';
 
+        // GRE Transportista (31) has no transfer reason / transport mode: store neutral catalog values (not rendered).
+        $is_carrier = $document_type_id === '31';
+        if ($is_carrier) {
+            $inputs['transport_mode_type_id'] = $inputs['transport_mode_type_id'] ?? '01';
+            $inputs['transfer_reason_type_id'] = $inputs['transfer_reason_type_id'] ?? '01';
+            $inputs['transfer_reason_description'] = null;
+            $inputs['packages_number'] = $inputs['packages_number'] ?? 0;
+            $inputs['port_code'] = null;
+            $inputs['container_number'] = null;
+        }
+
         return [
             'type' => $inputs['type'],
             'user_id' => auth()->id(),
@@ -73,6 +84,58 @@ class DispatchInput
             'reference_order_form_id' => Functions::valueKeyInArray($inputs, 'reference_order_form_id'),
             'reference_sale_note_id' => Functions::valueKeyInArray($inputs, 'reference_sale_note_id'),
             'secondary_license_plates' => self::secondary_license_plates($inputs),
+        ] + ($is_carrier ? self::carrier($inputs) : []);
+    }
+
+    /**
+     * GRE Transportista (31) specific data.
+     */
+    private static function carrier($inputs)
+    {
+        $party = function ($data) {
+            if (empty($data) || !is_array($data) || empty($data['number'])) {
+                return null;
+            }
+
+            return [
+                'identity_document_type_id' => $data['identity_document_type_id'] ?? '6',
+                'number' => $data['number'],
+                'name' => $data['name'] ?? null,
+            ];
+        };
+
+        $freight_payer = $inputs['freight_payer'] ?? null;
+        $related = [];
+        foreach (($inputs['related_dispatches'] ?? []) as $row) {
+            if (empty($row['series_number'])) {
+                continue;
+            }
+            $related[] = [
+                'series_number' => strtoupper(trim($row['series_number'])),
+                'ruc' => $row['ruc'] ?? null,
+            ];
+        }
+
+        $vehicle = $inputs['vehicle_details'] ?? [];
+        $indicators = $inputs['indicators'] ?? [];
+
+        return [
+            'sender' => $party($inputs['sender'] ?? null),
+            'freight_payer' => $freight_payer,
+            'freight_payer_party' => $freight_payer === 'tercero' ? $party($inputs['freight_payer_party'] ?? null) : null,
+            'related_dispatches' => $related ?: null,
+            'subcontractor' => $party($inputs['subcontractor'] ?? null),
+            'vehicle_details' => [
+                'tuc' => $vehicle['tuc'] ?? null,
+                'authorization_number' => $vehicle['authorization_number'] ?? null,
+                'authorization_entity_id' => $vehicle['authorization_entity_id'] ?? null,
+                'semitrailer_tuc' => $vehicle['semitrailer_tuc'] ?? null,
+            ],
+            'indicators' => [
+                'total_transfer' => !empty($indicators['total_transfer']),
+                'empty_packaging_return' => !empty($indicators['empty_packaging_return']),
+                'empty_vehicle_return' => !empty($indicators['empty_vehicle_return']),
+            ],
         ];
     }
 

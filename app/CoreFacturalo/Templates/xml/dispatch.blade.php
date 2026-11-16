@@ -1,5 +1,7 @@
 @php
-    // SUNAT GRE 2.0 (Guia de Remision Remitente, type 09). UBL 2.1 DespatchAdvice, CustomizationID 2.0.
+    // SUNAT GRE 2.0. UBL 2.1 DespatchAdvice, CustomizationID 2.0.
+    // Type 09 = Guia de Remision Remitente, type 31 = Guia de Remision Transportista (RS 000123-2022, annexes 28 and 14-b).
+    $isCarrier = $document->document_type_id === '31';
     $isPublicTransport = $document->transport_mode_type_id === '01';
     $driver = $document->driver;
     $dispatcher = $document->dispatcher;
@@ -25,6 +27,42 @@
     $licensePlate = $normalizePlate($document->license_plate);
     $semitrailer = $normalizePlate($document->secondary_license_plates->semitrailer ?? '');
     $weight = number_format((float) $document->total_weight, 3, '.', '');
+
+    $relatedGuides = [];
+    $carrierIndicators = [];
+    if ($isCarrier) {
+        $sender = $document->sender;
+        $payer = $document->freight_payer_party;
+        $subcontractor = $document->subcontractor;
+        $vehicle = $document->vehicle_details;
+        $indicators = $document->indicators;
+        $relatedGuides = array_values(array_filter((array) $document->related_dispatches, function ($row) {
+            return !empty($row->series_number);
+        }));
+        $hasSubcontractor = !empty($subcontractor->number ?? null);
+        $semitrailerTuc = $vehicle->semitrailer_tuc ?? null;
+
+        // Order follows the SUNAT annex (fields 53 to 58).
+        if (!empty($indicators->total_transfer ?? null)) {
+            $carrierIndicators[] = 'SUNAT_Envio_IndicadorTrasladoTotal';
+        }
+        if (!empty($indicators->empty_packaging_return ?? null)) {
+            $carrierIndicators[] = 'SUNAT_Envio_IndicadorRetornoVehiculoEnvaseVacio';
+        }
+        if (!empty($indicators->empty_vehicle_return ?? null)) {
+            $carrierIndicators[] = 'SUNAT_Envio_IndicadorRetornoVehiculoVacio';
+        }
+        if ($document->transshipment_indicator) {
+            $carrierIndicators[] = 'SUNAT_Envio_IndicadorTransbordoProgramado';
+        }
+        if ($hasSubcontractor) {
+            $carrierIndicators[] = 'SUNAT_Envio_IndicadorTrasporteSubcontratado';
+        }
+        $payerSuffix = ['remitente' => 'Remitente', 'subcontratador' => 'Subcontratador', 'tercero' => 'Tercero'][$document->freight_payer] ?? null;
+        if ($payerSuffix) {
+            $carrierIndicators[] = 'SUNAT_Envio_IndicadorPagadorFlete_'.$payerSuffix;
+        }
+    }
 @endphp
 {!! '<'.'?xml version="1.0" encoding="utf-8" standalone="no"?'.'>' !!}
 <DespatchAdvice xmlns="urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2"
@@ -46,7 +84,21 @@
     @if($document->observations)
     <cbc:Note>{{ $document->observations }}</cbc:Note>
     @endif
-    @if($related && in_array($related->document_type_id, ['01', '03']))
+    @foreach($relatedGuides as $guide)
+    <cac:AdditionalDocumentReference>
+        <cbc:ID>{{ $guide->series_number }}</cbc:ID>
+        <cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="Documento relacionado al transporte" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61">09</cbc:DocumentTypeCode>
+        <cbc:DocumentType>Guía de remisión remitente</cbc:DocumentType>
+        @if(!empty($guide->ruc))
+        <cac:IssuerParty>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">{{ $guide->ruc }}</cbc:ID>
+            </cac:PartyIdentification>
+        </cac:IssuerParty>
+        @endif
+    </cac:AdditionalDocumentReference>
+    @endforeach
+    @if($related && empty($relatedGuides) && in_array($related->document_type_id, ['01', '03']))
     <cac:AdditionalDocumentReference>
         <cbc:ID>{{ $related->series }}-{{ $related->number }}</cbc:ID>
         <cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="Documento relacionado al transporte" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61">{{ $related->document_type_id }}</cbc:DocumentTypeCode>
@@ -95,24 +147,63 @@
             </cac:PartyLegalEntity>
         </cac:Party>
     </cac:DeliveryCustomerParty>
+    @if($isCarrier && $document->freight_payer === 'tercero' && !empty($payer->number ?? null))
+    <cac:OriginatorCustomerParty>
+        <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="{{ $payer->identity_document_type_id ?? '' }}" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">{{ $payer->number }}</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PartyLegalEntity>
+                <cbc:RegistrationName>{{ $payer->name ?? '' }}</cbc:RegistrationName>
+            </cac:PartyLegalEntity>
+        </cac:Party>
+    </cac:OriginatorCustomerParty>
+    @endif
     <cac:Shipment>
         <cbc:ID>SUNAT_Envio</cbc:ID>
+        @if(!$isCarrier)
         <cbc:HandlingCode listAgencyName="PE:SUNAT" listName="Motivo de traslado" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20">{{ $document->transfer_reason_type_id }}</cbc:HandlingCode>
         @if($document->transfer_reason_description)
         <cbc:HandlingInstructions>{{ $document->transfer_reason_description }}</cbc:HandlingInstructions>
         @endif
+        @endif
         <cbc:GrossWeightMeasure unitCode="{{ $document->unit_type_id }}">{{ $weight }}</cbc:GrossWeightMeasure>
-        @if($document->packages_number)
+        @if(!$isCarrier && $document->packages_number)
         <cbc:TotalTransportHandlingUnitQuantity>{{ $document->packages_number }}</cbc:TotalTransportHandlingUnitQuantity>
         @endif
-        @if($document->transshipment_indicator)
+        @if(!$isCarrier && $document->transshipment_indicator)
         <cbc:SpecialInstructions>SUNAT_Envio_IndicadorTransbordoProgramado</cbc:SpecialInstructions>
         @endif
+        @foreach($carrierIndicators as $indicator)
+        <cbc:SpecialInstructions>{{ $indicator }}</cbc:SpecialInstructions>
+        @endforeach
+        @if($isCarrier && $hasSubcontractor)
+        <cac:Consignment>
+            <cbc:ID>SUNAT_Envio</cbc:ID>
+            <cac:LogisticsOperatorParty>
+                <cbc:CustomerAssignedAccountID schemeID="{{ $subcontractor->identity_document_type_id ?? '6' }}">{{ $subcontractor->number }}</cbc:CustomerAssignedAccountID>
+                <cac:Party>
+                    <cac:PartyLegalEntity>
+                        <cbc:RegistrationName>{{ $subcontractor->name ?? '' }}</cbc:RegistrationName>
+                    </cac:PartyLegalEntity>
+                </cac:Party>
+            </cac:LogisticsOperatorParty>
+        </cac:Consignment>
+        @endif
         <cac:ShipmentStage>
+            @if(!$isCarrier)
             <cbc:TransportModeCode listName="Modalidad de traslado" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo18">{{ $document->transport_mode_type_id }}</cbc:TransportModeCode>
+            @endif
             <cac:TransitPeriod>
                 <cbc:StartDate>{{ $document->date_of_shipping->format('Y-m-d') }}</cbc:StartDate>
             </cac:TransitPeriod>
+            @if($isCarrier && !empty($company->mtc_registration_number))
+            <cac:CarrierParty>
+                <cac:PartyLegalEntity>
+                    <cbc:CompanyID>{{ $company->mtc_registration_number }}</cbc:CompanyID>
+                </cac:PartyLegalEntity>
+            </cac:CarrierParty>
+            @endif
             @if($isPublicTransport && $dispatcher)
             <cac:CarrierParty>
                 <cac:PartyIdentification>
@@ -126,7 +217,7 @@
                 </cac:PartyLegalEntity>
             </cac:CarrierParty>
             @endif
-            @if(!$isPublicTransport && $driver)
+            @if(($isCarrier || !$isPublicTransport) && $driver)
             <cac:DriverPerson>
                 <cbc:ID schemeID="{{ $driver->identity_document_type_id ?? '' }}" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">{{ $driver->number ?? '' }}</cbc:ID>
                 <cbc:FirstName>{{ $driverFirstName }}</cbc:FirstName>
@@ -152,9 +243,19 @@
                         <cbc:Line>{{ $document->origin->address }}</cbc:Line>
                     </cac:AddressLine>
                 </cac:DespatchAddress>
+                @if($isCarrier && $sender)
+                <cac:DespatchParty>
+                    <cac:PartyIdentification>
+                        <cbc:ID schemeID="{{ $sender->identity_document_type_id ?? '' }}" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">{{ $sender->number ?? '' }}</cbc:ID>
+                    </cac:PartyIdentification>
+                    <cac:PartyLegalEntity>
+                        <cbc:RegistrationName>{{ $sender->name ?? '' }}</cbc:RegistrationName>
+                    </cac:PartyLegalEntity>
+                </cac:DespatchParty>
+                @endif
             </cac:Despatch>
         </cac:Delivery>
-        @if($document->container_number)
+        @if(!$isCarrier && $document->container_number)
         <cac:TransportHandlingUnit>
             <cac:Package>
                 <cbc:ID>1</cbc:ID>
@@ -162,7 +263,34 @@
             </cac:Package>
         </cac:TransportHandlingUnit>
         @endif
-        @if(!$isPublicTransport && $licensePlate !== '')
+        @if($isCarrier && $licensePlate !== '')
+        <cac:TransportHandlingUnit>
+            <cac:TransportEquipment>
+                <cbc:ID>{{ $licensePlate }}</cbc:ID>
+                @if($semitrailer !== '')
+                <cac:AttachedTransportEquipment>
+                    <cbc:ID>{{ $semitrailer }}</cbc:ID>
+                    @if(!empty($semitrailerTuc))
+                    <cac:ShipmentDocumentReference>
+                        <cbc:ID>{{ $semitrailerTuc }}</cbc:ID>
+                    </cac:ShipmentDocumentReference>
+                    @endif
+                </cac:AttachedTransportEquipment>
+                @endif
+                @if(!empty($vehicle->tuc ?? null))
+                <cac:ShipmentDocumentReference>
+                    <cbc:ID>{{ $vehicle->tuc }}</cbc:ID>
+                </cac:ShipmentDocumentReference>
+                @endif
+                @if(!empty($vehicle->authorization_number ?? null))
+                <cac:ShipmentDocumentReference>
+                    <cbc:ID schemeID="{{ $vehicle->authorization_entity_id ?? '' }}" schemeName="Entidad Autorizadora" schemeAgencyName="PE:SUNAT">{{ $vehicle->authorization_number }}</cbc:ID>
+                </cac:ShipmentDocumentReference>
+                @endif
+            </cac:TransportEquipment>
+        </cac:TransportHandlingUnit>
+        @endif
+        @if(!$isCarrier && !$isPublicTransport && $licensePlate !== '')
         <cac:TransportHandlingUnit>
             <cac:TransportEquipment>
                 <cbc:ID>{{ $licensePlate }}</cbc:ID>
@@ -174,7 +302,7 @@
             </cac:TransportEquipment>
         </cac:TransportHandlingUnit>
         @endif
-        @if($document->port_code)
+        @if(!$isCarrier && $document->port_code)
         <cac:FirstArrivalPortLocation>
             <cbc:ID schemeAgencyName="PE:SUNAT" schemeName="Puertos" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo63">{{ $document->port_code }}</cbc:ID>
             <cbc:LocationTypeCode>1</cbc:LocationTypeCode>

@@ -25,6 +25,7 @@ class Company extends ModelTenant
         'operation_amazonia',
         'img_firm',
         'gre_client_id',
+        'mtc_registration_number',
         'sire_client_id',
         'cpe_client_id',
     ];

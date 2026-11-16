@@ -15,7 +15,7 @@ use App\Models\Tenant\Dispatch;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Orchestrates sending a GRE (type 09) to SUNAT through the REST API and
+ * Orchestrates sending a GRE (type 09 remitente or 31 transportista) to SUNAT through the REST API and
  * processing the ticket status / CDR.
  *
  * Every public method returns an array:
@@ -119,8 +119,10 @@ class GreDispatchService
         try {
             $company = Company::active();
 
-            if ($dispatch->series[0] !== 'T') {
-                return $this->result(false, 'Solo las guías con serie electrónica (T) se envían a SUNAT.', $dispatch);
+            // Electronic series: T for the remitente guide (09), V for the transportista guide (31).
+            $expectedPrefix = $dispatch->document_type_id === '31' ? 'V' : 'T';
+            if ($dispatch->series[0] !== $expectedPrefix) {
+                return $this->result(false, "Solo las guías con serie electrónica ({$expectedPrefix}) se envían a SUNAT.", $dispatch);
             }
 
             if ($dispatch->state_type_id === self::REJECTED) {

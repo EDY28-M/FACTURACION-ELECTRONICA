@@ -127,7 +127,7 @@ class GreClient
     /**
      * Sends a zipped signed XML. Returns ['ticket' => ..., 'received_at' => ...].
      *
-     * @param string $filenameBase {RUC}-09-{serie}-{numero}, without extension
+     * @param string $filenameBase {RUC}-{09|31}-{serie}-{numero}, without extension
      * @param string $zipContent   binary zip containing exactly one xml named {filenameBase}.xml
      */
     public function send($filenameBase, $zipContent)

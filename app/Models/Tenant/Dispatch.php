@@ -65,6 +65,14 @@ class Dispatch extends ModelTenant
         'ticket',
         'qr',
         'sunat_qr_url',
+        // GRE Transportista (31)
+        'sender',
+        'freight_payer',
+        'freight_payer_party',
+        'related_dispatches',
+        'subcontractor',
+        'vehicle_details',
+        'indicators',
     ];
 
     protected $casts = [
@@ -152,6 +160,66 @@ class Dispatch extends ModelTenant
         $this->attributes['soap_shipping_response'] = (is_null($value))?null:json_encode($value);
     }
     
+    public function getSenderAttribute($value)
+    {
+        return (is_null($value)) ? null : (object) json_decode($value);
+    }
+
+    public function setSenderAttribute($value)
+    {
+        $this->attributes['sender'] = (is_null($value)) ? null : json_encode($value);
+    }
+
+    public function getFreightPayerPartyAttribute($value)
+    {
+        return (is_null($value)) ? null : (object) json_decode($value);
+    }
+
+    public function setFreightPayerPartyAttribute($value)
+    {
+        $this->attributes['freight_payer_party'] = (is_null($value)) ? null : json_encode($value);
+    }
+
+    public function getSubcontractorAttribute($value)
+    {
+        return (is_null($value)) ? null : (object) json_decode($value);
+    }
+
+    public function setSubcontractorAttribute($value)
+    {
+        $this->attributes['subcontractor'] = (is_null($value)) ? null : json_encode($value);
+    }
+
+    public function getVehicleDetailsAttribute($value)
+    {
+        return (is_null($value)) ? null : (object) json_decode($value);
+    }
+
+    public function setVehicleDetailsAttribute($value)
+    {
+        $this->attributes['vehicle_details'] = (is_null($value)) ? null : json_encode($value);
+    }
+
+    public function getIndicatorsAttribute($value)
+    {
+        return (is_null($value)) ? null : (object) json_decode($value);
+    }
+
+    public function setIndicatorsAttribute($value)
+    {
+        $this->attributes['indicators'] = (is_null($value)) ? null : json_encode($value);
+    }
+
+    public function getRelatedDispatchesAttribute($value)
+    {
+        return (is_null($value)) ? null : json_decode($value);
+    }
+
+    public function setRelatedDispatchesAttribute($value)
+    {
+        $this->attributes['related_dispatches'] = (is_null($value)) ? null : json_encode($value);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -200,6 +268,14 @@ class Dispatch extends ModelTenant
     public function items()
     {
         return $this->hasMany(DispatchItem::class);
+    }
+
+    /**
+     * GRE Transportista: the issuer is the carrier (document type 31).
+     */
+    public function isCarrierGuide()
+    {
+        return $this->document_type_id === '31';
     }
 
     public function getNumberFullAttribute()

@@ -103,7 +103,8 @@ class DispatchController extends Controller
 
 	public function store(DispatchRequest $request)
 	{
-		$isElectronic = $request->series[0] == 'T';
+		// Electronic series: T (remitente, 09) and V (transportista, 31).
+		$isElectronic = in_array($request->series[0], ['T', 'V'], true);
 
 		$fact = DB::connection('tenant')->transaction(function () use ($request, $isElectronic) {
 			$facturalo = new Facturalo();

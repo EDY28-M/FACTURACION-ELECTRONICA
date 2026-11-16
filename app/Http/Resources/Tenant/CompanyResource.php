@@ -37,6 +37,7 @@ class CompanyResource extends JsonResource
             'img_firm' => $this->img_firm,
             'favicon' => $this->favicon,
             'gre_client_id' => $this->gre_client_id,
+            'mtc_registration_number' => $this->mtc_registration_number,
             'has_gre_client_secret' => $this->hasGreClientSecret(),
             'sire_client_id' => $this->sire_client_id,
             'has_sire_client_secret' => $this->hasSireClientSecret(),

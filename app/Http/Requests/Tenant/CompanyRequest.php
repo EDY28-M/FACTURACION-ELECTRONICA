@@ -44,6 +44,10 @@ class CompanyRequest extends FormRequest
             'soap_type_id' => [
                 'nullable'
             ],
+            'mtc_registration_number' => [
+                'nullable',
+                'max:20',
+            ],
             'gre_client_id' => [
                 'nullable',
                 'max:100',
