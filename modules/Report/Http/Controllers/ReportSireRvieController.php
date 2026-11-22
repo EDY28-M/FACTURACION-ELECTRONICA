@@ -28,7 +28,9 @@ class ReportSireRvieController extends Controller
         try {
             $result = $this->generate($request);
         } catch (InvalidArgumentException|RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            report($e);
+
+            return response()->json(['success' => false, 'message' => 'No se pudo consultar el SIRE.'], 422);
         }
 
         return response()->json([
@@ -75,7 +77,9 @@ class ReportSireRvieController extends Controller
 
             return $response;
         } catch (InvalidArgumentException|RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            report($e);
+
+            return response()->json(['success' => false, 'message' => 'No se pudo consultar el SIRE.'], 422);
         } finally {
             @unlink($txtPath);
             if ($zipPath !== null && !$streamed) {
@@ -164,7 +168,9 @@ class ReportSireRvieController extends Controller
         try {
             $result = $action();
         } catch (InvalidArgumentException|RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            report($e);
+
+            return response()->json(['success' => false, 'message' => 'No se pudo consultar el SIRE.'], 422);
         } catch (GreException $e) {
             $userFixable = $e instanceof GreConfigurationException || $e instanceof GreAuthException
                 || ($e instanceof GreApiException && $e->isValidationError());

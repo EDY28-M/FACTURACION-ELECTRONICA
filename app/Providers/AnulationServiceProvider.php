@@ -31,6 +31,10 @@ class AnulationServiceProvider extends ServiceProvider
 
         Document::updated(function ($document) {
 
+            if (!$document->isDirty('state_type_id') || (string) $document->getOriginal('state_type_id') === '11') {
+                return;
+            }
+
             if($document['document_type_id'] == '01' || $document['document_type_id'] == '03'){
 
                 if($document['state_type_id'] == 11){

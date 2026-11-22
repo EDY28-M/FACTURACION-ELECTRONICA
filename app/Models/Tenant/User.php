@@ -3,6 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Notifications\Tenant\PasswordResetNotification;
+use App\Support\Access\TenantPlan;
 use Hyn\Tenancy\Traits\UsesTenantConnection;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -31,7 +32,7 @@ class User extends Authenticatable
      * @var array
      */
     protected $hidden = [
-        'remember_token',
+        'password', 'remember_token', 'api_token',
     ];
 
     public function modules()
@@ -47,43 +48,137 @@ class User extends Authenticatable
     /** @var bool|null */
     private $ownerCache;
 
+    /** @var int[]|null */
+    private $moduleIdsCache;
+
     /** @var string[]|null */
     private $moduleValuesCache;
+
+    /** @var int[]|null */
+    private $levelIdsCache;
 
     /** @var string[]|null */
     private $levelValuesCache;
 
     /**
-     * The tenant owner is the first user created for the tenant; it always has full access.
+     * The tenant owner is the first user created for the tenant. Its modules/levels ARE the tenant
+     * plan (see TenantPlan); it is not exempt from the plan, only protected from deletion/edition.
      */
     public function isOwner(): bool
     {
         if ($this->ownerCache === null) {
-            $this->ownerCache = (int) $this->id === (int) static::query()->min('id');
+            // TenantPlan memoizes the owner id per request, so listing users does not query it per row.
+            $this->ownerCache = (int) $this->id === (int) TenantPlan::current()->ownerId();
         }
 
         return $this->ownerCache;
     }
 
     /**
-     * Module values (modules.value) granted to the user. Empty means no access.
+     * Masked API token for listings: only the last 4 characters are shown.
+     */
+    public function apiTokenHint(): ?string
+    {
+        $token = (string) $this->api_token;
+
+        return $token === '' ? null : '••••••••'.substr($token, -4);
+    }
+
+    /**
+     * The API token acts as this user's credential, so the full value is only shown to the user
+     * itself, to the owner, or to an administrator looking at a non-owner account.
+     */
+    public function apiTokenVisibleTo(?User $viewer): bool
+    {
+        if (!$viewer) {
+            return false;
+        }
+
+        if ((int) $viewer->id === (int) $this->id || $viewer->isOwner()) {
+            return true;
+        }
+
+        return $viewer->type === 'admin' && !$this->isOwner();
+    }
+
+    /**
+     * Effective module ids: the plan for the owner, own grants capped by the plan for everyone else.
+     *
+     * @return int[]
+     */
+    public function moduleIds(): array
+    {
+        if ($this->moduleIdsCache === null) {
+            $plan = TenantPlan::current()->moduleIds();
+
+            if ($this->isOwner()) {
+                $this->moduleIdsCache = $plan;
+            } else {
+                $own = $this->modules()->pluck('modules.id')->map('intval')->all();
+                $this->moduleIdsCache = array_values(array_intersect($own, $plan));
+            }
+        }
+
+        return $this->moduleIdsCache;
+    }
+
+    /**
+     * Effective module values (modules.value). Empty means no access.
+     *
+     * @return string[]
      */
     public function moduleValues(): array
     {
         if ($this->moduleValuesCache === null) {
-            $this->moduleValuesCache = $this->modules()->pluck('value')->all();
+            $ids = $this->moduleIds();
+            $this->moduleValuesCache = $ids
+                ? Module::whereIn('id', $ids)->orderBy('id')->pluck('value')->all()
+                : [];
         }
 
         return $this->moduleValuesCache;
     }
 
     /**
-     * Level values (module_levels.value) granted to the user. Empty means no access.
+     * Effective level ids: plan levels for the owner; own levels capped by the plan and by the
+     * user's effective modules for everyone else.
+     *
+     * @return int[]
+     */
+    public function levelIds(): array
+    {
+        if ($this->levelIdsCache === null) {
+            $plan = TenantPlan::current();
+
+            if ($this->isOwner()) {
+                $this->levelIdsCache = $plan->levelIds();
+            } else {
+                $own = $this->levels()->pluck('module_levels.id')->map('intval')->all();
+                $moduleIds = $this->moduleIds();
+                $this->levelIdsCache = array_values(array_filter(
+                    array_intersect($own, $plan->levelIds()),
+                    function ($levelId) use ($plan, $moduleIds) {
+                        return in_array($plan->moduleOfLevel((int) $levelId), $moduleIds, true);
+                    }
+                ));
+            }
+        }
+
+        return $this->levelIdsCache;
+    }
+
+    /**
+     * Effective level values (module_levels.value). Empty means no access.
+     *
+     * @return string[]
      */
     public function levelValues(): array
     {
         if ($this->levelValuesCache === null) {
-            $this->levelValuesCache = $this->levels()->pluck('value')->all();
+            $ids = $this->levelIds();
+            $this->levelValuesCache = $ids
+                ? ModuleLevel::whereIn('id', $ids)->orderBy('id')->pluck('value')->all()
+                : [];
         }
 
         return $this->levelValuesCache;
@@ -99,56 +194,42 @@ class User extends Authenticatable
 
     public function hasAnyModule($modules)
     {
-        if (is_array($modules)) {
-            foreach ($modules as $module)
-            {
-                if ($this->hasModule($module)) {
-                    return true;
-                }
-            }
-        } else {
-            if ($this->hasModule($modules)) {
+        foreach ((array) $modules as $module) {
+            if ($this->hasModule($module)) {
                 return true;
             }
         }
+
         return false;
     }
 
     public function hasModule($module)
     {
-        if ($this->modules()->where('name', $module)->first()) {
-            return true;
-        }
-        return false;
+        return in_array($module, $this->moduleValues(), true);
     }
 
-
-
+    /**
+     * Value of the first effective module (by id), or null.
+     */
     public function getModule()
     {
-        $module = $this->modules()->orderBy('id')->first();
-        if ($module) {
-            return $module->value;
+        $ids = $this->moduleIds();
+        if (!$ids) {
+            return null;
         }
-        return null;
+        $module = Module::whereIn('id', $ids)->orderBy('id')->first();
+
+        return $module ? $module->value : null;
     }
 
     public function getModules()
     {
-        $modules = $this->modules()->get();
-        if ($modules) {
-            return $modules;
-        }
-        return null;
+        return Module::whereIn('id', $this->moduleIds())->get();
     }
-
 
     public function searchModule($module)
     {
-        if ($this->modules()->where('value', $module)->first()) {
-            return true;
-        }
-        return false;
+        return $this->hasModule($module);
     }
 
 
@@ -178,29 +259,23 @@ class User extends Authenticatable
 
     public function getLevel()
     {
-        $level = $this->levels()->orderBy('id')->first();
-        if ($level) {
-            return $level->value;
+        $ids = $this->levelIds();
+        if (!$ids) {
+            return null;
         }
-        return null;
+        $level = ModuleLevel::whereIn('id', $ids)->orderBy('id')->first();
+
+        return $level ? $level->value : null;
     }
 
     public function getLevels()
     {
-        $levels = $this->levels()->get();
-        if ($levels) {
-            return $levels;
-        }
-        return null;
+        return ModuleLevel::whereIn('id', $this->levelIds())->get();
     }
-
 
     public function searchLevel($Level)
     {
-        if ($this->levels()->where('value', $Level)->first()) {
-            return true;
-        }
-        return false;
+        return in_array($Level, $this->levelValues(), true);
     }
 
     public function user_commission()

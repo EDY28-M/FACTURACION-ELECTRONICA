@@ -66,7 +66,12 @@ class CashServiceProvider extends ServiceProvider
     
     private static function getCash(){
 
-        return  Cash::where([['user_id',auth()->user()->id],['state',true]])->first();
+        $userId = auth()->id();
+        if (!$userId) {
+            return null;
+        }
+
+        return Cash::where([['user_id', $userId], ['state', true]])->first();
 
     }
     

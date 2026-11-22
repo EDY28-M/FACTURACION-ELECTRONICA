@@ -20,7 +20,7 @@ class DashboardStock
         $establishment_id = $request->establishment_id;
 
         if(!$establishment_id){
-            $establishment_id = Establishment::select('id')->first()->id;
+            $establishment_id = optional(Establishment::select('id')->first())->id;
         }
 
         $products = ItemWarehouse::whereHas('item',function($query){

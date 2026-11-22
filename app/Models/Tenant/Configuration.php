@@ -88,4 +88,13 @@ class Configuration extends ModelTenant
     {
         return is_null($value) ? ['apply_arrears' => false, 'arrears_amount' => 0] : (object) json_decode($value);
     }
+
+    /**
+     * Whether the system admin allowed this company to change its own SUNAT settings
+     * (environment, send channel, SOL credentials and signing certificate).
+     */
+    public static function allowsSunatSettingsChanges(): bool
+    {
+        return (bool) optional(static::first())->config_system_env;
+    }
 }

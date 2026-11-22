@@ -13,14 +13,14 @@ class ToPay
 
     public static function getToPay($request)
     {
-        $establishment_id = $request['establishment_id'];
-        $period = $request['period'];
-        $date_start = $request['date_start'];
-        $date_end = $request['date_end'];
-        $month_start = $request['month_start'];
-        $month_end = $request['month_end'];
-        $supplier_id = $request['supplier_id'];
-        $user = $request['user'];
+        $establishment_id = $request['establishment_id'] ?? null;
+        $period = $request['period'] ?? null;
+        $date_start = $request['date_start'] ?? null;
+        $date_end = $request['date_end'] ?? null;
+        $month_start = $request['month_start'] ?? null;
+        $month_end = $request['month_end'] ?? null;
+        $supplier_id = $request['supplier_id'] ?? null;
+        $user = $request['user'] ?? null;
 
 
         $d_start = null;
@@ -48,7 +48,7 @@ class ToPay
         /*
          * Purchases
          */
-        $purchase_payments = DB::table('purchase_payments')
+        $purchase_payments = DB::connection('tenant')->table('purchase_payments')
             ->select('purchase_id', DB::raw('SUM(payment) as total_payment'))
             ->groupBy('purchase_id');
 
@@ -57,7 +57,6 @@ class ToPay
             $purchases = DB::connection('tenant')
                 ->table('purchases')
                 // ->where('supplier_id', $supplier_id)
-                ->where('user_id', $user)
                 ->join('persons', 'persons.id', '=', 'purchases.supplier_id')
                 ->leftJoinSub($purchase_payments, 'payments', function ($join) {
                     $join->on('purchases.id', '=', 'payments.purchase_id');
@@ -80,7 +79,6 @@ class ToPay
             $purchases = DB::connection('tenant')
                 ->table('purchases')
                 // ->where('supplier_id', $supplier_id)
-                ->where('user_id', $user)
                 ->join('persons', 'persons.id', '=', 'purchases.supplier_id')
                 ->leftJoinSub($purchase_payments, 'payments', function ($join) {
                     $join->on('purchases.id', '=', 'payments.purchase_id');
@@ -98,14 +96,17 @@ class ToPay
                 ->where('purchases.establishment_id', $establishment_id);
 
         }
+        if ($user !== null && $user !== '') {
+            $purchases->where('purchases.user_id', $user);
+        }
         if ($supplier_id) {
             $purchases = $purchases->where('supplier_id', $supplier_id);
         }
 
         /*
-         * Sale Notes
+         * Expenses
          */
-        $expense_payments = DB::table('expense_payments')
+        $expense_payments = DB::connection('tenant')->table('expense_payments')
             ->select('expense_id', DB::raw('SUM(payment) as total_payment'))
             ->groupBy('expense_id');
 
@@ -114,7 +115,6 @@ class ToPay
             $expenses = DB::connection('tenant')
                 ->table('expenses')
                 // ->where('supplier_id', $supplier_id)
-                ->where('user_id', $user)
                 ->join('persons', 'persons.id', '=', 'expenses.supplier_id')
                 ->leftJoinSub($expense_payments, 'payments', function ($join) {
                     $join->on('expenses.id', '=', 'payments.expense_id');
@@ -138,7 +138,6 @@ class ToPay
             $expenses = DB::connection('tenant')
                 ->table('expenses')
                 // ->where('supplier_id', $supplier_id)
-                ->where('user_id', $user)
                 ->join('persons', 'persons.id', '=', 'expenses.supplier_id')
                 ->leftJoinSub($expense_payments, 'payments', function ($join) {
                     $join->on('expenses.id', '=', 'payments.expense_id');
@@ -151,10 +150,13 @@ class ToPay
                                 "expenses.number as number_full, ".
                                 "expenses.total as total, ".
                                 "IFNULL(payments.total_payment, 0) as total_payment, ".
-                                "'sale_note' AS 'type', " . "expenses.currency_type_id, " . "expenses.exchange_rate_sale"))
+                                "'expense' AS 'type', " . "expenses.currency_type_id, " . "expenses.exchange_rate_sale"))
                 ->where('expenses.establishment_id', $establishment_id);
                 // ->where('expenses.changed', false)
                 // ->where('expenses.total_canceled', false);
+        }
+        if ($user !== null && $user !== '') {
+            $expenses->where('expenses.user_id', $user);
         }
         if ($supplier_id) {
             $expenses = $expenses->where('supplier_id', $supplier_id);
@@ -216,7 +218,7 @@ class ToPay
     public static function getToPayNoFilter()
     {
 
-        $purchase_payments = DB::table('purchase_payments')
+        $purchase_payments = DB::connection('tenant')->table('purchase_payments')
             ->select('purchase_id', DB::raw('SUM(payment) as total_payment'))
             ->groupBy('purchase_id');
 
@@ -239,7 +241,7 @@ class ToPay
                                     "'purchase' AS 'type', ". "purchases.currency_type_id, " . "purchases.exchange_rate_sale"));
 
 
-        $expense_payments = DB::table('expense_payments')
+        $expense_payments = DB::connection('tenant')->table('expense_payments')
             ->select('expense_id', DB::raw('SUM(payment) as total_payment'))
             ->groupBy('expense_id');
 
@@ -257,7 +259,7 @@ class ToPay
                                 "expenses.number as number_full, ".
                                 "expenses.total as total, ".
                                 "IFNULL(payments.total_payment, 0) as total_payment, ".
-                                "'sale_note' AS 'type', " . "expenses.currency_type_id, " . "expenses.exchange_rate_sale"));
+                                "'expense' AS 'type', " . "expenses.currency_type_id, " . "expenses.exchange_rate_sale"));
 
 
         $records = $purchases->union($expenses)->get();

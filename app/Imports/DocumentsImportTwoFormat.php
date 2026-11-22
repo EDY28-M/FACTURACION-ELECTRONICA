@@ -2,6 +2,8 @@
 
 namespace App\Imports;
 
+use Exception;
+
 use App\Models\Tenant\Document;
 use App\Models\Tenant\Item;
 use App\Models\Tenant\Warehouse;
@@ -217,7 +219,8 @@ class DocumentsImportTwoFormat implements ToCollection
                         'json' => $json
                     ]);
                 } catch (Exception $e) {
-                    dd($e);
+                    report($e);
+                    continue;
                 }
 
                 // dd($response);

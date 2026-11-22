@@ -25,6 +25,10 @@ class InventoryVoidedServiceProvider extends ServiceProvider
     {
         //Revisar los tipos de documentos, ello varia el control de stock en las anulaciones.
         Document::updated(function ($document) {
+            if (!$document->isDirty('state_type_id') || in_array((string) $document->getOriginal('state_type_id'), ['09', '11'], true)) {
+                return;
+            }
+
             if($document['document_type_id'] == '01' || $document['document_type_id'] == '03'){
                 if(in_array($document['state_type_id'], [ '09', '11' ], true)){
                     $warehouse = $this->findWarehouse($document['establishment_id']);
@@ -81,6 +85,10 @@ class InventoryVoidedServiceProvider extends ServiceProvider
     private function voided_order_note(){
 
         OrderNote::updated(function ($order_note) {
+
+            if (!$order_note->isDirty('state_type_id') || in_array((string) $order_note->getOriginal('state_type_id'), ['09', '11'], true)) {
+                return;
+            }
 
             if(in_array($order_note->state_type_id, [ '09', '11' ], true)){
 

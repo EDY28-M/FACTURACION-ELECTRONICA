@@ -78,7 +78,7 @@ class DashboardData
     public function globalData()
     {
         return [
-            'total_cpe' => Configuration::first()->quantity_documents,
+            'total_cpe' => optional(Configuration::first())->quantity_documents,
             'document_total_global' => $this->document_totals_globals(),
             'sale_note_total_global' => $this->sale_note_totals_global(),
         ];
@@ -162,33 +162,20 @@ class DashboardData
     private function sale_note_totals_global()
     {
         $sale_notes = SaleNote::query()
+            ->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
             ->where('changed', false)
             ->whereStateTypeAccepted()
             ->get();
 
         //PEN
-        $sale_note_total_pen = 0;
-        $sale_note_total_payment_pen = 0;
-
         $sale_note_total_pen = collect($sale_notes->where('currency_type_id', 'PEN'))->sum('total');
 
         //USD
         $sale_note_total_usd = 0;
-        $sale_note_total_payment_usd = 0;
 
-        //TWO CURRENCY
-        foreach ($sale_notes as $sale_note)
-        {
-
-            if($sale_note->currency_type_id == 'PEN'){
-
-                $sale_note_total_payment_pen += collect($sale_note->payments)->sum('payment');
-
-            }else{
-
+        foreach ($sale_notes as $sale_note) {
+            if ($sale_note->currency_type_id != 'PEN') {
                 $sale_note_total_usd += $sale_note->total * $sale_note->exchange_rate_sale;
-                $sale_note_total_payment_usd += collect($sale_note->payments)->sum('payment') * $sale_note->exchange_rate_sale;
-
             }
         }
 
@@ -302,20 +289,18 @@ class DashboardData
 
     private function document_totals_globals()
     {
-        $documents = Document::query()->get();
+        $documents = Document::query()
+            ->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+            ->whereIn('state_type_id', ['01','03','05','07','13'])
+            ->get();
 
         //PEN
-        $document_total_pen = 0;
-        $document_total_payment_pen = 0;
-        $document_total_note_credit_pen = 0;
-
         $document_total_pen = collect($documents->whereIn('state_type_id', ['01','03','05','07','13'])->whereIn('document_type_id', ['01','03','08']))->where('currency_type_id', 'PEN')->sum('total');
-
 
         //USD
         $document_total_usd = 0;
+        $document_total_note_credit_pen = 0;
         $document_total_note_credit_usd = 0;
-        $document_total_payment_usd = 0;
 
         $documents_usd = $documents->whereIn('state_type_id', ['01','03','05','07','13'])
                                     ->whereIn('document_type_id', ['01','03','08'])
@@ -326,30 +311,16 @@ class DashboardData
         }
 
         //TWO CURRENCY
-
-        foreach ($documents as $document)
-        {
-            if($document->currency_type_id == 'PEN'){
-
-                if(in_array($document->state_type_id,['01','03','05','07','13'])){
-
-                    $document_total_payment_pen += collect($document->payments)->sum('payment');
-                    $document_total_note_credit_pen += ($document->document_type_id == '07') ? $document->total:0; //nota de credito
-
+        foreach ($documents as $document) {
+            if ($document->currency_type_id == 'PEN') {
+                if (in_array($document->state_type_id, ['01','03','05','07','13'])) {
+                    $document_total_note_credit_pen += ($document->document_type_id == '07') ? $document->total : 0; //nota de credito
                 }
-
-
-            }else{
-
-                if(in_array($document->state_type_id,['01','03','05','07','13'])){
-
-                    $document_total_payment_usd += collect($document->payments)->sum('payment') * $document->exchange_rate_sale;
-                    $document_total_note_credit_usd += ($document->document_type_id == '07') ? $document->total * $document->exchange_rate_sale:0; //nota de credito
-
+            } else {
+                if (in_array($document->state_type_id, ['01','03','05','07','13'])) {
+                    $document_total_note_credit_usd += ($document->document_type_id == '07') ? $document->total * $document->exchange_rate_sale : 0; //nota de credito
                 }
-
             }
-
         }
 
         //TOTALS

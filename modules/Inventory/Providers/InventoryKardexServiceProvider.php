@@ -69,8 +69,10 @@ class InventoryKardexServiceProvider extends ServiceProvider
                 $warehouse = ($document_item->warehouse_id) ? $this->findWarehouse($this->findWarehouseById($document_item->warehouse_id)->establishment_id) : $this->findWarehouse();
 
                 //$this->createInventory($document_item->item_id, $factor * $document_item->quantity, $warehouse->id);
-                $this->createInventoryKardex($document_item->document, $document_item->item_id, ($factor * ($document_item->quantity * $presentationQuantity)), $warehouse->id);
-                if(!$document_item->document->sale_note_id && !$document_item->document->order_note_id) $this->updateStock($document_item->item_id, ($factor * ($document_item->quantity * $presentationQuantity)), $warehouse->id);
+                if(!$document->sale_note_id && !$document->order_note_id) {
+                    $this->createInventoryKardex($document, $document_item->item_id, ($factor * ($document_item->quantity * $presentationQuantity)), $warehouse->id);
+                    $this->updateStock($document_item->item_id, ($factor * ($document_item->quantity * $presentationQuantity)), $warehouse->id);
+                }
 
             }
             else{
@@ -85,8 +87,10 @@ class InventoryKardexServiceProvider extends ServiceProvider
                     $document = $document_item->document;
                     $factor = ($document->document_type_id === '07') ? 1 : -1;
                     $warehouse = $this->findWarehouse();
-                    $this->createInventoryKardex($document_item->document, $ind_item->id, ($factor * ($document_item->quantity * $presentationQuantity * $item_set_quantity)), $warehouse->id);
-                    if(!$document_item->document->sale_note_id && !$document_item->document->order_note_id) $this->updateStock($ind_item->id, ($factor * ($document_item->quantity * $presentationQuantity * $item_set_quantity)), $warehouse->id);
+                    if(!$document->sale_note_id && !$document->order_note_id) {
+                        $this->createInventoryKardex($document, $ind_item->id, ($factor * ($document_item->quantity * $presentationQuantity * $item_set_quantity)), $warehouse->id);
+                        $this->updateStock($ind_item->id, ($factor * ($document_item->quantity * $presentationQuantity * $item_set_quantity)), $warehouse->id);
+                    }
 
                 }
 

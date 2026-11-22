@@ -2,29 +2,24 @@
 
 namespace Modules\Dashboard\Http\Controllers;
 
-use App\Exports\AccountsReceivable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Maatwebsite\Excel\Facades\Excel;
 use Modules\Dashboard\Helpers\DashboardData;
 use Modules\Dashboard\Helpers\DashboardUtility;
 use Modules\Dashboard\Helpers\DashboardSalePurchase;
 use Modules\Dashboard\Helpers\DashboardView;
 use Modules\Dashboard\Helpers\DashboardStock;
 use Modules\Dashboard\Helpers\DashboardInsights;
-use Illuminate\Support\Facades\DB;
-use App\Models\Tenant\Document;
 use App\Models\Tenant\Company;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\Exception\ProcessFailedException;
-use Illuminate\Support\Arr;
 
 class DashboardController extends Controller
 {
     public function index()
     {
         $company = Company::select('soap_type_id')->first();
-        $soap_company  = $company->soap_type_id;
+        $soap_company = $company ? $company->soap_type_id : null;
 
         $bootstrap = $this->buildBootstrap();
 
@@ -105,20 +100,6 @@ class DashboardController extends Controller
             'data' => (new DashboardData())->data($request->all()),
         ];
     }
-
-    // public function unpaid(Request $request)
-    // {
-    //     return [
-    //             'records' => (new DashboardView())->getUnpaid($request->all())
-    //     ];
-    // }
-
-    // public function unpaidall()
-    // {
-
-    //     return Excel::download(new AccountsReceivable, 'Allclients.xlsx');
-
-    // }
 
     public function data_aditional(Request $request)
     {

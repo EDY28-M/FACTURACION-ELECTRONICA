@@ -225,7 +225,7 @@ class FixedAssetPurchase extends ModelTenant
     public function scopeWhereTypeUser($query)
     {
         $user = auth()->user();
-        return ($user->type == 'seller') ? $query->where('user_id', $user->id) : null;
+        return (($user->type ?? null) === 'seller') ? $query->where('user_id', $user->id) : null;
     }
 
     public function scopeWhereStateTypeAccepted($query)

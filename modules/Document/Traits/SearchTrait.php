@@ -25,16 +25,18 @@ trait SearchTrait
                 ->limit(1)
                 ->get();
         }
-        return Item::where('description','like', "%{$request->input}%")
+        return Item::where(function ($query) use ($request) {
+                $query->where('description', 'like', "%{$request->input}%")
+                    ->orWhere('internal_id', 'like', "%{$request->input}%")
+                    ->orWhereHas('category', function ($query) use ($request) {
+                        $query->where('name', 'like', '%' . $request->input . '%');
+                    })
+                    ->orWhereHas('brand', function ($query) use ($request) {
+                        $query->where('name', 'like', '%' . $request->input . '%');
+                    })
+                    ->orWhereJsonContains('attributes', ['value' => $request->input]);
+            })
             ->whereTypeUser()
-            ->orWhere('internal_id','like', "%{$request->input}%")
-            ->orWhereHas('category', function($query) use($request) {
-                $query->where('name', 'like', '%' . $request->input . '%');
-            })
-            ->orWhereHas('brand', function($query) use($request) {
-                $query->where('name', 'like', '%' . $request->input . '%');
-            })
-            ->OrWhereJsonContains('attributes', ['value' => $request->input])
             ->with(['item_lots'])
             ->where('unit_type_id','ZZ')
             ->whereNotIsSet()

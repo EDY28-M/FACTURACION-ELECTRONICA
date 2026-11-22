@@ -376,26 +376,41 @@ class InventoryController extends Controller
     }
 
     
-    public function regularize_stock()
+    public function regularize_stock(Request $request)
     {
+        $apply = $request->boolean('confirm');
+        $changes = [];
 
-        DB::connection('tenant')->transaction(function () {
+        DB::connection('tenant')->transaction(function () use ($apply, &$changes) {
+            foreach (ItemWarehouse::get() as $it_warehouse) {
+                $inv_kardex = InventoryKardex::where([
+                    ['item_id', $it_warehouse->item_id],
+                    ['warehouse_id', $it_warehouse->warehouse_id],
+                ])->sum('quantity');
 
-            $item_warehouses = ItemWarehouse::get();
+                if ((float) $it_warehouse->stock === (float) $inv_kardex) {
+                    continue;
+                }
 
-            foreach ($item_warehouses as $it_warehouse) {
+                $changes[] = [
+                    'item_id' => $it_warehouse->item_id,
+                    'warehouse_id' => $it_warehouse->warehouse_id,
+                    'stock' => $it_warehouse->stock,
+                    'kardex' => $inv_kardex,
+                ];
 
-                $inv_kardex = InventoryKardex::where([['item_id', $it_warehouse->item_id], ['warehouse_id', $it_warehouse->warehouse_id]])->sum('quantity');
-                $it_warehouse->stock = $inv_kardex;
-                $it_warehouse->save();
-
+                if ($apply) {
+                    $it_warehouse->stock = $inv_kardex;
+                    $it_warehouse->save();
+                }
             }
-
         });
 
         return [
             'success' => true,
-            'message' => 'Stock regularizado'
+            'applied' => $apply,
+            'changes' => $changes,
+            'message' => $apply ? 'Stock regularizado' : 'Vista previa; envíe confirm=1 para aplicar.',
         ];
     }
 

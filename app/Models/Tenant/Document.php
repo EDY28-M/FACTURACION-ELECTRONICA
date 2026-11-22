@@ -357,7 +357,7 @@ class Document extends ModelTenant
     {
         $user = auth()->user();
         return ($user->type == 'admin') ? null : $query->where('user_id', $user->id);
-        // return ($user->type == 'seller') ? $query->where('user_id', $user->id) : null;
+        // return (($user->type ?? null) === 'seller') ? $query->where('user_id', $user->id) : null;
     }
 
     public function scopeWhereNotSent($query)
