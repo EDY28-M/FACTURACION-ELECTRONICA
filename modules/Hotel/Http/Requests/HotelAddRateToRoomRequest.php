@@ -16,9 +16,9 @@ class HotelAddRateToRoomRequest extends FormRequest
 	{
 		return [
 			'hotel_rate_id' => [
-				'required', 'numeric', Rule::unique('tenant.hotel_room_rates', 'hotel_rate_id')->where('hotel_room_id', $this->id)
+				'required', 'numeric', Rule::unique('tenant.hotel_room_rates', 'hotel_rate_id')->where('hotel_room_id', $this->route('id'))
 			],
-			'hotel_room_id' => ['required', 'numeric'],
+			'hotel_room_id' => ['nullable', 'numeric'],
 			'price'         => 'required|numeric'
 		];
 	}

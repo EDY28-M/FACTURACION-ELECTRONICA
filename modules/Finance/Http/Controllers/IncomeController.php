@@ -74,7 +74,7 @@ class IncomeController extends Controller
 
     public function record($id)
     {
-        $record = new IncomeResource(Income::findOrFail($id));
+        $record = new IncomeResource(Income::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -166,15 +166,28 @@ class IncomeController extends Controller
 
     public function voided($id)
     {
+        try {
+            return DB::connection('tenant')->transaction(function () use ($id) {
+                $income = Income::whereTypeUser()->lockForUpdate()->findOrFail($id);
 
-        $income = Income::findOrFail($id);
-        $income->state_type_id = 11;
-        $income->save();
+                if ((string) $income->state_type_id !== '11') {
+                    $income->state_type_id = 11;
+                    $income->save();
+                }
 
-        return [
-            'success' => true, 
-            'message' => 'Ingreso anulado exitosamente',
-        ];
+                return [
+                    'success' => true,
+                    'message' => 'Ingreso anulado exitosamente',
+                ];
+            });
+        } catch (\Exception $e) {
+            report($e);
+
+            return [
+                'success' => false,
+                'message' => 'No se pudo anular el ingreso.',
+            ];
+        }
     }
 
 

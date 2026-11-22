@@ -8,7 +8,6 @@ use Illuminate\Routing\Controller;
 use Modules\Finance\Models\GlobalPayment;
 use App\Models\Tenant\Cash;
 use App\Models\Tenant\User;
-use App\Http\Resources\Tenant\UserCollection;
 use App\Models\Tenant\BankAccount;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Tenant\Company;
@@ -48,8 +47,7 @@ class ToPayController extends Controller
             ];
         });
 
-        $query_users = User::all();
-        $users = new UserCollection($query_users);
+        $users = User::without(['establishment'])->get(['id', 'name']);
 
         $establishments = DashboardView::getEstablishments();
 

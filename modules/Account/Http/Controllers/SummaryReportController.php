@@ -25,8 +25,8 @@ class SummaryReportController extends Controller
     public function records(Request $request)
     {
         $request->validate([
-            'date_start' => 'required',
-            'date_end' => 'required',
+            'date_start' => 'required|date',
+            'date_end' => 'required|date',
         ]);
         // dd($request->all());
         return $this->getRecords($request);
@@ -53,6 +53,10 @@ class SummaryReportController extends Controller
 
     public function download(Request $request)
     {
+        $request->validate([
+            'date_start' => 'required|date',
+            'date_end' => 'required|date',
+        ]);
 
         $filename = 'Reporte_Resumido_Ventas_'.date('YmdHis');
 
@@ -111,7 +115,8 @@ class SummaryReportController extends Controller
                     ->whereIn('document_type_id', ['01','03'])
                     ->whereHas('documents')
                     ->with(['documents' => function($query) use($request) {
-                            $query->whereBetween('date_of_issue', [$request->date_start, $request->date_end])
+                            $query->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+                                  ->whereBetween('date_of_issue', [$request->date_start, $request->date_end])
                                   ->where('state_type_id', '05')
                                   ->select('series', 'number', 'state_type_id', 'total_igv', 'total_plastic_bag_taxes', 'total_value', 'total', 'currency_type_id', 'exchange_rate_sale');
                     }])
@@ -174,9 +179,10 @@ class SummaryReportController extends Controller
                             ->where('state_type_id', '11');
             })
             ->with(['documents' => function($query) use($request) {
-                    $query->whereBetween('date_of_issue', [$request->date_start, $request->date_end])
-                            ->where('state_type_id', '11')
-                            ->select('series', 'number', 'state_type_id', 'total_igv', 'total_plastic_bag_taxes', 'total_value', 'total', 'currency_type_id');
+                    $query->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+                          ->whereBetween('date_of_issue', [$request->date_start, $request->date_end])
+                          ->where('state_type_id', '11')
+                          ->select('series', 'number', 'state_type_id', 'total_igv', 'total_plastic_bag_taxes', 'total_value', 'total', 'currency_type_id');
             }])
             ->get()
             ->map(function($series) use($total){

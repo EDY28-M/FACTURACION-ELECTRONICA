@@ -23,6 +23,7 @@ class FileRequest extends FormRequest
 			'subject'                 => 'required|max:250',
 			'documentary_process_id'  => 'required|numeric|min:1',
 			'person'                  => 'required',
+			'file'                    => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240',
 		];
 	}
 }

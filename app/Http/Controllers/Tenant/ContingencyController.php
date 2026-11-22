@@ -36,9 +36,12 @@ class ContingencyController extends Controller
 
     public function records(Request $request)
     {
+        $allowedColumns = array_keys($this->columns());
+        $column = in_array($request->column, $allowedColumns, true) ? $request->column : 'number';
+
         $series = Series::select('number')->where('contingency', true)->get();
         
-        $records = Document::where($request->column, 'like', "%{$request->value}%")
+        $records = Document::where($column, 'like', "%{$request->value}%")
                             ->whereIn('series',$series)
                             ->whereTypeUser()
                             ->latest();

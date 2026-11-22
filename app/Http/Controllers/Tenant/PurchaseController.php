@@ -157,7 +157,7 @@ class PurchaseController extends Controller
     public function record($id)
     {
 
-        $record = new PurchaseResource(Purchase::findOrFail($id));
+        $record = new PurchaseResource(Purchase::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -271,12 +271,36 @@ class PurchaseController extends Controller
 
     public function update(PurchaseRequest $request)
     {
+        if ($request['id']) {
+            $existingQuery = Purchase::query();
+            if (auth()->user()->type === 'seller') {
+                $existingQuery->where('user_id', auth()->id());
+            }
+            $existing = $existingQuery->find($request['id']);
+
+            if ($existing && !in_array((string) $existing->state_type_id, ['01', '03', '09'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se puede editar una compra aceptada, anulada u observada.',
+                ], 422);
+            }
+        }
 
         $purchase = DB::connection('tenant')->transaction(function () use ($request) {
 
-            $doc = Purchase::firstOrNew(['id' => $request['id']]);
+            if ($request['id']) {
+                $query = Purchase::query();
+                if (auth()->user()->type === 'seller') {
+                    $query->where('user_id', auth()->id());
+                }
+                $doc = $query->lockForUpdate()->findOrFail($request['id']);
+            } else {
+                $doc = new Purchase();
+            }
             $validationBefore = $doc->exists ? PurchaseValidationService::fingerprint($doc) : null;
-            $doc->fill($request->all());
+            $payload = $request->all();
+            unset($payload['id'], $payload['user_id'], $payload['state_type_id'], $payload['external_id'], $payload['created_at'], $payload['updated_at']);
+            $doc->fill($payload);
             $doc->supplier = PersonInput::set($request['supplier_id']);
             $doc->group_id = ($request->document_type_id === '01') ? '01':'02';
             $doc->user_id = auth()->id();
@@ -418,43 +442,75 @@ class PurchaseController extends Controller
 
     public function anular($id)
     {
-        $obj =  Purchase::find($id);
-        $validated = self::verifyHasSaleItems($obj->items);
-        if(!$validated['success'])
-        {
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $purchase = $this->lockPurchaseForMutation($id);
+
+            if ((string) $purchase->state_type_id === '11') {
+                return [
+                    'success' => true,
+                    'message' => 'La compra ya estaba anulada.',
+                ];
+            }
+
+            $validated = self::verifyHasSaleItems($purchase->items);
+            if (!$validated['success']) {
+                return [
+                    'success' => false,
+                    'message' => $validated['message'],
+                ];
+            }
+
+            $this->reversePurchaseStock($purchase);
+
+            $purchase->state_type_id = 11;
+            $purchase->save();
+
             return [
-                'success' => false,
-                'message' => $validated['message']
+                'success' => true,
+                'message' => 'Compra anulada con éxito',
             ];
+        });
+    }
+
+    private function lockPurchaseForMutation($id): Purchase
+    {
+        $query = Purchase::query();
+        $user = auth()->user();
+
+        if ($user && $user->type === 'seller') {
+            $query->where('user_id', $user->id);
         }
 
-        DB::connection('tenant')->transaction(function () use($obj){
+        return $query->lockForUpdate()->findOrFail($id);
+    }
 
-            foreach ($obj->items as $it) {
-                $it->lots()->delete();
+    private function reversePurchaseStock(Purchase $purchase): void
+    {
+        foreach ($purchase->items as $item) {
+            $item->lots()->delete();
+
+            $purchase->inventory_kardex()->create([
+                'date_of_issue' => date('Y-m-d'),
+                'item_id' => $item->item_id,
+                'warehouse_id' => $item->warehouse_id,
+                'quantity' => -$item->quantity,
+            ]);
+
+            $warehouseStock = ItemWarehouse::where([
+                ['item_id', $item->item_id],
+                ['warehouse_id', $item->warehouse_id],
+            ])->lockForUpdate()->first();
+
+            if (!$warehouseStock) {
+                report(new \RuntimeException(
+                    "No se encontró stock de almacén para el item {$item->item_id} y almacén {$item->warehouse_id}."
+                ));
+                continue;
             }
 
-            $obj->state_type_id = 11;
-            $obj->save();
-
-            foreach ($obj->items as $item) {
-                $item->purchase->inventory_kardex()->create([
-                    'date_of_issue' => date('Y-m-d'),
-                    'item_id' => $item->item_id,
-                    'warehouse_id' => $item->warehouse_id,
-                    'quantity' => -$item->quantity,
-                ]);
-                $wr = ItemWarehouse::where([['item_id', $item->item_id],['warehouse_id', $item->warehouse_id]])->first();
-                $wr->stock =  $wr->stock - $item->quantity;
-                $wr->save();
-            }
-
-        });
-
-        return [
-            'success' => true,
-            'message' => 'Compra anulada con éxito'
-        ];
+            $warehouseStock->stock = $warehouseStock->stock - $item->quantity;
+            $warehouseStock->save();
+        }
     }
 
     public static function convert($inputs)
@@ -657,27 +713,52 @@ class PurchaseController extends Controller
 
     public function delete($id)
     {
-
         try {
+            return DB::connection('tenant')->transaction(function () use ($id) {
+                $purchase = $this->lockPurchaseForMutation($id);
 
-            DB::connection('tenant')->transaction(function () use ($id) {
+                if (!in_array((string) $purchase->state_type_id, ['01', '11'], true)) {
+                    return [
+                        'success' => false,
+                        'message' => 'Anule la compra antes de eliminarla.',
+                    ];
+                }
 
-                $row = Purchase::findOrFail($id);
-                $this->deleteAllPayments($row->purchase_payments);
-                $row->delete();
+                if ((string) $purchase->state_type_id !== '11') {
+                    $validated = self::verifyHasSaleItems($purchase->items);
+                    if (!$validated['success']) {
+                        return [
+                            'success' => false,
+                            'message' => $validated['message'],
+                        ];
+                    }
 
+                    $this->reversePurchaseStock($purchase);
+
+                    // Trigger the legacy stock reversal before removing the row.
+                    $purchase->state_type_id = 11;
+                    $purchase->save();
+                }
+
+                $this->deleteAllPayments($purchase->purchase_payments);
+                $purchase->delete();
+
+                return [
+                    'success' => true,
+                    'message' => 'Compra eliminada con éxito',
+                ];
             });
-
-            return [
-                'success' => true,
-                'message' => 'Compra eliminada con éxito'
-            ];
-
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Compra no encontrada.',
+            ], 404);
         } catch (\Exception $e) {
+            report($e);
 
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'No se pudo eliminar la compra.',
             ];
         }
     }
@@ -796,9 +877,11 @@ class PurchaseController extends Controller
 
         }catch(Exception $e)
         {
+            report($e);
+
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'No se pudo importar el archivo. Verifique el formato.',
             ];
         }
 

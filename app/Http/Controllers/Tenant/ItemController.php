@@ -12,7 +12,9 @@ use App\Models\Tenant\ItemImage;
 
 use Modules\Item\Models\ItemLot;
 
+use App\CoreFacturalo\Helpers\Storage\TempImageHelper;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Http\Requests\Tenant\ItemRequest;
@@ -109,9 +111,11 @@ class ItemController extends Controller
                 break;
 
             default:
+                $allowedColumns = ['description', 'internal_id', 'barcode', 'model', 'date_of_due', 'lot_code'];
+                $column = in_array($request->column, $allowedColumns, true) ? $request->column : 'description';
                 $records = Item::whereTypeUser()
                                 ->whereNotIsSet()
-                                ->where($request->column, 'like', "%{$request->value}%");
+                                ->where($column, 'like', "%{$request->value}%");
                 break;
         }
         if ($request->type) {
@@ -164,176 +168,200 @@ class ItemController extends Controller
     }
 
     public function store(ItemRequest $request) {
-        //return 'no';
         $id = $request->input('id');
         if (!$request->barcode) {
             if ($request->internal_id) {
                 $request->merge(['barcode' => $request->internal_id]);
             }
         }
-        $item = Item::firstOrNew(['id' => $id]);
-        $item->item_type_id = '01';
-        $item->amount_plastic_bag_taxes = Configuration::firstOrFail()->amount_plastic_bag_taxes;
-        $item->fill($request->all());
 
         $temp_path = $request->input('temp_path');
-        if($temp_path) {
+        $resolvedMainImage = $temp_path ? TempImageHelper::resolveValidated($temp_path) : null;
+
+        $multi_images = is_array($request->multi_images) ? $request->multi_images : [];
+        $resolvedMultiImages = [];
+        foreach ($multi_images as $im) {
+            if (!is_array($im) || empty($im['temp_path'])) {
+                abort(422, 'Imagen adicional inválida.');
+            }
+            $resolvedMultiImages[] = [
+                'filename' => $im['filename'] ?? '',
+                'resolved' => TempImageHelper::resolveValidated($im['temp_path']),
+            ];
+        }
+
+        $item = DB::connection('tenant')->transaction(function () use ($request, $id, $resolvedMainImage, $resolvedMultiImages) {
+            $item = Item::firstOrNew(['id' => $id]);
+            $item->item_type_id = '01';
+            $item->amount_plastic_bag_taxes = Configuration::firstOrFail()->amount_plastic_bag_taxes;
+            $item->fill($request->all());
 
             $directory = 'public'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'items'.DIRECTORY_SEPARATOR;
 
-            $file_name_old = $request->input('image');
-            $file_name_old_array = explode('.', $file_name_old);
-            $file_content = file_get_contents($temp_path);
-            $datenow = date('YmdHis');
-            $file_name = Str::slug($item->description).'-'.$datenow.'.'.$file_name_old_array[1];
-            Storage::put($directory.$file_name, $file_content);
-            $item->image = $file_name;
+            if ($resolvedMainImage) {
+                $realTempPath = $resolvedMainImage['path'];
+                $ext = $resolvedMainImage['extension'];
+                $file_content = file_get_contents($realTempPath);
+                $datenow = date('YmdHis');
+                $slug = Str::slug($item->description) ?: 'item';
 
-            //--- IMAGE SIZE MEDIUM
-            $image = \Image::make($temp_path);
-            $file_name = Str::slug($item->description).'-'.$datenow.'_medium'.'.'.$file_name_old_array[1];
-            $image->resize(512, null, function ($constraint) {
-                $constraint->aspectRatio();
-                $constraint->upsize();
-            });
-            Storage::put($directory.$file_name,  (string) $image->encode('jpg', 30));
-            $item->image_medium = $file_name;
+                $file_name = $slug.'-'.$datenow.'.'.$ext;
+                if (!Storage::put($directory.$file_name, $file_content)) {
+                    throw new \RuntimeException('Unable to store item image.');
+                }
+                $item->image = $file_name;
 
-              //--- IMAGE SIZE SMALL
-            $image = \Image::make($temp_path);
-            $file_name = Str::slug($item->description).'-'.$datenow.'_small'.'.'.$file_name_old_array[1];
-            $image->resize(256, null, function ($constraint) {
-                $constraint->aspectRatio();
-                $constraint->upsize();
-            });
-            Storage::put($directory.$file_name,  (string) $image->encode('jpg', 20));
-            $item->image_small = $file_name;
+                //--- IMAGE SIZE MEDIUM
+                $image = \Image::make($realTempPath);
+                $file_name = $slug.'-'.$datenow.'_medium.'.$ext;
+                $image->resize(512, null, function ($constraint) {
+                    $constraint->aspectRatio();
+                    $constraint->upsize();
+                });
+                if (!Storage::put($directory.$file_name, (string) $image->encode('jpg', 30))) {
+                    throw new \RuntimeException('Unable to store item image.');
+                }
+                $item->image_medium = $file_name;
 
-
-
-        }else if(!$request->input('image') && !$request->input('temp_path') && !$request->input('image_url')){
-            $item->image = 'imagen-no-disponible.jpg';
-        }
-
-        $item->save();
-
-        foreach ($request->item_unit_types as $value) {
-
-            $item_unit_type = ItemUnitType::firstOrNew(['id' => $value['id']]);
-            $item_unit_type->item_id = $item->id;
-            $item_unit_type->description = $value['description'];
-            $item_unit_type->unit_type_id = $value['unit_type_id'];
-            $item_unit_type->quantity_unit = $value['quantity_unit'];
-            $item_unit_type->price1 = $value['price1'];
-            $item_unit_type->price2 = $value['price2'];
-            $item_unit_type->price3 = $value['price3'];
-            $item_unit_type->price_default = $value['price_default'];
-            $item_unit_type->save();
-
-        }
-
-        if($request->tags_id)
-        {
-            ItemTag::destroy(   ItemTag::where('item_id', $item->id)->pluck('id'));
-            foreach ($request->tags_id as $value) {
-                ItemTag::create(['item_id' => $item->id,  'tag_id' => $value]);
-                //$tag = ItemTag::where('item_id', $item->id)->where('tag_id', $value)->first();
+                //--- IMAGE SIZE SMALL
+                $image = \Image::make($realTempPath);
+                $file_name = $slug.'-'.$datenow.'_small.'.$ext;
+                $image->resize(256, null, function ($constraint) {
+                    $constraint->aspectRatio();
+                    $constraint->upsize();
+                });
+                if (!Storage::put($directory.$file_name, (string) $image->encode('jpg', 20))) {
+                    throw new \RuntimeException('Unable to store item image.');
+                }
+                $item->image_small = $file_name;
+            } elseif (!$request->input('image') && !$request->input('temp_path') && !$request->input('image_url')) {
+                $item->image = 'imagen-no-disponible.jpg';
             }
-        }
 
-        if (!$id) {
+            $item->save();
 
-            // $item->lots()->delete();
-            $establishment = Establishment::where('id', auth()->user()->establishment_id)->first();
-            $warehouse = Warehouse::where('establishment_id',$establishment->id)->first();
-
-            //$warehouse = WarehouseModule::find(auth()->user()->establishment_id);
-
-            $v_lots = isset($request->lots) ? $request->lots:[];
-
-            foreach ($v_lots as $lot) {
-
-                // $item->lots()->create($lot);
-                $item->lots()->create([
-                    'date' => $lot['date'],
-                    'series' => $lot['series'],
-                    'item_id' => $item->id,
-                    'warehouse_id' => $warehouse ? $warehouse->id:null,
-                    'has_sale' => false,
-                    'state' => $lot['state'],
-                ]);
+            $item_unit_types = is_array($request->item_unit_types) ? $request->item_unit_types : [];
+            foreach ($item_unit_types as $value) {
+                $unitTypeId = $value['id'] ?? null;
+                $item_unit_type = ($item->exists && $unitTypeId)
+                    ? (ItemUnitType::where('item_id', $item->id)->find($unitTypeId) ?? new ItemUnitType())
+                    : new ItemUnitType();
+                $item_unit_type->item_id = $item->id;
+                $item_unit_type->description = $value['description'];
+                $item_unit_type->unit_type_id = $value['unit_type_id'];
+                $item_unit_type->quantity_unit = $value['quantity_unit'];
+                $item_unit_type->price1 = $value['price1'];
+                $item_unit_type->price2 = $value['price2'];
+                $item_unit_type->price3 = $value['price3'];
+                $item_unit_type->price_default = $value['price_default'];
+                $item_unit_type->save();
             }
-            $lots_enabled = isset($request->lots_enabled) ? $request->lots_enabled:false;
-            if ($lots_enabled) {
-                ItemLotsGroup::create([
-                    'code'  => $request->lot_code,
-                    'quantity'  => $request->stock,
-                    'date_of_due'  => $request->date_of_due,
-                    'item_id' => $item->id
-                ]);
+
+            if (is_array($request->tags_id) && $request->tags_id) {
+                ItemTag::destroy(ItemTag::where('item_id', $item->id)->pluck('id'));
+                foreach ($request->tags_id as $value) {
+                    ItemTag::create(['item_id' => $item->id, 'tag_id' => $value]);
+                }
             }
-        } else {
-            $item->lots()->delete();
-            $establishment = Establishment::where('id', auth()->user()->establishment_id)->first();
-            $warehouse = Warehouse::where('establishment_id',$establishment->id)->first();
-            $v_lots = isset($request->lots) ? $request->lots:[];
-            foreach ($v_lots as $lot) {
-                if ($lot['deleted'] == true) {
-                    ItemLot::find($lot['id'])->delete();
-                } else {
-                    if ( isset( $lot['id'] )) {
-                        ItemLot::find($lot['id'])->update([
-                            'date' => $lot['date'],
-                            'series' => $lot['series'],
-                            'state' => $lot['state'],
-                        ]);
+
+            $establishmentId = optional(auth()->user())->establishment_id;
+            $establishment = $establishmentId ? Establishment::where('id', $establishmentId)->first() : null;
+            $warehouse = $establishment ? Warehouse::where('establishment_id', $establishment->id)->first() : null;
+            $v_lots = is_array($request->lots) ? $request->lots : [];
+
+            if (!$id) {
+                foreach ($v_lots as $lot) {
+                    $item->lots()->create([
+                        'date' => $lot['date'],
+                        'series' => $lot['series'],
+                        'item_id' => $item->id,
+                        'warehouse_id' => $warehouse ? $warehouse->id : null,
+                        'has_sale' => false,
+                        'state' => $lot['state'],
+                    ]);
+                }
+                $lots_enabled = isset($request->lots_enabled) ? $request->lots_enabled : false;
+                if ($lots_enabled) {
+                    ItemLotsGroup::create([
+                        'code' => $request->lot_code,
+                        'quantity' => $request->stock,
+                        'date_of_due' => $request->date_of_due,
+                        'item_id' => $item->id
+                    ]);
+                }
+            } else {
+                foreach ($v_lots as $lot) {
+                    $lotId = $lot['id'] ?? null;
+                    if (!empty($lot['deleted'])) {
+                        if ($lotId) {
+                            $existingLot = ItemLot::where('item_id', $item->id)->find($lotId);
+                            if ($existingLot) {
+                                $existingLot->delete();
+                            }
+                        }
+                    } elseif ($lotId) {
+                        $existingLot = ItemLot::where('item_id', $item->id)->find($lotId);
+                        if ($existingLot) {
+                            $existingLot->update([
+                                'date' => $lot['date'],
+                                'series' => $lot['series'],
+                                'state' => $lot['state'],
+                            ]);
+                        }
                     } else {
                         $item->lots()->create([
                             'date' => $lot['date'],
                             'series' => $lot['series'],
                             'item_id' => $item->id,
-                            'warehouse_id' => $warehouse ? $warehouse->id:null,
+                            'warehouse_id' => $warehouse ? $warehouse->id : null,
                             'has_sale' => false,
                             'state' => $lot['state'],
                         ]);
                     }
                 }
+
+                $lots_enabled = isset($request->lots_enabled) ? $request->lots_enabled : false;
+                if ($lots_enabled) {
+                    ItemLotsGroup::where('item_id', $item->id)->delete();
+                    ItemLotsGroup::create([
+                        'code' => $request->lot_code,
+                        'quantity' => $request->stock,
+                        'date_of_due' => $request->date_of_due,
+                        'item_id' => $item->id
+                    ]);
+                }
             }
 
-            $lots_enabled = isset($request->lots_enabled) ? $request->lots_enabled:false;
-            if ($lots_enabled) {
-                ItemLotsGroup::where('item_id', $item->id)->delete();
-                ItemLotsGroup::create([
-                    'code'  => $request->lot_code,
-                    'quantity'  => $request->stock,
-                    'date_of_due'  => $request->date_of_due,
-                    'item_id' => $item->id
-                ]);
+            foreach ($resolvedMultiImages as $im) {
+                $baseName = Str::slug(pathinfo((string) $im['filename'], PATHINFO_FILENAME)) ?: 'item-image';
+                $file_name = $baseName.'-'.date('YmdHis').'-'.Str::random(6).'.'.$im['resolved']['extension'];
+                $file_content = file_get_contents($im['resolved']['path']);
+                if (!Storage::put($directory.$file_name, $file_content)) {
+                    throw new \RuntimeException('Unable to store item image.');
+                }
+
+                ItemImage::create(['item_id' => $item->id, 'image' => $file_name]);
             }
+
+            if (!$item->barcode) {
+                $item->barcode = str_pad($item->id, 12, '0', STR_PAD_LEFT);
+            }
+
+            $item->update();
+
+            return $item;
+        });
+
+        if ($resolvedMainImage) {
+            TempImageHelper::deleteOwned($resolvedMainImage['path']);
         }
-
-        $directory = 'public'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'items'.DIRECTORY_SEPARATOR;
-
-        $multi_images = isset($request->multi_images) ? $request->multi_images:[];
-
-        foreach ($multi_images as $im) {
-
-            $file_name = $im['filename'];
-            $file_content = file_get_contents($im['temp_path']);
-            Storage::put($directory.$file_name, $file_content);
-
-            ItemImage::create(['item_id'=> $item->id, 'image' => $file_name]);
+        foreach ($resolvedMultiImages as $im) {
+            TempImageHelper::deleteOwned($im['resolved']['path']);
         }
-
-        if (!$item->barcode) {
-            $item->barcode = str_pad($item->id, 12, '0', STR_PAD_LEFT);
-        }
-
-        $item->update();
 
         return [
             'success' => true,
-            'message' => ($id)?'Producto editado con éxito':'Producto registrado con éxito',
+            'message' => ($id) ? 'Producto editado con éxito' : 'Producto registrado con éxito',
             'id' => $item->id
         ];
     }
@@ -341,10 +369,11 @@ class ItemController extends Controller
     public function destroy($id)
     {
         try {
-
-            $item = Item::findOrFail($id);
-            $this->deleteRecordInitialKardex($item);
-            $item->delete();
+            DB::connection('tenant')->transaction(function () use ($id) {
+                $item = Item::findOrFail($id);
+                $this->deleteRecordInitialKardex($item);
+                $item->delete();
+            });
 
             return [
                 'success' => true,
@@ -388,9 +417,11 @@ class ItemController extends Controller
                     'data' => $data
                 ];
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo importar el archivo. Verifique el formato.',
                 ];
             }
         }
@@ -403,7 +434,7 @@ class ItemController extends Controller
     public function upload(Request $request)
     {
 
-        $validate_upload = UploadFileHelper::validateUploadFile($request, 'file', 'jpg,jpeg,png,gif,svg');
+        $validate_upload = UploadFileHelper::validateUploadFile($request, 'file', 'jpg,jpeg,png,gif,webp');
 
         if(!$validate_upload['success']){
             return $validate_upload;
@@ -425,23 +456,7 @@ class ItemController extends Controller
 
     function upload_image($request)
     {
-        $file = $request['file'];
-        $type = $request['type'];
-
-        $temp = tempnam(sys_get_temp_dir(), $type);
-        file_put_contents($temp, file_get_contents($file));
-
-        $mime = mime_content_type($temp);
-        $data = file_get_contents($temp);
-
-        return [
-            'success' => true,
-            'data' => [
-                'filename' => $file->getClientOriginalName(),
-                'temp_path' => $temp,
-                'temp_image' => 'data:' . $mime . ';base64,' . base64_encode($data)
-            ]
-        ];
+        return TempImageHelper::storeTemp($request['file'], $request['type'] ?? 'item_');
     }
 
     private function deleteRecordInitialKardex($item){
@@ -455,7 +470,7 @@ class ItemController extends Controller
 
     public function visibleStore(Request $request)
     {
-        $item = Item::find($request->id);
+        $item = Item::findOrFail($request->id);
 
         if(!$item->internal_id && $request->apply_store){
             return [
@@ -479,7 +494,7 @@ class ItemController extends Controller
     public function duplicate(Request $request)
     {
        // return $request->id;
-       $obj = Item::find($request->id);
+       $obj = Item::findOrFail($request->id);
        $new = $obj->replicate();
        $new->save();
 
@@ -640,9 +655,11 @@ class ItemController extends Controller
         ini_set("pcre.backtrack_limit", "50000000");
         $id = $request->id;
 
-        $record = Item::find($id);
-        $item_warehouse = ItemWarehouse::where([['item_id', $id], ['warehouse_id', auth()->user()
-            ->establishment->warehouse->id]])->first();
+        $record = Item::findOrFail($id);
+        $warehouseId = optional(optional(optional(auth()->user())->establishment)->warehouse)->id;
+        $item_warehouse = $warehouseId
+            ? ItemWarehouse::where([['item_id', $id], ['warehouse_id', $warehouseId]])->first()
+            : null;
 
         if(!$item_warehouse){
             return [
@@ -682,7 +699,7 @@ class ItemController extends Controller
     public function itemLast()
     {
         $record = Item::latest()->first();
-        return json_encode(['data' => $record->id]);
+        return json_encode(['data' => optional($record)->id]);
     }
 
     public function tablesImport()

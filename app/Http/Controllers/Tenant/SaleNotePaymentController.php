@@ -26,6 +26,7 @@ class SaleNotePaymentController extends Controller
 
     public function records($sale_note_id)
     {
+        SaleNote::whereTypeUser()->findOrFail($sale_note_id);
         $records = SaleNotePayment::where('sale_note_id', $sale_note_id)->get();
 
         return new SaleNotePaymentCollection($records);
@@ -66,47 +67,79 @@ class SaleNotePaymentController extends Controller
     {
         $id = $request->input('id');
 
-        DB::connection('tenant')->transaction(function () use ($id, $request) {
+        $result = DB::connection('tenant')->transaction(function () use ($id, $request) {
 
-            $record = SaleNotePayment::firstOrNew(['id' => $id]);
-            $record->fill($request->all());
+            if ($id) {
+                $record = SaleNotePayment::lockForUpdate()->findOrFail($id);
+                $saleNote = SaleNote::whereTypeUser()->lockForUpdate()->findOrFail($record->sale_note_id);
+            } else {
+                $saleNote = SaleNote::whereTypeUser()
+                    ->lockForUpdate()
+                    ->findOrFail($request->input('sale_note_id'));
+                $record = new SaleNotePayment();
+                $record->sale_note_id = $saleNote->id;
+            }
+
+            if ((string) $saleNote->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden registrar pagos de una nota de venta anulada.',
+                ], 422);
+            }
+
+            $record->fill($request->except(['id', 'sale_note_id']));
+            $record->sale_note_id = $saleNote->id;
             $record->save();
+
             $this->createGlobalPayment($record, $request->all());
             $this->saveFiles($record, $request, 'sale_notes');
 
+            $saleNote->total_canceled = $saleNote->payments()->sum('payment') >= $saleNote->total;
+            $saleNote->save();
+
+            return [
+                'success' => true,
+                'message' => ($id) ? 'Pago editado con éxito' : 'Pago registrado con éxito',
+                'sale_note_id' => $saleNote->id,
+            ];
         });
 
-        if($request->paid == true)
-        {
-            $sale_note = SaleNote::find($request->sale_note_id);
-            $sale_note->total_canceled = true;
-            $sale_note->save();
+        if ($result instanceof \Illuminate\Http\JsonResponse) {
+            return $result;
         }
 
-        $this->createPdf($request->input('sale_note_id'));
+        if (($result['success'] ?? false) && isset($result['sale_note_id'])) {
+            $this->createPdf($result['sale_note_id']);
+        }
 
-        return [
-            'success' => true,
-            'message' => ($id)?'Pago editado con éxito':'Pago registrado con éxito'
-        ];
+        return $result;
     }
 
     public function destroy($id)
     {
-        $item = SaleNotePayment::findOrFail($id);
-        $sale_note_id = $item->sale_note_id;
-        $item->delete();
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $item = SaleNotePayment::lockForUpdate()->findOrFail($id);
+            $saleNote = SaleNote::whereTypeUser()->lockForUpdate()->findOrFail($item->sale_note_id);
 
-        $sale_note = SaleNote::find($item->sale_note_id);
-        $sale_note->total_canceled = false;
-        $sale_note->save();
+            if ((string) $saleNote->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden eliminar pagos de una nota de venta anulada.',
+                ], 422);
+            }
 
-        $this->createPdf($sale_note_id);
+            $item->delete();
 
-        return [
-            'success' => true,
-            'message' => 'Pago eliminado con éxito'
-        ];
+            $saleNote->total_canceled = $saleNote->payments()->sum('payment') >= $saleNote->total;
+            $saleNote->save();
+
+            $this->createPdf($saleNote->id);
+
+            return [
+                'success' => true,
+                'message' => 'Pago eliminado con éxito',
+            ];
+        });
     }
 
     public function createPdf($sale_note_id, $format = null)

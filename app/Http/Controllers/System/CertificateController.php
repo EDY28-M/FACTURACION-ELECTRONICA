@@ -47,9 +47,11 @@ class CertificateController extends Controller
                     'message' =>  __('app.actions.upload.success'),
                 ];
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo procesar el certificado.',
                 ];
             }
         }

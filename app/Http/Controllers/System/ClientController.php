@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\System\Configuration;
 use App\CoreFacturalo\Helpers\Certificate\GenerateCertificate;
+use App\Support\Files\SafeTempFile;
+use App\Support\Access\TenantPlan;
 
 class ClientController extends Controller
 {
@@ -90,20 +92,20 @@ class ClientController extends Controller
                 $day_now = (int)date('j');
 
 
-                if( $day_now <= $day_start_billing  )
-                {
-                    $init = Carbon::parse( date('Y').'-'.((int)date('n') -1).'-'.$day_start_billing );
-                    $end = Carbon::parse(date('Y-m-d'));
+                $year = (int) date('Y');
+                $month = (int) date('n');
 
-                    $row->count_doc_month = DB::connection('tenant')->table('documents')->whereBetween('date_of_issue', [ $init, $end  ])->count();
+                if ($day_now <= $day_start_billing) {
+                    $month--;
+                    if ($month < 1) {
+                        $month = 12;
+                        $year--;
+                    }
                 }
-                else{
 
-                    $init = Carbon::parse( date('Y').'-'.((int)date('n') ).'-'.$day_start_billing );
-                    $end = Carbon::parse(date('Y-m-d'));
-                    $row->count_doc_month = DB::connection('tenant')->table('documents')->whereBetween('date_of_issue', [ $init, $end  ])->count();
-
-                }
+                $init = Carbon::create($year, $month, $day_start_billing, 0, 0, 0);
+                $end = Carbon::today();
+                $row->count_doc_month = DB::connection('tenant')->table('documents')->whereBetween('date_of_issue', [ $init, $end ])->count();
 
             }
         }
@@ -116,8 +118,8 @@ class ClientController extends Controller
         $tenancy = app(Environment::class);
         $tenancy->tenant($client->hostname->website);
 
-        $client->modules = DB::connection('tenant')->table('module_user')->where('user_id', 1)->get()->pluck('module_id')->toArray();
-        $client->levels = DB::connection('tenant')->table('module_level_user')->where('user_id', 1)->get()->pluck('module_level_id')->toArray();
+        $client->modules = DB::connection('tenant')->table('module_user')->where('user_id', $this->tenantOwnerId())->get()->pluck('module_id')->toArray();
+        $client->levels = DB::connection('tenant')->table('module_level_user')->where('user_id', $this->tenantOwnerId())->get()->pluck('module_level_id')->toArray();
 
         $config =  DB::connection('tenant')->table('configurations')->first();
 
@@ -182,14 +184,68 @@ class ClientController extends Controller
         return compact('line', 'total_documents');
     }
 
+    /**
+     * Tenant owner id (lowest users.id) on the current tenant connection; its module rows are the plan.
+     */
+    private function tenantOwnerId(): int
+    {
+        return (int) (DB::connection('tenant')->table('users')->min('id') ?: 1);
+    }
+
+    /**
+     * Modules every plan must include: without them the owner cannot do the essential setup
+     * (company, SUNAT credentials, certificate, series, users, branches).
+     * Returns an error message, or null when the selection is valid.
+     */
+    private function validatePlanModules($modules, $levels = []): ?string
+    {
+        $modules = is_array($modules) ? array_map('intval', $modules) : [];
+
+        if (count($modules) === 0) {
+            return 'Debe seleccionar al menos un módulo.';
+        }
+
+        $required = Module::whereIn('value', ['configuration', 'establishments'])->pluck('id')->map('intval')->all();
+        if (array_diff($required, $modules)) {
+            return 'Los módulos Configuración y Usuarios/Locales & Series son obligatorios.';
+        }
+
+        // A module with levels needs at least one level: with none saved, the plan falls back to
+        // every level (legacy behaviour), which would grant more than the admin intended.
+        $levels = is_array($levels) ? array_map('intval', $levels) : [];
+        $modulesWithLevels = DB::table('module_levels')->select('module_id')->distinct()->pluck('module_id')->map('intval')->all();
+        foreach (array_intersect($modulesWithLevels, $modules) as $moduleId) {
+            $hasLevel = DB::table('module_levels')->where('module_id', $moduleId)->whereIn('id', $levels)->exists();
+            if (!$hasLevel) {
+                $description = Module::where('id', $moduleId)->value('description');
+
+                return "Seleccione al menos un permiso dentro del módulo {$description}.";
+            }
+        }
+
+        return null;
+    }
+
     public function update(Request $request)
     {
         try
         {
+            if ($error = $this->validatePlanModules($request->input('modules'), $request->input('levels'))) {
+                return ['success' => false, 'message' => $error];
+            }
 
-            $temp_path = $request->input('temp_path');
+            $temp_path = SafeTempFile::realPath($request->input('temp_path'));
 
-            $name_certificate = $request->input('certificate');
+            $name_certificate = $request->filled('certificate')
+                ? SafeTempFile::filename($request->input('certificate'))
+                : null;
+
+            if ($request->filled('temp_path') && !$temp_path) {
+                return [
+                    'success' => false,
+                    'message' => 'El archivo temporal del certificado no es válido.',
+                ];
+            }
 
             if($temp_path){
 
@@ -197,7 +253,7 @@ class ClientController extends Controller
                     $password = $request->input('password_certificate');
                     $pfx = file_get_contents($temp_path);
                     $pem = GenerateCertificate::typePEM($pfx, $password);
-                    $name = 'certificate_'.$request->input('number').'.pem';
+                    $name = 'certificate_'.SafeTempFile::filename($request->input('number')).'.pem';
                     if(!file_exists(storage_path('app'.DIRECTORY_SEPARATOR.'certificates'))) {
                         mkdir(storage_path('app'.DIRECTORY_SEPARATOR.'certificates'));
                     }
@@ -205,9 +261,11 @@ class ClientController extends Controller
                     $name_certificate = $name;
 
                 } catch (Exception $e) {
+                    report($e);
+
                     return [
                         'success' => false,
-                        'message' =>  $e->getMessage()
+                        'message' => 'No se pudo procesar el certificado.',
                     ];
                 }
             }
@@ -239,23 +297,28 @@ class ClientController extends Controller
 
 
             //modules
-            DB::connection('tenant')->table('module_user')->where('user_id', 1)->delete();
-            DB::connection('tenant')->table('module_level_user')->where('user_id', 1)->delete();
+            // The owner's rows are the plan; other users' rows are never touched (they are capped at read time).
+            $ownerId = $this->tenantOwnerId();
+            DB::connection('tenant')->table('module_user')->where('user_id', $ownerId)->delete();
+            DB::connection('tenant')->table('module_level_user')->where('user_id', $ownerId)->delete();
 
             $array_modules = [];
             $array_levels = [];
             foreach ($request->modules as $module) {
                 array_push($array_modules, [
-                    'module_id' => $module, 'user_id' => 1
+                    'module_id' => $module, 'user_id' => $ownerId
                 ]);
             }
-            foreach ($request->levels as $level) {
+            foreach ((array) $request->levels as $level) {
                 array_push($array_levels, [
-                    'module_level_id' => $level, 'user_id' => 1
+                    'module_level_id' => $level, 'user_id' => $ownerId
                 ]);
             }
             DB::connection('tenant')->table('module_user')->insert($array_modules);
-            DB::connection('tenant')->table('module_level_user')->insert($array_levels);
+            if (count($array_levels) > 0) {
+                DB::connection('tenant')->table('module_level_user')->insert($array_levels);
+            }
+            TenantPlan::flush();
             // Modules
 
             return [
@@ -265,9 +328,11 @@ class ClientController extends Controller
 
         }catch(Exception $e)
         {
+            report($e);
+
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'No se pudo procesar la solicitud del cliente.',
             ];
 
         }
@@ -276,10 +341,21 @@ class ClientController extends Controller
 
     public function store(ClientRequest $request)
     {
-        $temp_path = $request->input('temp_path');
+        if ($error = $this->validatePlanModules($request->input('modules'), $request->input('levels'))) {
+            return ['success' => false, 'message' => $error];
+        }
+
+        $temp_path = SafeTempFile::realPath($request->input('temp_path'));
         $configuration = Configuration::first();
 
         $name_certificate = $configuration->certificate;
+
+        if ($request->filled('temp_path') && !$temp_path) {
+            return [
+                'success' => false,
+                'message' => 'El archivo temporal del certificado no es válido.',
+            ];
+        }
 
         if($temp_path){
 
@@ -287,7 +363,7 @@ class ClientController extends Controller
                 $password = $request->input('password_certificate');
                 $pfx = file_get_contents($temp_path);
                 $pem = GenerateCertificate::typePEM($pfx, $password);
-                $name = 'certificate_'.'admin_tenant'.'.pem';
+                $name = 'certificate_'.SafeTempFile::filename($request->input('number')).'.pem';
                 if(!file_exists(storage_path('app'.DIRECTORY_SEPARATOR.'certificates'))) {
                     mkdir(storage_path('app'.DIRECTORY_SEPARATOR.'certificates'));
                 }
@@ -295,9 +371,11 @@ class ClientController extends Controller
                 $name_certificate = $name;
 
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo procesar el certificado.',
                 ];
             }
         }
@@ -348,12 +426,15 @@ class ClientController extends Controller
             app(HostnameRepository::class)->delete($hostname, true);
             app(WebsiteRepository::class)->delete($website, true);
 
+            report($e);
+
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'No se pudo procesar la solicitud del cliente.',
             ];
         }
 
+        try {
         DB::connection('tenant')->table('companies')->insert([
             'identity_document_type_id' => '6',
             'number' => $request->input('number'),
@@ -467,6 +548,25 @@ class ClientController extends Controller
                 ['module_id' => 3, 'user_id' => $user_id],
                 ['module_id' => 5, 'user_id' => $user_id],
             ]);
+        }
+
+        } catch (\Throwable $e) {
+            try {
+                if (isset($client) && $client->exists) {
+                    $client->delete();
+                }
+                app(HostnameRepository::class)->delete($hostname, true);
+                app(WebsiteRepository::class)->delete($website, true);
+            } catch (\Throwable $cleanupError) {
+                report($cleanupError);
+            }
+
+            report($e);
+
+            return [
+                'success' => false,
+                'message' => 'No se pudo inicializar el tenant; se revirtió el alta.',
+            ];
         }
 
         return [

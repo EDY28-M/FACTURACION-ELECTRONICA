@@ -180,9 +180,16 @@ class SaleNoteController extends Controller
 
     public function changed($id)
     {
-        $sale_note = SaleNote::find($id);
-        $sale_note->changed = true;
-        $sale_note->save();
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $sale_note = SaleNote::whereTypeUser()->lockForUpdate()->findOrFail($id);
+
+            if (!$sale_note->changed) {
+                $sale_note->changed = true;
+                $sale_note->save();
+            }
+
+            return ['success' => true];
+        });
     }
 
 
@@ -203,7 +210,7 @@ class SaleNoteController extends Controller
 
     public function record($id)
     {
-        $record = new SaleNoteResource(SaleNote::findOrFail($id));
+        $record = new SaleNoteResource(SaleNote::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -217,14 +224,42 @@ class SaleNoteController extends Controller
 
     public function store(SaleNoteRequest $request)
     {
+        $id = $request->input('id');
 
-        DB::connection('tenant')->transaction(function () use ($request) {
+        if ($id) {
+            $existingQuery = SaleNote::query();
+            if (auth()->user()->type === 'seller') {
+                $existingQuery->where('user_id', auth()->id());
+            }
+            $existing = $existingQuery->findOrFail($id);
+
+            if ((string) $existing->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se puede editar una nota de venta anulada.',
+                ], 422);
+            }
+        }
+
+        DB::connection('tenant')->transaction(function () use ($request, $id) {
 
             $data = $this->mergeData($request);
 
-            $this->sale_note =  SaleNote::updateOrCreate(
-                ['id' => $request->input('id')],
-                $data);
+            if ($id) {
+                $query = SaleNote::query();
+                if (auth()->user()->type === 'seller') {
+                    $query->where('user_id', auth()->id());
+                }
+                $this->sale_note = $query->lockForUpdate()->findOrFail($id);
+                // mergeData always creates a new external_id and state 01;
+                // editing must preserve both fiscal identifiers.
+                $data['external_id'] = $this->sale_note->external_id;
+                $data['state_type_id'] = $this->sale_note->state_type_id;
+                $this->sale_note->fill($data);
+                $this->sale_note->save();
+            } else {
+                $this->sale_note = SaleNote::create($data);
+            }
 
 
             // $this->sale_note->payments()->delete();
@@ -234,7 +269,13 @@ class SaleNoteController extends Controller
             foreach($data['items'] as $row) {
 
                 $item_id = isset($row['id']) ? $row['id'] : null;
-                $sale_note_item = SaleNoteItem::firstOrNew(['id' => $item_id]);
+                if ($item_id) {
+                    $sale_note_item = SaleNoteItem::where('sale_note_id', $this->sale_note->id)
+                        ->lockForUpdate()
+                        ->findOrFail($item_id);
+                } else {
+                    $sale_note_item = new SaleNoteItem();
+                }
 
                 if(isset($row['item']['lots'])){
                     $row['item']['lots'] = isset($row['lots']) ? $row['lots']:$row['item']['lots'];
@@ -949,7 +990,10 @@ class SaleNoteController extends Controller
 
         DB::connection('tenant')->transaction(function () use ($id) {
 
-            $obj =  SaleNote::find($id);
+            $obj = SaleNote::whereTypeUser()->lockForUpdate()->findOrFail($id);
+            if ((string) $obj->state_type_id === '11') {
+                return;
+            }
             $obj->state_type_id = 11;
             $obj->save();
 

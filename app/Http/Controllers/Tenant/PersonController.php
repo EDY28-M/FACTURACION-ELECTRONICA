@@ -13,6 +13,7 @@ use App\Models\Tenant\Catalogs\Province;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Person;
 use App\Models\Tenant\PersonType;
+use App\Services\GenericCustomerService;
 use Exception;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
@@ -22,6 +23,13 @@ use App\Models\System\Configuration;
 
 class PersonController extends Controller
 {
+    public function genericCustomer(GenericCustomerService $service)
+    {
+        $person = $service->getOrCreate();
+
+        return ['customer' => $service->toArray($person)];
+    }
+
     public function index($type)
     {
         $configuration = Configuration::first();
@@ -139,9 +147,11 @@ class PersonController extends Controller
                     'data' => $data
                 ];
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo importar el archivo. Verifique el formato.',
                 ];
             }
         }

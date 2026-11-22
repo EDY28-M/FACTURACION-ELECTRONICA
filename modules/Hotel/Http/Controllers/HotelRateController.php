@@ -62,18 +62,21 @@ class HotelRateController extends Controller
 	 */
 	public function destroy($id)
 	{
+		$rate = HotelRate::findOrFail($id);
+
 		try {
-			HotelRate::where('id', $id)
-				->delete();
+			$rate->delete();
 
 			return response()->json([
 				'success' => true,
 				'message' => 'Información actualizada'
 			], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success'    => false,
-				'message'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message'    => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}

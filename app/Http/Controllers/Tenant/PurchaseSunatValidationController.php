@@ -57,7 +57,9 @@ class PurchaseSunatValidationController extends Controller
                 $request->input('after_id')
             );
         } catch (InvalidArgumentException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            report($e);
+
+            return response()->json(['success' => false, 'message' => 'No se pudo validar el comprobante con SUNAT.'], 422);
         } catch (BulkValidationInterrupted $e) {
             // Progress already stored is reported with the error so the UI keeps its counters.
             return $this->failure($e->getCause(), $e->getPartial());

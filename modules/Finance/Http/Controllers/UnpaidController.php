@@ -54,7 +54,7 @@ class UnpaidController extends Controller
 
         if(auth()->user()->type == 'admin')
         {
-            $users = User::where('id', '!=', auth()->user()->id)->whereIn('type', ['admin', 'seller'])->get();
+            $users = User::without(['establishment'])->where('id', '!=', auth()->user()->id)->whereIn('type', ['admin', 'seller'])->get(['id', 'name']);
         }
 
         $payment_method_types = PaymentMethodType::whereIn('id', ['05', '08', '09'])->get();

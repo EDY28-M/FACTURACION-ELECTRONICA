@@ -212,7 +212,7 @@ class QuotationController extends Controller
 
     public function record($id)
     {
-        $record = new QuotationResource(Quotation::findOrFail($id));
+        $record = new QuotationResource(Quotation::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -273,8 +273,22 @@ class QuotationController extends Controller
             $configuration = Configuration::select('terms_condition')->first();
             $request['terms_condition'] = $this->getTermsCondition();
 
-            $this->quotation = Quotation::firstOrNew(['id' => $request['id']]);
-            $this->quotation->fill($request->all());
+            if ($request['id']) {
+                $query = Quotation::query();
+                if (auth()->user()->type === 'seller') {
+                    $query->where('user_id', auth()->id());
+                }
+                $this->quotation = $query->lockForUpdate()->findOrFail($request['id']);
+            } else {
+                $this->quotation = new Quotation();
+            }
+            $payload = $request->all();
+            unset($payload['id'], $payload['user_id'], $payload['state_type_id'], $payload['external_id'], $payload['created_at'], $payload['updated_at']);
+            $this->quotation->fill($payload);
+            $this->quotation->user_id = $this->quotation->user_id ?: auth()->id();
+            if (!$this->quotation->exists) {
+                $this->quotation->state_type_id = '01';
+            }
             $this->quotation->customer = PersonInput::set($request['customer_id'], isset($request['customer_address_id']) ? $request['customer_address_id']: null  );
             $this->quotation->items()->delete();
 
@@ -341,13 +355,19 @@ class QuotationController extends Controller
 
     public function anular($id)
     {
-        $obj =  Quotation::find($id);
-        $obj->state_type_id = 11;
-        $obj->save();
-        return [
-            'success' => true,
-            'message' => 'Producto anulado con éxito'
-        ];
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $obj = Quotation::whereTypeUser()->lockForUpdate()->findOrFail($id);
+
+            if ((string) $obj->state_type_id !== '11') {
+                $obj->state_type_id = 11;
+                $obj->save();
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Producto anulado con éxito',
+            ];
+        });
     }
 
     public function mergeData($inputs)
@@ -872,24 +892,33 @@ class QuotationController extends Controller
 
     public function changed($id)
     {
-        $record = Quotation::find($id);
-        $record->changed = true;
-        $record->save();
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $record = Quotation::whereTypeUser()->lockForUpdate()->findOrFail($id);
 
-        return [
-            'success' => true
-        ];
+            if (!$record->changed) {
+                $record->changed = true;
+                $record->save();
+            }
+
+            return ['success' => true];
+        });
     }
 
     public function updateStateType($state_type_id, $id)
     {
-        $record = Quotation::find($id);
-        $record->state_type_id = $state_type_id;
-        $record->save();
+        return DB::connection('tenant')->transaction(function () use ($state_type_id, $id) {
+            if (!in_array((string) $state_type_id, ['01', '05', '09'], true) || !\App\Models\Tenant\StateType::whereKey($state_type_id)->exists()) {
+                return ['success' => false, 'message' => 'Estado no válido.'];
+            }
 
-        return [
-            'success' => true,
-            'message' => 'Estado actualizado correctamente'
-        ];
+            $record = Quotation::whereTypeUser()->lockForUpdate()->findOrFail($id);
+            $record->state_type_id = $state_type_id;
+            $record->save();
+
+            return [
+                'success' => true,
+                'message' => 'Estado actualizado correctamente',
+            ];
+        });
     }
 }

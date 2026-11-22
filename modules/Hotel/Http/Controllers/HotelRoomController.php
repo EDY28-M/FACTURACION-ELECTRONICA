@@ -5,12 +5,12 @@ namespace Modules\Hotel\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Modules\Hotel\Http\Requests\HotelAddRateToRoomRequest;
 use Modules\Hotel\Models\HotelRoom;
 use Modules\Hotel\Models\HotelFloor;
 use Modules\Hotel\Models\HotelCategory;
 use Modules\Hotel\Http\Requests\HotelRoomRequest;
-use Modules\Hotel\Http\Requests\HotelFloorRequest;
 use Modules\Hotel\Models\HotelRate;
 use Modules\Hotel\Models\HotelRoomRate;
 
@@ -83,7 +83,7 @@ class HotelRoomController extends Controller
 	 * @param int $id
 	 * @return Response
 	 */
-	public function update(HotelFloorRequest $request, $id)
+	public function update(HotelRoomRequest $request, $id)
 	{
 		$room = HotelRoom::findOrFail($id);
 		$room = $room->fill($request->only('description', 'active', 'name', 'hotel_category_id', 'hotel_floor_id'));
@@ -104,32 +104,38 @@ class HotelRoomController extends Controller
 	 */
 	public function destroy($id)
 	{
+		$room = HotelRoom::findOrFail($id);
+
 		try {
-			HotelRoom::where('id', $id)
-				->delete();
+			$room->delete();
 
 			return response()->json([
 				'success' => true,
 				'message' => 'Información actualizada'
 			], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success' => false,
-				'data'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message' => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}
 
-	public function changeRoomStatus($roomId)
+	public function changeRoomStatus(Request $request, $roomId)
 	{
-		HotelRoom::where('id', $roomId)
-			->update([
-				'status' => request('status')
-			]);
+		$request->validate([
+			'status' => ['required', Rule::in(HotelRoom::$status)],
+		]);
+
+		$room = HotelRoom::findOrFail($roomId);
+		$room->status = $request->status;
+		$room->save();
 
 		return response()->json([
 			'success' => true,
-			'message' => 'La habitación cambió su estado a DISPONIBLE',
+			'message' => 'La habitación cambió su estado a ' . $room->status,
 		], 200);
 	}
 
@@ -159,7 +165,13 @@ class HotelRoomController extends Controller
 
 	public function addRateToRoom(HotelAddRateToRoomRequest $request, $roomId)
 	{
-		$roomRate = HotelRoomRate::create($request->only('hotel_room_id', 'hotel_rate_id', 'price'));
+		HotelRoom::findOrFail($roomId);
+
+		$roomRate = HotelRoomRate::create([
+			'hotel_room_id' => $roomId,
+			'hotel_rate_id' => $request->hotel_rate_id,
+			'price'         => $request->price,
+		]);
 		$roomRate->load('rate');
 
 		return response()->json([

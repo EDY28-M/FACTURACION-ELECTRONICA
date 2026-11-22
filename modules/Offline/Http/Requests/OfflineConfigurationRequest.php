@@ -16,8 +16,8 @@ class OfflineConfigurationRequest extends FormRequest
         
         return [
             'is_client' => ['required', 'boolean'],
-            'token_server' => ['required_if:is_client, "true"'], 
-            'url_server' => ['required_if:is_client, "true"'], 
+            'token_server' => ['required_if:is_client,true'], 
+            'url_server' => ['required_if:is_client,true'], 
         ];
     }
 }

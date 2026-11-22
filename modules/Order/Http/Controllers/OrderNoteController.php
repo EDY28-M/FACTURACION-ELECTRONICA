@@ -229,7 +229,7 @@ class OrderNoteController extends Controller
 
     public function record($id)
     {
-        $record = new OrderNoteResource(OrderNote::findOrFail($id));
+        $record = new OrderNoteResource(OrderNote::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -283,8 +283,12 @@ class OrderNoteController extends Controller
         DB::connection('tenant')->transaction(function () use ($request) {
 
             $data = $this->mergeData($request);
+            $existing = OrderNote::whereTypeUser()->lockForUpdate()->findOrFail($request['id']);
 
-            $this->order_note = OrderNote::firstOrNew(['id' => $request['id']]);
+            $data['external_id'] = $existing->external_id;
+            $data['state_type_id'] = $existing->state_type_id;
+
+            $this->order_note = $existing;
             $this->order_note->fill($data);
             //$this->order_note->items()->delete();
 
@@ -292,7 +296,9 @@ class OrderNoteController extends Controller
 
                 // $this->order_note->items()->create($row);
                 $item_id = isset($row['id']) ? $row['id'] : null;
-                $order_note_item = OrderNoteItem::firstOrNew(['id' => $item_id]);
+                $order_note_item = $item_id
+                    ? OrderNoteItem::where('order_note_id', $existing->id)->lockForUpdate()->findOrFail($item_id)
+                    : new OrderNoteItem();
                 $order_note_item->fill($row);
                 $order_note_item->order_note_id = $this->order_note->id;
                 $order_note_item->save();
@@ -361,7 +367,10 @@ class OrderNoteController extends Controller
 
         DB::connection('tenant')->transaction(function () use ($id) {
 
-            $obj =  OrderNote::find($id);
+            $obj = OrderNote::whereTypeUser()->lockForUpdate()->findOrFail($id);
+            if ((string) $obj->state_type_id === '11') {
+                return;
+            }
             $obj->state_type_id = '11';
             $obj->update();
 

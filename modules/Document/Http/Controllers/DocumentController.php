@@ -12,6 +12,7 @@ use App\Models\Tenant\Catalogs\DocumentType;
 use App\Models\Tenant\Establishment;
 use App\Models\Tenant\Series;
 use Illuminate\Support\Facades\Storage;
+use App\Support\Files\SafeTempFile;
 use Illuminate\Support\Str;
 use App\Models\Tenant\Person;
 use App\Models\Tenant\StateType;
@@ -241,11 +242,13 @@ class DocumentController extends Controller
             $image_pay_constancy = $request->upload_image_pay_constancy;
             $directory = 'public'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'image_detractions'.DIRECTORY_SEPARATOR;
 
-            $file_name_old = $image_pay_constancy['image'];
-            $file_name_old_array = explode('.', $file_name_old);
-            $file_content = file_get_contents($image_pay_constancy['temp_path']);
+            $resolved = SafeTempFile::image($image_pay_constancy['temp_path'] ?? null);
+            if (!$resolved) {
+                abort(422, 'La imagen de constancia no es válida.');
+            }
+            $file_content = file_get_contents($resolved['path']);
             $datenow = date('YmdHis');
-            $file_name =  $detraction->detraction_type_id.'-'.$detraction->bank_account.'-'.$datenow.'.'.$file_name_old_array[1];
+            $file_name =  $detraction->detraction_type_id.'-'.$detraction->bank_account.'-'.$datenow.'.'.$resolved['extension'];
             Storage::put($directory.$file_name, $file_content);
             $set_image_pay_constancy = $file_name;
             $detraction->image_pay_constancy = $set_image_pay_constancy;

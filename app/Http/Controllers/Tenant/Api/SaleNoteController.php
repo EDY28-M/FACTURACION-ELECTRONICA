@@ -4,27 +4,13 @@ namespace App\Http\Controllers\Tenant\Api;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\Tenant\Person;
-use App\Models\Tenant\Catalogs\CurrencyType;
-use App\Models\Tenant\Catalogs\ChargeDiscountType;
-use App\Models\Tenant\Establishment;
 use App\Models\Tenant\SaleNote;
 use App\Models\Tenant\SaleNoteItem;
-use App\CoreFacturalo\Requests\Inputs\Common\LegendInput;
-use App\Models\Tenant\Item;
 use App\Models\Tenant\Series;
 use App\Http\Resources\Tenant\SaleNoteCollection;
-use App\Http\Resources\Tenant\SaleNoteResource;
-use App\Http\Resources\Tenant\SaleNoteResource2;
-use App\Models\Tenant\Catalogs\AffectationIgvType;
-use App\Models\Tenant\Catalogs\DocumentType;
 use Illuminate\Support\Facades\DB;
-use App\Models\Tenant\Catalogs\PriceType;
-use App\Models\Tenant\Catalogs\SystemIscType;
-use App\Models\Tenant\Catalogs\AttributeType;
 use App\Models\Tenant\Company;
 use App\Http\Requests\Tenant\SaleNoteRequest;
-// use App\Models\Tenant\Warehouse;
 use Illuminate\Support\Str;
 use App\CoreFacturalo\Requests\Inputs\Common\PersonInput;
 use App\CoreFacturalo\Requests\Inputs\Common\EstablishmentInput;
@@ -34,12 +20,10 @@ use Mpdf\Mpdf;
 use Mpdf\HTMLParserMode;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
-use App\Models\Tenant\PaymentMethodType;
 use App\Mail\Tenant\SaleNoteEmail;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Mail;
-use Modules\Inventory\Models\Warehouse;
 use Modules\Item\Models\ItemLot;
 
 class SaleNoteController extends Controller
@@ -49,6 +33,7 @@ class SaleNoteController extends Controller
 
     protected $sale_note;
     protected $company;
+    protected $document;
 
     public function lists()
     {
@@ -403,7 +388,7 @@ class SaleNoteController extends Controller
     public function email(Request $request)
     {
         $company = Company::active();
-        $record = SaleNote::find($request->input('id'));
+        $record = SaleNote::findOrFail($request->input('id'));
         $customer_email = $request->input('email');
 
         Mail::to($customer_email)->send(new SaleNoteEmail($company, $record));

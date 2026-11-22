@@ -114,7 +114,9 @@ class BackupController extends Controller
         } catch (Exception $e) {
 
             $this->setErrorLog($e);
-            return $this->getErrorMessage("Lo sentimos, ocurrió un error inesperado: {$e->getMessage()}");
+            report($e);
+
+            return $this->getErrorMessage('Lo sentimos, ocurrió un error inesperado.');
 
         }
 

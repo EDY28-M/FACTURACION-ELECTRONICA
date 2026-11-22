@@ -2,6 +2,8 @@
 
 namespace Modules\Expense\Http\Controllers;
 
+use Exception;
+
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
@@ -74,7 +76,7 @@ class ExpenseController extends Controller
 
     public function record($id)
     {
-        $record = new ExpenseResource(Expense::findOrFail($id));
+        $record = new ExpenseResource(Expense::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -168,23 +170,31 @@ class ExpenseController extends Controller
     public function voided ($record)
     {
         try {
-            $expense = Expense::findOrFail($record);
-            $expense->state_type_id = 11;
-            $expense->save();
-            return [
-                'success' => true,
-                'data' => [
-                    'id' => $expense->id,
-                ],
-                'message' => 'Gasto anulado exitosamente',
-            ];
+            return DB::connection('tenant')->transaction(function () use ($record) {
+                $expense = Expense::whereTypeUser()->lockForUpdate()->findOrFail($record);
+
+                if ((string) $expense->state_type_id !== '11') {
+                    $expense->state_type_id = 11;
+                    $expense->save();
+                }
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'id' => $expense->id,
+                    ],
+                    'message' => 'Gasto anulado exitosamente',
+                ];
+            });
         } catch (Exception $e) {
+            report($e);
+
             return [
                 'success' => false,
                 'data' => [
                     'id' => $record,
                 ],
-                'message' => 'Falló al anular',
+                'message' => 'No se pudo anular el gasto.',
             ];
         }
     }

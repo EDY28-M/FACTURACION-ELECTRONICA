@@ -22,6 +22,7 @@ class DocumentPaymentController extends Controller
 
     public function records($document_id)
     {
+        Document::whereTypeUser()->findOrFail($document_id);
         $records = DocumentPayment::where('document_id', $document_id)->get();
 
         return new DocumentPaymentCollection($records);
@@ -54,35 +55,62 @@ class DocumentPaymentController extends Controller
 
     public function store(DocumentPaymentRequest $request)
     {
-        // dd($request->all());
-
         $id = $request->input('id');
 
-        DB::connection('tenant')->transaction(function () use ($id, $request) {
+        return DB::connection('tenant')->transaction(function () use ($id, $request) {
 
-            $record = DocumentPayment::firstOrNew(['id' => $id]);
-            $record->fill($request->all());
+            if ($id) {
+                $record = DocumentPayment::lockForUpdate()->findOrFail($id);
+                $document = Document::whereTypeUser()->lockForUpdate()->findOrFail($record->document_id);
+            } else {
+                $document = Document::whereTypeUser()
+                    ->lockForUpdate()
+                    ->findOrFail($request->input('document_id'));
+                $record = new DocumentPayment();
+                $record->document_id = $document->id;
+            }
+
+            if ((string) $document->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden registrar pagos de un comprobante anulado.',
+                ], 422);
+            }
+
+            $record->fill($request->except(['id', 'document_id']));
+            $record->document_id = $document->id;
             $record->save();
+
             $this->createGlobalPayment($record, $request->all());
             $this->saveFiles($record, $request, 'documents');
 
+            return [
+                'success' => true,
+                'message' => ($id) ? 'Pago editado con éxito' : 'Pago registrado con éxito',
+            ];
         });
-
-        return [
-            'success' => true,
-            'message' => ($id)?'Pago editado con éxito':'Pago registrado con éxito'
-        ];
     }
 
     public function destroy($id)
     {
-        $item = DocumentPayment::findOrFail($id);
-        $item->delete();
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $item = DocumentPayment::lockForUpdate()->findOrFail($id);
+            $document = Document::whereTypeUser()->lockForUpdate()->findOrFail($item->document_id);
 
-        return [
-            'success' => true,
-            'message' => 'Pago eliminado con éxito'
-        ];
+            if ((string) $document->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden eliminar pagos de un comprobante anulado.',
+                ], 422);
+            }
+
+            $item->delete();
+
+            return [
+                'success' => true,
+                'message' => 'Pago eliminado con éxito',
+            ];
+        });
     }
 
     public function initialize_balance()

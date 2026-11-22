@@ -2,6 +2,7 @@
 
 namespace Modules\Padron\Http\Controllers;
 
+use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
@@ -14,28 +15,10 @@ use Illuminate\Support\Facades\DB;
 class PadronController extends Controller
 {
     use ExtractorTrait;
-    /**
-     * Display a listing of the resource.
-     * @return Response
-     */
-    public function index()
-    {
-       // return view('padron::index');
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     * @return Response
-     */
-    public function create()
-    {
-      //  return view('padron::create');
-    }
-
 
     public function consulta($ruc)
     {
-        if( strlen($ruc) != 11)
+        if (!ctype_digit((string) $ruc) || strlen((string) $ruc) !== 11)
         {
             return [
                 'success' => false,
@@ -77,7 +60,16 @@ class PadronController extends Controller
             ]);
 
             //DOWNLOAD ZIP ------
-            $filepath = str_replace(DIRECTORY_SEPARATOR, '/', public_path("padron_rar".DIRECTORY_SEPARATOR."padron_reducido_ruc.zip"));
+            $rarDir = public_path('padron_rar');
+            $extractDir = public_path('padron_extract');
+            if (!is_dir($rarDir)) {
+                mkdir($rarDir, 0755, true);
+            }
+            if (!is_dir($extractDir)) {
+                mkdir($extractDir, 0755, true);
+            }
+
+            $filepath = str_replace(DIRECTORY_SEPARATOR, '/', $rarDir.DIRECTORY_SEPARATOR.'padron_reducido_ruc.zip');
             $url = "http://www2.sunat.gob.pe/padron_reducido_ruc.zip";
 
             $ch = curl_init($url);
@@ -86,25 +78,31 @@ class PadronController extends Controller
             curl_setopt($ch, CURLOPT_BINARYTRANSFER, 1);
             curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120);
             $raw_file_data = curl_exec($ch);
-    
-            if(curl_errno($ch)){
-                 return 'error en descarga Zip';
+            $http_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+            if (curl_errno($ch) || $http_code !== 200 || empty($raw_file_data)) {
+                curl_close($ch);
+                return ['success' => false, 'message' => 'Error en descarga Zip'];
             }
-            
+
             curl_close($ch);
-    
+
             file_put_contents($filepath, $raw_file_data);
 
             //EXTRACT ZIP
-            $ini = str_replace(DIRECTORY_SEPARATOR, '/', public_path("padron_rar".DIRECTORY_SEPARATOR."padron_reducido_ruc.zip"));
-            $fin = str_replace(DIRECTORY_SEPARATOR, '/', public_path("padron_extract".DIRECTORY_SEPARATOR.""));
+            $ini = $filepath;
+            $fin = str_replace(DIRECTORY_SEPARATOR, '/', $extractDir.DIRECTORY_SEPARATOR);
             $data = $this->extract($ini, $fin);
+            $file = str_replace(DIRECTORY_SEPARATOR, '/', $extractDir.DIRECTORY_SEPARATOR.'padron_reducido_ruc.txt');
+            if (!$data || !is_file($file)) {
+                return ['success' => false, 'message' => 'No se pudo extraer el padrón descargado'];
+            }
 
             //LOAD DATA TXT TO MYSQL
             DB::connection('tenant')->table('padrones')->truncate();
-           // $file = public_path();
-            $file =  str_replace(DIRECTORY_SEPARATOR, '/', public_path("padron_extract".DIRECTORY_SEPARATOR."padron_reducido_ruc.txt"));
             $query = "LOAD DATA LOCAL INFILE '" . $file . "'
             INTO TABLE padrones FIELDS TERMINATED BY '|' LINES TERMINATED BY '\n' IGNORE 1 LINES
                     (ruc,
@@ -133,14 +131,12 @@ class PadronController extends Controller
 
             return [ 'success' => true, 'message' => 'Proceso Terminado correctamente'];
 
-        }catch(Exception $e)
-        {
-            return [ 'success' => false, 'message' => $e->getMessage()];
-        }
-        catch(\PDOException $Exception ) {
+        } catch (\Throwable $e) {
+            report($e);
+
             return [
                 'success' => false,
-                'message' => $Exception->getMessage(),
+                'message' => 'No se pudo procesar la carga del padrón.',
             ];
         }
        
@@ -159,10 +155,15 @@ class PadronController extends Controller
     {
 
         try {
-            DB::connection('tenant')->table('padrones')->truncate();
-            //$file = public_path();
-           
             $file =  str_replace(DIRECTORY_SEPARATOR, '/', public_path("padron_extract".DIRECTORY_SEPARATOR."demo.txt"));
+            if (!is_file($file)) {
+                return [
+                    'success' => false,
+                    'message' => 'Archivo de demostración no disponible.',
+                ];
+            }
+
+            DB::connection('tenant')->table('padrones')->truncate();
             $query = "LOAD DATA LOCAL INFILE '" . $file . "'
             INTO TABLE padrones FIELDS TERMINATED BY '|' LINES TERMINATED BY '\n' IGNORE 1 LINES
                     (ruc,
@@ -187,14 +188,13 @@ class PadronController extends Controller
     
             return 'ok';
         }
-        catch(\PDOException $Exception ) {
-            // Note The Typecast To An Integer!
+        catch(\Throwable $Exception ) {
+            report($Exception);
 
             return [
-                'message' => $Exception->getMessage(),
-                'line' => $Exception->getLine(),
+                'success' => false,
+                'message' => 'No se pudo cargar el padrón de demostración.',
             ];
-            //throw new MyDatabaseException( $Exception->getMessage( ) , (int)$Exception->getCode( ) );
         }
        
     }

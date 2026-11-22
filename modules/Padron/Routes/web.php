@@ -11,11 +11,15 @@
 |
 */
 
-Route::prefix('padron')->group(function() {
-    //Route::get('/', 'PadronController@index');
-    Route::get('consulta/{ruc}', 'PadronController@consulta');
-    Route::get('charges_data', 'PadronController@charges_data');
-    Route::get('list_history', 'PadronController@list_history');
-    Route::get('demo', 'PadronController@demo');
+$hostname = app(Hyn\Tenancy\Contracts\CurrentHostname::class);
 
-});
+if ($hostname) {
+    Route::domain($hostname->fqdn)->group(function () {
+        Route::middleware(['web', 'auth', 'redirect.module', 'locked.tenant'])->prefix('padron')->group(function () {
+            Route::get('consulta/{ruc}', 'PadronController@consulta')->middleware('throttle:30,1');
+            Route::get('charges_data', 'PadronController@charges_data')->middleware('throttle:2,1');
+            Route::get('list_history', 'PadronController@list_history');
+            Route::get('demo', 'PadronController@demo')->middleware('throttle:2,1');
+        });
+    });
+}

@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\Tenant;
 
+use App\CoreFacturalo\Helpers\Storage\TempImageHelper;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -74,26 +75,31 @@ class PromotionController extends Controller
             }
         }
 
+        $temp_path = $request->input('temp_path');
+        $resolvedImage = $temp_path ? TempImageHelper::resolveValidated($temp_path) : null;
+
         $item = Promotion::firstOrNew(['id' => $id]);
         $item->fill($request->all());
 
-        $temp_path = $request->input('temp_path');
-        if($temp_path) {
-
+        if ($resolvedImage) {
             $directory = 'public'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'promotions'.DIRECTORY_SEPARATOR;
-            $file_name_old = $request->input('image');
-            $file_name_old_array = explode('.', $file_name_old);
-            $file_content = file_get_contents($temp_path);
+            $file_content = file_get_contents($resolvedImage['path']);
             $datenow = date('YmdHis');
-            $file_name = Str::slug($item->description).'-'.$datenow.'.'.$file_name_old_array[1];
-            Storage::put($directory.$file_name, $file_content);
+            $slug = Str::slug($item->description) ?: 'promotion';
+            $file_name = $slug.'-'.$datenow.'.'.$resolvedImage['extension'];
+            if (!Storage::put($directory.$file_name, $file_content)) {
+                throw new \RuntimeException('Unable to store promotion image.');
+            }
             $item->image = $file_name;
-
-        }else if(!$request->input('image') && !$request->input('temp_path') && !$request->input('image_url')){
+        } elseif (!$request->input('image') && !$request->input('temp_path') && !$request->input('image_url')) {
             $item->image = 'imagen-no-disponible.jpg';
         }
 
         $item->save();
+
+        if ($resolvedImage) {
+            TempImageHelper::deleteOwned($resolvedImage['path']);
+        }
 
         return [
             'success' => true,
@@ -119,7 +125,7 @@ class PromotionController extends Controller
     public function upload(Request $request)
     {
         
-        $validate_upload = UploadFileHelper::validateUploadFile($request, 'file', 'jpg,jpeg,png,gif,svg');
+        $validate_upload = UploadFileHelper::validateUploadFile($request, 'file', 'jpg,jpeg,png,gif,webp');
         
         if(!$validate_upload['success']){
             return $validate_upload;
@@ -141,23 +147,7 @@ class PromotionController extends Controller
 
     function upload_image($request)
     {
-        $file = $request['file'];
-        $type = $request['type'];
-
-        $temp = tempnam(sys_get_temp_dir(), $type);
-        file_put_contents($temp, file_get_contents($file));
-
-        $mime = mime_content_type($temp);
-        $data = file_get_contents($temp);
-
-        return [
-            'success' => true,
-            'data' => [
-                'filename' => $file->getClientOriginalName(),
-                'temp_path' => $temp,
-                'temp_image' => 'data:' . $mime . ';base64,' . base64_encode($data)
-            ]
-        ];
+        return TempImageHelper::storeTemp($request['file'], $request['type'] ?? 'promotion_');
     }
 
 

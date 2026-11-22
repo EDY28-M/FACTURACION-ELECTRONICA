@@ -62,18 +62,21 @@ class HotelCategoryController extends Controller
 	 */
 	public function destroy($id)
 	{
+		$category = HotelCategory::findOrFail($id);
+
 		try {
-			HotelCategory::where('id', $id)
-				->delete();
+			$category->delete();
 
 			return response()->json([
 				'success' => true,
 				'message' => 'Información actualizada'
 			], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success' => false,
-				'data'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message' => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}

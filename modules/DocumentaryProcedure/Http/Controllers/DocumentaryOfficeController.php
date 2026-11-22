@@ -14,10 +14,10 @@ class DocumentaryOfficeController extends Controller
 		if (request()->ajax()) {
 			$filter = request('name');
 			if ($filter) {
-				$offices = $offices->where('name', 'like', "%$filter%")->get();
+				$offices = $offices->where('name', 'like', "%$filter%");
 			}
 
-			return response()->json(['data' => $offices], 200);
+			return response()->json(['data' => $offices->get()], 200);
 		}
 		$offices = $offices->get();
 
@@ -66,8 +66,9 @@ class DocumentaryOfficeController extends Controller
 	 */
 	public function destroy($id)
 	{
+		$office = DocumentaryOffice::findOrFail($id);
+
 		try {
-			$office = DocumentaryOffice::findOrFail($id);
 			$office->delete();
 
 			return response()->json([
@@ -76,9 +77,11 @@ class DocumentaryOfficeController extends Controller
                 'succes' => true,
             ], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success' => false,
-				'data'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message' => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}

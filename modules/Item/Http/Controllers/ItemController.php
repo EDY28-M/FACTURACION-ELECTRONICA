@@ -2,6 +2,8 @@
 
 namespace Modules\Item\Http\Controllers;
 
+use Exception;
+
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Models\Tenant\Item;
@@ -49,9 +51,11 @@ class ItemController extends Controller
                     'data' => $data
                 ];
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo importar el archivo. Verifique el formato.',
                 ];
             }
         }

@@ -19,7 +19,7 @@ class OfflineConfigurationController extends Controller
  
  
     public function record() {
-        $offline_configuration = OfflineConfiguration::first();
+        $offline_configuration = OfflineConfiguration::firstOrFail();
         $record = new OfflineConfigurationResource($offline_configuration);
         
         return $record;
@@ -27,7 +27,7 @@ class OfflineConfigurationController extends Controller
     
     public function store(OfflineConfigurationRequest $request) {
         $id = $request->input('id');
-        $offline_configuration = OfflineConfiguration::find($id);
+        $offline_configuration = OfflineConfiguration::findOrFail($id);
         $offline_configuration->fill($request->all());
         $offline_configuration->save();
         

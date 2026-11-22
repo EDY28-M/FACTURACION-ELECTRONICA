@@ -39,12 +39,24 @@ class HotelReceptionController extends Controller
 			$rooms = $rooms->where('status', request('status'));
 		}
 
-		$rooms = $rooms->get()->each(function ($room) {
+		$rooms = $rooms->get();
+		$occupiedRoomIds = $rooms->where('status', 'OCUPADO')->pluck('id');
+		$rentsByRoom = collect();
+		if ($occupiedRoomIds->isNotEmpty()) {
+			$rentsByRoom = HotelRent::whereIn('id', function ($query) use ($occupiedRoomIds) {
+					$query->selectRaw('MAX(id)')
+						->from('hotel_rents')
+						->whereIn('hotel_room_id', $occupiedRoomIds)
+						->groupBy('hotel_room_id');
+				})
+				->orderBy('id', 'DESC')
+				->get()
+				->keyBy('hotel_room_id');
+		}
+
+		$rooms->each(function ($room) use ($rentsByRoom) {
 			if ($room->status === 'OCUPADO') {
-				$rent = HotelRent::where('hotel_room_id', $room->id)
-					->orderBy('id', 'DESC')
-					->first();
-				$room->rent = $rent;
+				$room->rent = $rentsByRoom->get($room->id);
 			} else {
 				$room->rent = [];
 			}

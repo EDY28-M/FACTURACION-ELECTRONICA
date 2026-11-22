@@ -21,15 +21,15 @@ class LoginConfigurationController extends Controller
             'image' => 'required|mimes:webp,jpeg,png,jpg,gif,svg|max:2048'
         ]);
 
-        $config = Configuration::first();
+        $config = Configuration::firstOrFail();
         if (request()->hasFile('image') && request()->file('image')->isValid()) {
             $file = request()->file('image');
-            $ext = $file->getClientOriginalExtension();
+            $ext = $file->extension();
             $name = time() . '.' . $ext;
             $path = 'public/uploads/login';
             $file->storeAs($path, $name);
 
-            $loginConfig = $config->login;
+            $loginConfig = $config->login ?? new \stdClass();
             $loginConfig->type = 'image';
             $loginConfig->image = asset('storage/uploads/login/' . $name);
             $config->login = $loginConfig;

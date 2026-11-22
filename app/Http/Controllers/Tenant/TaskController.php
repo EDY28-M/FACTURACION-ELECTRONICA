@@ -73,9 +73,11 @@ class TaskController extends Controller
             ];
         }
         catch (\Exception $e) {
+            report($e);
+
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'No se pudo registrar la tarea.',
             ];
         }
     }

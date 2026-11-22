@@ -2,6 +2,8 @@
 
 namespace Modules\Purchase\Http\Controllers;
 
+use App\Support\Files\SafeTempFile;
+
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Person;
@@ -124,7 +126,7 @@ class PurchaseOrderController extends Controller
 
     public function record($id)
     {
-        $record = new PurchaseOrderResource(PurchaseOrder::findOrFail($id));
+        $record = new PurchaseOrderResource(PurchaseOrder::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -146,9 +148,15 @@ class PurchaseOrderController extends Controller
 
         DB::connection('tenant')->transaction(function () use ($request) {
 
+            $id = $request->input('id');
+            $existing = $id ? PurchaseOrder::whereTypeUser()->findOrFail($id) : null;
+
             $data = $this->mergeData($request);
 
-            $id = $request->input('id');
+            if ($existing) {
+                $data['external_id'] = $existing->external_id;
+                $data['state_type_id'] = $existing->state_type_id;
+            }
 
             $this->purchase_order =  PurchaseOrder::updateOrCreate( ['id' => $id], $data);
 
@@ -158,14 +166,22 @@ class PurchaseOrderController extends Controller
                 $this->purchase_order->items()->create($row);
             }
 
-            $temp_path = $request->input('attached_temp_path');
+            $temp_path = SafeTempFile::realPath($request->input('attached_temp_path'));
+
+            if ($request->filled('attached_temp_path') && !$temp_path) {
+                abort(422, 'El archivo adjunto no es válido.');
+            }
 
             if($temp_path) {
+                $extension = strtolower(pathinfo($request->input('attached') ?? '', PATHINFO_EXTENSION));
+                $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'];
+
+                if (!in_array($extension, $allowed, true)) {
+                    abort(422, 'El archivo adjunto no es válido.');
+                }
 
                 $datenow = date('YmdHis');
-                $file_name_old = $request->input('attached');
-                $file_name_old_array = explode('.', $file_name_old);
-                $file_name = Str::slug($this->purchase_order->id).'-'.$datenow.'.'.$file_name_old_array[1];
+                $file_name = Str::slug($this->purchase_order->id).'-'.$datenow.'.'.$extension;
                 $file_content = file_get_contents($temp_path);
                 Storage::disk('tenant')->put('purchase_order_attached'.DIRECTORY_SEPARATOR.$file_name, $file_content);
                 $this->purchase_order->upload_filename = $file_name;
@@ -455,12 +471,18 @@ class PurchaseOrderController extends Controller
 
     public function anular($id)
     {
-        $obj =  PurchaseOrder::find($id);
-        $obj->state_type_id = 11;
-        $obj->save();
-        return [
-            'success' => true,
-            'message' => 'Orden de compra anulada con éxito'
-        ];
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $obj = PurchaseOrder::whereTypeUser()->lockForUpdate()->findOrFail($id);
+
+            if ((string) $obj->state_type_id !== '11') {
+                $obj->state_type_id = 11;
+                $obj->save();
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Orden de compra anulada con éxito',
+            ];
+        });
     }
 }

@@ -38,9 +38,16 @@ class MobileController extends Controller
             ];
         }
 
+        $user = $request->user();
+        if ($user instanceof User && $user->type === 'client') {
+            return [
+                'success' => false,
+                'message' => 'No Autorizado'
+            ];
+        }
+
         $company = Company::active();
 
-        $user = $request->user();
         return [
             'success' => true,
             'name' => $user->name,
@@ -104,6 +111,7 @@ class MobileController extends Controller
                     ->get()
                     ->transform(function($row) use($warehouse){
                         $full_description = ($row->internal_id)?$row->internal_id.' - '.$row->description:$row->description;
+                        $warehouseItem = $warehouse ? $row->warehouses->firstWhere('warehouse_id', $warehouse->id) : null;
 
                         return [
                             'id' => $row->id,
@@ -114,7 +122,7 @@ class MobileController extends Controller
                             'currency_type_id' => $row->currency_type_id,
                             'internal_id' => $row->internal_id,
                             'item_code' => $row->item_code,
-                            'currency_type_symbol' => $row->currency_type->symbol,
+                            'currency_type_symbol' => optional($row->currency_type)->symbol,
                             'sale_unit_price' => number_format( $row->sale_unit_price, 2),
                             'purchase_unit_price' => $row->purchase_unit_price,
                             'unit_type_id' => $row->unit_type_id,
@@ -125,9 +133,9 @@ class MobileController extends Controller
                             'has_igv' => (bool) $row->has_igv,
                             'is_set' => (bool) $row->is_set,
                             'aux_quantity' => 1,
-                    'brand' => $row->brand->name,
-                    'category' => $row->brand->name,
-                    'stock' => ItemWarehouse::where([['item_id', $row->id],['warehouse_id', $warehouse->id]])->first()->stock,
+                    'brand' => optional($row->brand)->name,
+                    'category' => optional($row->category)->name,
+                    'stock' => $warehouseItem ? $warehouseItem->stock : 0,
                     'image' => $row->image != "imagen-no-disponible.jpg" ? url("/storage/uploads/items/" . $row->image) : url("/logo/" . $row->image),
 
                         ];
@@ -161,6 +169,12 @@ class MobileController extends Controller
     {
         $company = Company::active();
         $document = Document::find($request->id);
+        if (!$document) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Documento no encontrado.',
+            ], 404);
+        }
         $customer_email = $request->email;
 
         Mail::to($customer_email)->send(new DocumentEmail($company, $document));
@@ -249,17 +263,22 @@ class MobileController extends Controller
         $establishment_id = auth()->user()->establishment_id;
         $warehouse = Warehouse::where('establishment_id', $establishment_id)->first();
 
-        $items = Item::where('description', 'like', "%{$request->input}%" )
-                    ->orWhere('internal_id', 'like', "%{$request->input}%")
+        $items = Item::with(['brand', 'category'])
+                    ->where(function ($query) use ($request) {
+                        $query->where('description', 'like', "%{$request->input}%")
+                              ->orWhere('internal_id', 'like', "%{$request->input}%");
+                    })
                     ->whereHasInternalId()
                     ->whereWarehouse()
                     ->whereNotIsSet()
                     ->whereIsActive()
                     ->orderBy('description')
+                    ->take(50)
                     ->get()
                     ->transform(function($row) use($warehouse){
 
                         $full_description = ($row->internal_id)?$row->internal_id.' - '.$row->description:$row->description;
+                        $warehouseItem = $warehouse ? $row->warehouses->firstWhere('warehouse_id', $warehouse->id) : null;
 
                         return [
                             'id' => $row->id,
@@ -270,7 +289,7 @@ class MobileController extends Controller
                             'currency_type_id' => $row->currency_type_id,
                             'internal_id' => $row->internal_id,
                             'item_code' => $row->item_code,
-                            'currency_type_symbol' => $row->currency_type->symbol,
+                            'currency_type_symbol' => optional($row->currency_type)->symbol,
                             'sale_unit_price' => number_format( $row->sale_unit_price, 2),
                             'purchase_unit_price' => $row->purchase_unit_price,
                             'unit_type_id' => $row->unit_type_id,
@@ -281,13 +300,13 @@ class MobileController extends Controller
                             'has_igv' => (bool) $row->has_igv,
                             'is_set' => (bool) $row->is_set,
                             'aux_quantity' => 1,
-                    'brand' => $row->brand->name,
-                    'category' => $row->brand->name,
-                    'stock' => ItemWarehouse::where([['item_id', $row->id],['warehouse_id', $warehouse->id]])->first()->stock,
+                    'brand' => optional($row->brand)->name,
+                    'category' => optional($row->category)->name,
+                    'stock' => $warehouseItem ? $warehouseItem->stock : 0,
                     'image' => $row->image != "imagen-no-disponible.jpg" ? url("/storage/uploads/items/" . $row->image) : url("/logo/" . $row->image),
                             'warehouses' => collect($row->warehouses)->transform(function($row) {
                                 return [
-                                    'warehouse_description' => $row->warehouse->description,
+                                    'warehouse_description' => optional($row->warehouse)->description,
                                     'stock' => $row->stock,
                                     'warehouse_id' => $row->warehouse_id,
                                 ];
@@ -306,11 +325,15 @@ class MobileController extends Controller
 
         $identity_document_type_id = $this->getIdentityDocumentTypeId($request->document_type_id);
 
-        $customers = Person::where('name', 'like', "%{$request->input}%" )
-                            ->orWhere('number','like', "%{$request->input}%")
+        $customers = Person::with('identity_document_type')
+                            ->where(function ($query) use ($request) {
+                                $query->where('name', 'like', "%{$request->input}%")
+                                      ->orWhere('number', 'like', "%{$request->input}%");
+                            })
                             ->whereType('customers')
                             ->whereIn('identity_document_type_id', $identity_document_type_id)
                             ->orderBy('name')
+                            ->take(50)
                             ->get()
                             ->transform(function($row) {
                                 return [
@@ -319,7 +342,7 @@ class MobileController extends Controller
                                     'name' => $row->name,
                                     'number' => $row->number,
                                     'identity_document_type_id' => $row->identity_document_type_id,
-                                    'identity_document_type_code' => $row->identity_document_type->code,
+                                    'identity_document_type_code' => optional($row->identity_document_type)->code,
                                     'address' => $row->address,
                                     'telephone' => $row->telephone,
                                     'email' => $row->email,

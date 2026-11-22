@@ -12,6 +12,7 @@ use App\Http\Resources\Tenant\EstablishmentResource;
 use App\Http\Resources\Tenant\EstablishmentCollection;
 use App\Models\Tenant\Warehouse;
 use App\Models\Tenant\Person;
+use Illuminate\Support\Facades\DB;
 
 class EstablishmentController extends Controller
 {
@@ -55,26 +56,29 @@ class EstablishmentController extends Controller
     public function store(EstablishmentRequest $request)
     {
         $id = $request->input('id');
-        $establishment = Establishment::firstOrNew(['id' => $id]);
+
         if ($request->hasFile('file') && $request->file('file')->isValid()) {
             $request->validate(['file' => 'mimes:jpeg,png,jpg|max:1024']);
             $file = $request->file('file');
-            $ext = $file->getClientOriginalExtension();
+            $ext = $file->extension();
             $filename = time() . '.' . $ext;
             $file->storeAs('public/uploads/logos', $filename);
             $path = 'storage/uploads/logos/' . $filename;
             $request->merge(['logo' => $path]);
         }
-        $establishment->fill($request->all());
 
-        $establishment->save();
+        DB::connection('tenant')->transaction(function () use ($request, $id) {
+            $establishment = Establishment::firstOrNew(['id' => $id]);
+            $establishment->fill($request->all());
+            $establishment->save();
 
-        if(!$id) {
-            $warehouse = new Warehouse();
-            $warehouse->establishment_id = $establishment->id;
-            $warehouse->description = 'Almacén - '.$establishment->description;
-            $warehouse->save();
-        }
+            if (!$id) {
+                $warehouse = new Warehouse();
+                $warehouse->establishment_id = $establishment->id;
+                $warehouse->description = 'Almacén - '.$establishment->description;
+                $warehouse->save();
+            }
+        });
 
         return [
             'success' => true,

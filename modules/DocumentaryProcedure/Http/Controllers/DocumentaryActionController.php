@@ -14,10 +14,10 @@ class DocumentaryActionController extends Controller
 		if (request()->ajax()) {
 			$filter = request('name');
 			if ($filter) {
-				$actions = $actions->where('name', 'like', "%$filter%")->get();
+				$actions = $actions->where('name', 'like', "%$filter%");
 			}
 
-			return response()->json(['data' => $actions], 200);
+			return response()->json(['data' => $actions->get()], 200);
 		}
 		$actions = $actions->get();
 
@@ -66,8 +66,9 @@ class DocumentaryActionController extends Controller
 	 */
 	public function destroy($id)
 	{
+		$action = DocumentaryAction::findOrFail($id);
+
 		try {
-			$action = DocumentaryAction::findOrFail($id);
 			$action->delete();
 
 			return response()->json([
@@ -76,9 +77,11 @@ class DocumentaryActionController extends Controller
 				'succes'  => true,
 			], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success' => false,
-				'data'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message' => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}

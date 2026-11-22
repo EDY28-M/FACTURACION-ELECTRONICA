@@ -13,7 +13,7 @@ class CompanyAccountController extends Controller
     }
     
     public function record() {
-        $company_account = CompanyAccount::first();
+        $company_account = CompanyAccount::firstOrFail();
         $record = new CompanyAccountResource($company_account);
         
         return $record;
@@ -21,7 +21,7 @@ class CompanyAccountController extends Controller
     
     public function store(CompanyAccountRequest $request) {
         $id = $request->input('id');
-        $company_account = CompanyAccount::find($id);
+        $company_account = CompanyAccount::findOrFail($id);
         $company_account->fill($request->all());
         $company_account->save();
         

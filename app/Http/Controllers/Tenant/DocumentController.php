@@ -5,7 +5,6 @@ use App\Models\Tenant\PaymentCondition;
 use Exception;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
-use Nexmo\Account\Price;
 use App\Models\Tenant\Item;
 use App\Models\Tenant\User;
 use App\Traits\OfflineTrait;
@@ -20,18 +19,16 @@ use App\Models\Tenant\Document;
 use App\CoreFacturalo\Facturalo;
 use App\Imports\DocumentsImport;
 use App\Models\Tenant\StateType;
-use App\Models\Tenant\Warehouse;
 use Modules\Item\Models\Category;
 use App\Mail\Tenant\DocumentEmail;
 use Illuminate\Support\Facades\DB;
-use App\CoreFacturalo\WS\Zip\ZipFly;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Configuration;
 use App\Models\Tenant\Establishment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Cache;
 use App\Models\Tenant\PaymentMethodType;
+use Modules\Document\Traits\SearchTrait;
 use Modules\Finance\Traits\FinanceTrait;
 use App\Imports\DocumentsImportTwoFormat;
 use App\Models\Tenant\Catalogs\PriceType;
@@ -61,7 +58,7 @@ use App\Models\Tenant\Dispatch;
 
 class DocumentController extends Controller
 {
-    use StorageDocument, OfflineTrait, FinanceTrait;
+    use StorageDocument, OfflineTrait, FinanceTrait, SearchTrait;
     private $max_count_payment = 0;
 
     public function __construct()
@@ -103,8 +100,10 @@ class DocumentController extends Controller
         $identity_document_type_id = $this->getIdentityDocumentTypeId($request->document_type_id, $request->operation_type_id);
 //        $operation_type_id_id = $this->getIdentityDocumentTypeId($request->operation_type_id);
 
-        $customers = Person::where('number','like', "%{$request->input}%")
-                            ->orWhere('name','like', "%{$request->input}%")
+        $customers = Person::where(function ($query) use ($request) {
+                                $query->where('number', 'like', "%{$request->input}%")
+                                      ->orWhere('name', 'like', "%{$request->input}%");
+                            })
                             ->whereType('customers')->orderBy('name')
                             ->whereIn('identity_document_type_id',$identity_document_type_id)
                             ->whereIsEnabled()
@@ -284,8 +283,8 @@ class DocumentController extends Controller
             $warehouse = ModuleWarehouse::where('establishment_id', $establishment_id)->first();
 
             // $items_u = Item::whereWarehouse()->whereIsActive()->whereNotIsSet()->orderBy('description')->take(20)->get();
-            $items_u = Item::whereWarehouse()->whereIsActive()->orderBy('description')->take(20)->get();
-            $items_s = Item::where('unit_type_id','ZZ')->whereIsActive()->orderBy('description')->take(10)->get();
+            $items_u = Item::with(['brand', 'category'])->whereWarehouse()->whereIsActive()->orderBy('description')->take(20)->get();
+            $items_s = Item::with(['brand', 'category'])->where('unit_type_id','ZZ')->whereIsActive()->orderBy('description')->take(10)->get();
             $items = $items_u->merge($items_s);
 
             return collect($items)->transform(function($row) use($warehouse){
@@ -300,7 +299,7 @@ class DocumentController extends Controller
                     'internal_id' => $row->internal_id,
                     'description' => $row->description,
                     'currency_type_id' => $row->currency_type_id,
-                    'currency_type_symbol' => $row->currency_type->symbol,
+                    'currency_type_symbol' => optional($row->currency_type)->symbol,
                     'sale_unit_price' => number_format($row->sale_unit_price, 4, ".",""),
                     'purchase_unit_price' => $row->purchase_unit_price,
                     'unit_type_id' => $row->unit_type_id,
@@ -326,10 +325,10 @@ class DocumentController extends Controller
                     }),
                     'warehouses' => collect($row->warehouses)->transform(function($row) use($warehouse){
                         return [
-                            'warehouse_description' => $row->warehouse->description,
+                            'warehouse_description' => optional($row->warehouse)->description,
                             'stock' => $row->stock,
                             'warehouse_id' => $row->warehouse_id,
-                            'checked' => ($row->warehouse_id == $warehouse->id) ? true : false,
+                            'checked' => ($warehouse && $row->warehouse_id == $warehouse->id) ? true : false,
                         ];
                     }),
                     'attributes' => $row->attributes ? $row->attributes : [],
@@ -365,37 +364,10 @@ class DocumentController extends Controller
         return [];
     }
 
-    public function getFullDescription($row, $warehouse){
-
-        $desc = ($row->internal_id)?$row->internal_id.' - '.$row->description : $row->description;
-        $category = ($row->category) ? "{$row->category->name}" : "";
-        $brand = ($row->brand) ? "{$row->brand->name}" : "";
-
-
-
-        if($row->unit_type_id != 'ZZ')
-        {
-            $warehouse_stock = ($row->warehouses && $warehouse) ? number_format($row->warehouses->where('warehouse_id', $warehouse->id)->first()->stock,2) : 0;
-            $stock = ($row->warehouses && $warehouse) ? "{$warehouse_stock}" : "";
-        }
-        else{
-            $stock = '';
-        }
-
-        $desc = "{$desc} - {$brand}";
-
-        return [
-            'full_description' => $desc,
-            'brand' => $brand,
-            'category' => $category,
-            'stock' => $stock,
-        ];
-    }
-
 
     public function record($id)
     {
-        $record = new DocumentResource(Document::findOrFail($id));
+        $record = new DocumentResource(Document::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -469,6 +441,15 @@ class DocumentController extends Controller
 
     public function update(DocumentUpdateRequest $request, $id)
     {
+        $document = Document::whereTypeUser()->findOrFail($id);
+
+        if (!in_array((string) $document->state_type_id, ['01', '03', '09'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se puede editar un comprobante aceptado, anulado u observado.',
+            ], 422);
+        }
+
         $fact = DB::connection('tenant')->transaction(function () use ($request, $id) {
             $facturalo = new Facturalo();
             $facturalo->update($request->all(), $id);
@@ -505,8 +486,21 @@ class DocumentController extends Controller
 
     public function reStore($document_id)
     {
+        if (!config('tenant.recreate_document')) {
+            return ['success' => false, 'message' => 'La acción no está habilitada.'];
+        }
+
         $fact = DB::connection('tenant')->transaction(function () use ($document_id) {
-            $document = Document::find($document_id);
+            $query = Document::query();
+            if (auth()->user()->type !== 'admin') {
+                $query->where('user_id', auth()->id());
+            }
+
+            $document = $query->lockForUpdate()->findOrFail($document_id);
+
+            if (!in_array((string) $document->state_type_id, ['01', '03'], true)) {
+                return ['success' => false, 'message' => 'Solo se pueden recrear documentos pendientes de envío.'];
+            }
 
             $type = 'invoice';
             if($document->document_type_id === '07') {
@@ -527,21 +521,17 @@ class DocumentController extends Controller
             $facturalo->updateState('01');
             $facturalo->createPdf($document, $type, 'ticket');
 //            $facturalo->senderXmlSignedBill();
+
+            return ['success' => true, 'message' => 'El documento se volvió a generar.'];
         });
 
-//        $document = $fact->getDocument();
-//        $response = $fact->getResponse();
-
-        return [
-            'success' => true,
-            'message' => 'El documento se volvio a generar.',
-        ];
+        return $fact;
     }
 
     public function email(DocumentEmailRequest $request)
     {
         $company = Company::active();
-        $document = Document::find($request->input('id'));
+        $document = Document::whereTypeUser()->findOrFail($request->input('id'));
         $customer_email = $request->input('customer_email');
 
         Mail::to($customer_email)->send(new DocumentEmail($company, $document));
@@ -552,7 +542,10 @@ class DocumentController extends Controller
     }
 
     public function send($document_id) {
-        $document = Document::find($document_id);
+        $document = $this->findDocumentForMutation($document_id, ['01', '03']);
+        if (!$document) {
+            return ['success' => false, 'message' => 'El comprobante no existe o no está pendiente de envío.'];
+        }
 
         $fact = DB::connection('tenant')->transaction(function () use ($document) {
             $facturalo = new Facturalo();
@@ -572,7 +565,10 @@ class DocumentController extends Controller
 
     public function consultCdr($document_id)
     {
-        $document = Document::find($document_id);
+        $document = $this->findDocumentForMutation($document_id, ['03', '05', '07']);
+        if (!$document) {
+            return ['success' => false, 'message' => 'El comprobante no existe o no está en estado enviado.'];
+        }
 
         $fact = DB::connection('tenant')->transaction(function () use ($document) {
             $facturalo = new Facturalo();
@@ -589,7 +585,10 @@ class DocumentController extends Controller
     }
 
     public function sendServer($document_id, $query = false) {
-        $document = Document::find($document_id);
+        $document = $this->findDocumentForMutation($document_id, ['01', '03']);
+        if (!$document) {
+            return ['success' => false, 'message' => 'El comprobante no existe o no está pendiente de envío.'];
+        }
         // $bearer = config('tenant.token_server');
         // $api_url = config('tenant.url_server');
         $bearer = $this->getTokenServer();
@@ -628,7 +627,10 @@ class DocumentController extends Controller
     }
 
     public function checkServer($document_id) {
-        $document = Document::find($document_id);
+        $document = $this->findDocumentForMutation($document_id, ['01', '03']);
+        if (!$document) {
+            return ['success' => false, 'message' => 'El comprobante no existe o no está pendiente de envío.'];
+        }
         $bearer = $this->getTokenServer();
         $api_url = $this->getUrlServer();
 
@@ -703,16 +705,31 @@ class DocumentController extends Controller
 
     public function changeToRegisteredStatus($document_id)
     {
-        $document = Document::find($document_id);
-        if($document->state_type_id === '01') {
+        if (!config('tenant.change_to_registered_status')) {
+            return ['success' => false, 'message' => 'La acción no está habilitada.'];
+        }
+
+        if (auth()->user()->type !== 'admin') {
+            return ['success' => false, 'message' => 'Solo un administrador puede cambiar el estado a registrado.'];
+        }
+
+        return DB::connection('tenant')->transaction(function () use ($document_id) {
+            $query = Document::query();
+            if (auth()->user()->type !== 'admin') {
+                $query->where('user_id', auth()->id());
+            }
+
+            $document = $query->lockForUpdate()->findOrFail($document_id);
+
+            if ((string) $document->state_type_id !== '01') {
+                return ['success' => false, 'message' => 'Solo se pueden registrar documentos en estado 01.'];
+            }
+
             $document->state_type_id = '05';
             $document->save();
 
-            return [
-                'success' => true,
-                'message' => 'El estado del documento fue actualizado.',
-            ];
-        }
+            return ['success' => true, 'message' => 'El estado del documento fue actualizado.'];
+        });
     }
 
     public function import(Request $request)
@@ -728,9 +745,11 @@ class DocumentController extends Controller
                     'data' => $data
                 ];
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo importar el archivo. Verifique el formato.',
                 ];
             }
         }
@@ -753,9 +772,11 @@ class DocumentController extends Controller
                     'data' => $data
                 ];
             } catch (Exception $e) {
+                report($e);
+
                 return [
                     'success' => false,
-                    'message' =>  $e->getMessage()
+                    'message' => 'No se pudo importar el archivo. Verifique el formato.',
                 ];
             }
         }
@@ -917,14 +938,14 @@ class DocumentController extends Controller
             return (object)[
 
                 'id' => $row->id,
-                'ruc' => $row->customer->number,
+                'ruc' => optional($row->customer)->number,
                 // 'date' =>  $row->date_of_issue->format('Y-m-d'),
                 // 'date' =>  $row->date_of_issue,
                 'date' =>  $row->date_of_issue->format('d/m/Y'),
                 'invoice' => $row->number_full,
-                'comercial_name' => $row->customer->trade_name,
-                'business_name' => $row->customer->name,
-                'zone' => $row->customer->department->description,
+                'comercial_name' => optional($row->customer)->trade_name,
+                'business_name' => optional($row->customer)->name,
+                'zone' => optional(optional($row->customer)->department)->description,
                 'total' => number_format($row->total, 2, ".",""),
 
                 'payments' => $row->payments,
@@ -936,8 +957,8 @@ class DocumentController extends Controller
 
                 'balance' => $total_difference,
                 'person_type' => isset($row->person->person_type->description) ? $row->person->person_type->description:'',
-                'department' => $row->customer->department->description,
-                'district' => $row->customer->district->description,
+                'department' => optional(optional($row->customer)->department)->description,
+                'district' => optional(optional($row->customer)->district)->description,
 
                 /*'reference1' => ( isset($row->payments[0]) ) ?  $row->payments[0]->reference : '',
                 'reference2' =>  ( isset($row->payments[1]) ) ?  $row->payments[1]->reference : '',
@@ -972,26 +993,75 @@ class DocumentController extends Controller
     {
         try {
 
-            DB::connection('tenant')->transaction(function () use ($document_id) {
+            return DB::connection('tenant')->transaction(function () use ($document_id) {
 
-                $record = Document::findOrFail($document_id);
+                $query = Document::query();
+                if (auth()->user()->type !== 'admin') {
+                    $query->where('user_id', auth()->id());
+                }
+
+                $record = $query->lockForUpdate()->findOrFail($document_id);
+
+                $canDelete = config('tenant.delete_document_type_03')
+                    && (string) $record->document_type_id === '03'
+                    && (string) $record->state_type_id === '01'
+                    && !$record->summary_document()->exists()
+                    && !$record->payments()->exists();
+
+                if (!$canDelete) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Solo se pueden eliminar boletas en estado 01, sin resumen y sin pagos.',
+                    ], 422);
+                }
+
+                // Trigger the normal reversal providers before deleting the row.
+                $record->state_type_id = '11';
+                $record->save();
+
                 $this->deleteAllPayments($record->payments);
                 $record->delete();
 
+                return [
+                    'success' => true,
+                    'message' => 'Documento eliminado con éxito',
+                ];
             });
 
-            return [
-                'success' => true,
-                'message' => 'Documento eliminado con éxito'
-            ];
-
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Documento no encontrado.',
+            ], 404);
         } catch (Exception $e) {
+            report($e);
 
-            return ($e->getCode() == '23000') ? ['success' => false,'message' => 'El Documento esta siendo usada por otros registros, no puede eliminar'] : ['success' => false,'message' => 'Error inesperado, no se pudo eliminar el Documento'];
+            return ($e->getCode() == '23000')
+                ? ['success' => false, 'message' => 'El Documento esta siendo usado por otros registros, no puede eliminar']
+                : ['success' => false, 'message' => 'Error inesperado, no se pudo eliminar el Documento'];
+        }
+    }
 
+
+    private function findDocumentForMutation($id, array $allowedStates = []): ?Document
+    {
+        $query = Document::query();
+        $user = auth()->user();
+        if ($user && $user->type !== 'admin') {
+            $query->where('user_id', $user->id);
         }
 
+        $document = $query->find($id);
 
+        if (!$document) {
+            return null;
+        }
+
+        if ($allowedStates && !in_array((string) $document->state_type_id, $allowedStates, true)) {
+            return null;
+        }
+
+        return $document;
     }
 
     public function storeCategories(CategoryRequest $request)

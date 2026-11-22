@@ -127,9 +127,9 @@ class ContractRecurrentController extends Controller
                     'document_number' => optional($billing->document)->number_full,
                 ];
             } catch (ContractAlreadyBilledException $e) {
-                $result += ['status' => 'skipped', 'message' => $e->getMessage()];
+                $result += ['status' => 'skipped', 'message' => 'No se pudo procesar el contrato.'];
             } catch (Throwable $e) {
-                $result += ['status' => 'failed', 'message' => $e->getMessage()];
+                $result += ['status' => 'failed', 'message' => 'No se pudo procesar el contrato.'];
             }
 
             $results[] = $result;

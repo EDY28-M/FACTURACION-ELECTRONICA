@@ -38,10 +38,12 @@ class HotelRentController extends Controller
 	{
 		DB::connection('tenant')->beginTransaction();
 		try {
-			$room = HotelRoom::findOrFail($roomId);
+			$room = HotelRoom::lockForUpdate()->findOrFail($roomId);
 			if ($room->status !== 'DISPONIBLE') {
+				DB::connection('tenant')->rollBack();
+
 				return response()->json([
-					'success' => true,
+					'success' => false,
 					'message' => 'La habitación seleccionada no esta disponible',
 				], 500);
 			}
@@ -72,10 +74,11 @@ class HotelRentController extends Controller
 			], 200);
 		} catch (\Throwable $th) {
 			DB::connection('tenant')->rollBack();
+			report($th);
 
 			return response()->json([
-				'success' => true,
-				'message' => 'No se puede procesar su transacción. Detalles: ' . $th->getMessage(),
+				'success' => false,
+				'message' => 'No se puede procesar su transacción.',
 			], 500);
 		}
 	}
@@ -105,20 +108,24 @@ class HotelRentController extends Controller
 
 	public function addProductsToRoom(HotelRentItemRequest $request, $rentId)
 	{
-		foreach ($request->products as $product) {
-			$item = HotelRentItem::where('hotel_rent_id', $rentId)
-				->where('item_id', $product['item_id'])
-				->first();
-			if (!$item) {
-				$item = new HotelRentItem();
-				$item->type = 'PRO';
-				$item->hotel_rent_id = $rentId;
-				$item->item_id = $product['item_id'];
+		DB::connection('tenant')->transaction(function () use ($request, $rentId) {
+			HotelRent::findOrFail($rentId);
+
+			foreach ($request->products as $product) {
+				$item = HotelRentItem::where('hotel_rent_id', $rentId)
+					->where('item_id', $product['item_id'])
+					->first();
+				if (!$item) {
+					$item = new HotelRentItem();
+					$item->type = 'PRO';
+					$item->hotel_rent_id = $rentId;
+					$item->item_id = $product['item_id'];
+				}
+				$item->item = $product;
+				$item->payment_status = $product['payment_status'];
+				$item->save();
 			}
-			$item->item = $product;
-			$item->payment_status = $product['payment_status'];
-			$item->save();
-		}
+		});
 
 		return response()->json([
 			'success' => true,
@@ -141,7 +148,7 @@ class HotelRentController extends Controller
         $payment_method_types = PaymentMethodType::all();
         $payment_destinations = $this->getPaymentDestinations();
         $establishment = Establishment::where('id', auth()->user()->establishment_id)->first();
-        $series = Series::where('establishment_id', $establishment->id)->get();
+        $series = $establishment ? Series::where('establishment_id', $establishment->id)->get() : collect();
         $document_types_invoice = DocumentType::whereIn('id', ['01', '03', '80'])->get();
         $user = auth()->user();
         $warehouse_id = $user->establishment_id;
@@ -153,15 +160,31 @@ class HotelRentController extends Controller
 
 	public function finalizeRent($rentId)
 	{
-		$rent = HotelRent::findOrFail($rentId);
-		$rent->update([
-			'arrears' => request('arrears'),
-			'status'  => 'FINALIZADO'
-		]);
-		HotelRoom::where('id', $rent->hotel_room_id)
-			->update([
-				'status' => 'LIMPIEZA'
-			]);
+		$alreadyFinalized = false;
+
+		DB::connection('tenant')->transaction(function () use ($rentId, &$alreadyFinalized) {
+			$rent = HotelRent::lockForUpdate()->findOrFail($rentId);
+			if ($rent->status === 'FINALIZADO') {
+				$alreadyFinalized = true;
+				return;
+			}
+
+			$rent->arrears = is_numeric(request('arrears')) ? (int) request('arrears') : 0;
+			$rent->status = 'FINALIZADO';
+			$rent->save();
+
+			HotelRoom::where('id', $rent->hotel_room_id)
+				->update([
+					'status' => 'LIMPIEZA'
+				]);
+		});
+
+		if ($alreadyFinalized) {
+			return response()->json([
+				'success' => false,
+				'message' => 'La renta ya fue finalizada previamente.'
+			], 422);
+		}
 
 		return response()->json([
 			'success' => true,

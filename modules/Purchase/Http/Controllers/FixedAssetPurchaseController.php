@@ -2,6 +2,8 @@
 
 namespace Modules\Purchase\Http\Controllers;
 
+use Exception;
+
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Person;
@@ -149,16 +151,19 @@ class FixedAssetPurchaseController extends Controller
 
     public function voided($id)
     {
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $obj = FixedAssetPurchase::whereTypeUser()->lockForUpdate()->findOrFail($id);
 
-        $obj =  FixedAssetPurchase::find($id);
-        $obj->state_type_id = 11;
-        $obj->save();
+            if ((string) $obj->state_type_id !== '11') {
+                $obj->state_type_id = 11;
+                $obj->save();
+            }
 
-        return [
-            'success' => true,
-            'message' => 'Compra anulada con éxito'
-        ];
-
+            return [
+                'success' => true,
+                'message' => 'Compra anulada con éxito',
+            ];
+        });
     }
 
     public static function convert($inputs)
@@ -245,10 +250,11 @@ class FixedAssetPurchaseController extends Controller
             ];
 
         } catch (Exception $e) {
+            report($e);
 
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'No se pudo eliminar la compra.',
             ];
         }
     }

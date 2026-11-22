@@ -23,13 +23,17 @@ class AccountController extends Controller
 
     public function download(Request $request)
     {
+        $request->validate([
+            'type'  => 'required|in:concar,siscont,foxcont,contasis,adsoft,sumerius',
+            'month' => 'required|date_format:Y-m',
+        ]);
+
         $type = $request->input('type');
         $month = $request->input('month');
 
         $d_start = Carbon::parse($month.'-01')->format('Y-m-d');
         $d_end = Carbon::parse($month.'-01')->endOfMonth()->format('Y-m-d');
 
-        $records = $this->getDocuments($d_start, $d_end);
         $filename = 'Reporte_'.ucfirst($type).'_Ventas_'.date('YmdHis');
 
         switch ($type) {
@@ -45,8 +49,7 @@ class AccountController extends Controller
                 return $report;
 
             case 'siscont':
-
-                $records = $this->getStructureSiscont($records);
+                $records = $this->getStructureSiscont($this->getDocuments($d_start, $d_end));
 
                 $temp = tempnam(sys_get_temp_dir(), 'txt');
                 $file = fopen($temp, 'w+');
@@ -57,12 +60,11 @@ class AccountController extends Controller
                 }
                 fclose($file);
 
-                return response()->download($temp, $filename.'.txt');
+                return response()->download($temp, $filename.'.txt')->deleteFileAfterSend(true);
 
             case 'foxcont':
-
                 $data = [
-                    'records' => $this->getStructureFoxcont($records),
+                    'records' => $this->getStructureFoxcont($this->getDocuments($d_start, $d_end)),
                 ];
 
                 return (new ReportAccountingFoxcontExport)
@@ -70,9 +72,8 @@ class AccountController extends Controller
                     ->download($filename.'.xlsx');
 
             case 'contasis':
-
                 $data = [
-                    'records' => $this->getStructureContasis($records),
+                    'records' => $this->getStructureContasis($this->getDocuments($d_start, $d_end)),
                 ];
 
                 return (new ReportAccountingContasisExport)
@@ -80,23 +81,25 @@ class AccountController extends Controller
                     ->download($filename.'.xlsx');
 
             case 'adsoft':
-
                 $data = [
-                    'records' => $this->getStructureAdsoft($records),
+                    'records' => $this->getStructureAdsoft($this->getDocuments($d_start, $d_end)),
                 ];
 
                 return (new ReportAccountingAdsoftExport)
                     ->data($data)
                     ->download($filename.'.xlsx');
-            case 'sumerius':
 
+            case 'sumerius':
                 $data = [
-                    'records' => $this->getStructureSumerius($records),
+                    'records' => $this->getStructureSumerius($this->getDocuments($d_start, $d_end)),
                 ];
 
                 return (new ReportAccountingSumeriusExport)
                     ->data($data)
                     ->download($filename.'.xlsx');
+
+            default:
+                abort(422, 'Formato no válido');
         }
     }
 
@@ -317,7 +320,7 @@ class AccountController extends Controller
                         'col_I' => 'S',
                         'col_J' => '',
                         // 'col_K' => '121201',
-                        'col_K' => ($row->currency_type_id === 'PEN') ? $company_account->total_pen : $company_account->total_usd,
+                        'col_K' => ($row->currency_type_id === 'PEN') ? optional($company_account)->total_pen : optional($company_account)->total_usd,
                         'col_L' => $row->customer->number,
                         'col_M' => '',
                         'col_N' => 'H',
@@ -363,7 +366,7 @@ class AccountController extends Controller
                         'col_I' => 'S',
                         'col_J' => '',
                         // 'col_K' => '401111',
-                        'col_K' => ($row->currency_type_id === 'PEN') ? $company_account->igv_pen : $company_account->igv_usd,
+                        'col_K' => ($row->currency_type_id === 'PEN') ? optional($company_account)->igv_pen : optional($company_account)->igv_usd,
                         'col_L' => $row->customer->number,
                         'col_M' => '',
                         'col_N' => 'D',
@@ -408,7 +411,7 @@ class AccountController extends Controller
                         'col_I' => 'S',
                         'col_J' => '',
                         // 'col_K' => '704101',
-                        'col_K' => ($row->currency_type_id === 'PEN') ? $company_account->subtotal_pen : $company_account->subtotal_usd,
+                        'col_K' => ($row->currency_type_id === 'PEN') ? optional($company_account)->subtotal_pen : optional($company_account)->subtotal_usd,
                         'col_L' => $row->customer->number,
                         'col_M' => '',
                         'col_N' => 'D',
@@ -457,7 +460,7 @@ class AccountController extends Controller
                         'col_I' => 'S',
                         'col_J' => '',
                         // 'col_K' => '121201',
-                        'col_K' => ($row->currency_type_id === 'PEN') ? $company_account->total_pen : $company_account->total_usd,
+                        'col_K' => ($row->currency_type_id === 'PEN') ? optional($company_account)->total_pen : optional($company_account)->total_usd,
                         'col_L' => $row->customer->number,
                         'col_M' => '',
                         'col_N' => 'D',
@@ -503,7 +506,7 @@ class AccountController extends Controller
                         'col_I' => 'S',
                         'col_J' => '',
                         // 'col_K' => '401111',
-                        'col_K' => ($row->currency_type_id === 'PEN') ? $company_account->igv_pen : $company_account->igv_usd,
+                        'col_K' => ($row->currency_type_id === 'PEN') ? optional($company_account)->igv_pen : optional($company_account)->igv_usd,
                         'col_L' => $row->customer->number,
                         'col_M' => '',
                         'col_N' => 'H',
@@ -548,7 +551,7 @@ class AccountController extends Controller
                         'col_I' => 'S',
                         'col_J' => '',
                         // 'col_K' => '704101',
-                        'col_K' => ($row->currency_type_id === 'PEN') ? $company_account->subtotal_pen : $company_account->subtotal_usd,
+                        'col_K' => ($row->currency_type_id === 'PEN') ? optional($company_account)->subtotal_pen : optional($company_account)->subtotal_usd,
                         'col_L' => $row->customer->number,
                         'col_M' => '',
                         'col_N' => 'H',
@@ -609,7 +612,7 @@ class AccountController extends Controller
                     'col_003_006' => $number_index,
                     'col_007_014' => $date_of_issue->format('d/m/y'),
                     // 'col_015_024' => '12102',
-                    'col_015_024' => ($row->currency_type_id === 'PEN') ? $company_account->total_pen : $company_account->total_usd,
+                    'col_015_024' => ($row->currency_type_id === 'PEN') ? optional($company_account)->total_pen : optional($company_account)->total_usd,
                     'col_025_036' => ($row->state_type_id == '11') ? str_pad(0, 12, '0', STR_PAD_LEFT) : str_pad($item->total, 12, '0', STR_PAD_LEFT),
                     'col_037_037' => 'D',
                     'col_038_038' => $currency_type_id,
@@ -647,7 +650,7 @@ class AccountController extends Controller
                     'col_003_006' => $number_index,
                     'col_007_014' => $date_of_issue->format('d/m/y'),
                     // 'col_015_024' => '40111',
-                    'col_015_024' =>  ($row->currency_type_id === 'PEN') ? $company_account->igv_pen : $company_account->igv_usd,
+                    'col_015_024' =>  ($row->currency_type_id === 'PEN') ? optional($company_account)->igv_pen : optional($company_account)->igv_usd,
                     // 'col_025_036' => str_pad($row->total, 12, '0', STR_PAD_LEFT),
                     'col_025_036' => ($row->state_type_id == '11') ? str_pad(0, 12, '0', STR_PAD_LEFT) : str_pad($item->total_igv, 12, '0', STR_PAD_LEFT),
                     'col_037_037' => 'H',
@@ -689,7 +692,7 @@ class AccountController extends Controller
                         'col_003_006' => $number_index,
                         'col_007_014' => $date_of_issue->format('d/m/y'),
                         // 'col_015_024' => '70201',
-                        'col_015_024' => ($row->currency_type_id === 'PEN') ? $company_account->subtotal_pen : $company_account->subtotal_usd,
+                        'col_015_024' => ($row->currency_type_id === 'PEN') ? optional($company_account)->subtotal_pen : optional($company_account)->subtotal_usd,
                         'col_025_036' => str_pad($item->total_value, 12, '0', STR_PAD_LEFT),
                         'col_037_037' => 'H',
                         'col_038_038' => $currency_type_id,
@@ -733,9 +736,9 @@ class AccountController extends Controller
 
     private function getStructureContasis($documents)
     {
+        $company_account = CompanyAccount::first();
 
-        return $documents->transform(function($row) {
-            $company_account = CompanyAccount::first();
+        return $documents->transform(function($row) use ($company_account) {
             $document_base = ($row->note) ? $row->note : null;
             $payment_condition = '';
             $payment_method = '';
@@ -780,8 +783,8 @@ class AccountController extends Controller
                 'amount_usd' => null,
                 'date_of_due' => $row->invoice->date_of_due->format('d/m/Y'),
                 'payment_condition' => $payment_condition,
-                'account_taxed' => ($row->currency_type_id === 'PEN') ? $company_account->subtotal_pen : $company_account->subtotal_usd,
-                'account_total' => ($row->currency_type_id === 'PEN') ? $company_account->total_pen : $company_account->total_usd,
+                'account_taxed' => ($row->currency_type_id === 'PEN') ? optional($company_account)->subtotal_pen : optional($company_account)->subtotal_usd,
+                'account_total' => ($row->currency_type_id === 'PEN') ? optional($company_account)->total_pen : optional($company_account)->total_usd,
                 'aditional_information' => $row->aditional_information,
                 'payment_method' => $payment_method,
             ];

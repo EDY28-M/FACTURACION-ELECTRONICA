@@ -15,6 +15,8 @@ use App\Http\Resources\Tenant\CashCollection;
 use App\Http\Resources\Tenant\CashResource;
 use App\Models\Tenant\Cash;
 use App\Models\Tenant\CashDocument;
+use App\Models\Tenant\Document;
+use App\Models\Tenant\SaleNote;
 use Exception;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
@@ -48,7 +50,10 @@ class CashController extends Controller
 
     public function records(Request $request)
     {
-        $records = Cash::where($request->column, 'like', "%{$request->value}%")
+        $allowedColumns = array_keys($this->columns());
+        $column = in_array($request->column, $allowedColumns, true) ? $request->column : 'income';
+
+        $records = Cash::where($column, 'like', "%{$request->value}%")
                         ->whereTypeUser()
                         ->orderBy('date_opening', 'DESC');
 
@@ -98,7 +103,12 @@ class CashController extends Controller
 
     public function record($id)
     {
-        $record = new CashResource(Cash::findOrFail($id));
+        $query = Cash::query();
+        if (auth()->user()->type !== 'admin') {
+            $query->where('user_id', auth()->id());
+        }
+
+        $record = new CashResource($query->findOrFail($id));
 
         return $record;
     }
@@ -107,30 +117,53 @@ class CashController extends Controller
 
         $id = $request->input('id');
 
-        DB::connection('tenant')->transaction(function () use ($id, $request) {
+        return DB::connection('tenant')->transaction(function () use ($id, $request) {
 
-            $cash = Cash::firstOrNew(['id' => $id]);
-            $cash->fill($request->all());
+            if ($id) {
+                $cashQuery = Cash::where('id', $id);
+                if (auth()->user()->type !== 'admin') {
+                    $cashQuery->where('user_id', auth()->id());
+                }
+                $cash = $cashQuery->lockForUpdate()->firstOrFail();
 
-            if(!$id){
+                if (!$cash->state) {
+                    return [
+                        'success' => false,
+                        'message' => 'No se puede editar una caja cerrada.',
+                    ];
+                }
+            } else {
+                // Serialize concurrent openings for the same user.
+                User::whereKey(auth()->id())->lockForUpdate()->first();
+
+                if (Cash::where('user_id', auth()->id())->where('state', true)->exists()) {
+                    return [
+                        'success' => false,
+                        'message' => 'Ya tiene una caja aperturada.',
+                    ];
+                }
+
+                $cash = new Cash();
+                $cash->user_id = auth()->id();
+                $cash->state = true;
                 $cash->date_opening = date('Y-m-d');
                 $cash->time_opening = date('H:i:s');
             }
 
+            $cash->beginning_balance = $request->input('beginning_balance');
+            if ($request->filled('reference_number')) {
+                $cash->reference_number = $request->input('reference_number');
+            }
             $cash->save();
 
             $this->createCashTransaction($cash, $request);
 
+            return [
+                'success' => true,
+                'message' => ($id) ? 'Caja actualizada con éxito' : 'Caja aperturada con éxito',
+            ];
         });
-
-
-        return [
-            'success' => true,
-            'message' => ($id)?'Caja actualizada con éxito':'Caja aperturada con éxito'
-        ];
-
     }
-
 
     public function createCashTransaction($cash, $request){
 
@@ -142,7 +175,7 @@ class CashController extends Controller
             'payment_method_type_id' => '01',
             'payment' => $request->beginning_balance,
             'payment_destination_id' => 'cash',
-            'user_id' => $request->user_id,
+            'user_id' => $cash->user_id,
         ];
 
         $cash_transaction = $cash->cash_transaction()->create($data);
@@ -153,79 +186,120 @@ class CashController extends Controller
 
 
     public function close($id) {
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $cashQuery = Cash::with([
+                'cash_documents.sale_note',
+                'cash_documents.document',
+                'cash_documents.expense_payment.expense',
+            ]);
 
-        $cash = Cash::findOrFail($id);
-
-        // dd($cash->cash_documents);
-
-        $cash->date_closed = date('Y-m-d');
-        $cash->time_closed = date('H:i:s');
-
-        $final_balance = 0;
-        $income = 0;
-
-        foreach ($cash->cash_documents as $cash_document) {
-
-
-            if($cash_document->sale_note){
-
-                if(in_array($cash_document->sale_note->state_type_id, ['01','03','05','07','13'])){
-                    $final_balance += ($cash_document->sale_note->currency_type_id == 'PEN') ? $cash_document->sale_note->total : ($cash_document->sale_note->total * $cash_document->sale_note->exchange_rate_sale);
-                }
-
-                // $final_balance += $cash_document->sale_note->total;
-
-            }
-            else if($cash_document->document){
-
-                if(in_array($cash_document->document->state_type_id, ['01','03','05','07','13'])){
-                    $final_balance += ($cash_document->document->currency_type_id == 'PEN') ? $cash_document->document->total : ($cash_document->document->total * $cash_document->document->exchange_rate_sale);
-                }
-
-                // $final_balance += $cash_document->document->total;
-
-            }
-            else if($cash_document->expense_payment){
-
-                if($cash_document->expense_payment->expense->state_type_id == '05'){
-                    $final_balance -= ($cash_document->expense_payment->expense->currency_type_id == 'PEN') ? $cash_document->expense_payment->payment:($cash_document->expense_payment->payment  * $cash_document->expense_payment->expense->exchange_rate_sale);
-                }
-
-                // $final_balance -= $cash_document->expense_payment->payment;
-
+            if (auth()->user()->type !== 'admin') {
+                $cashQuery->where('user_id', auth()->id());
             }
 
-            // else if($cash_document->purchase){
-            //     $final_balance -= $cash_document->purchase->total;
-            // }
-            // else if($cash_document->expense){
-            //     $final_balance -= $cash_document->expense->total;
-            // }
+            $cash = $cashQuery->lockForUpdate()->findOrFail($id);
 
-        }
+            if (!$cash->state) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'La caja ya se encuentra cerrada.',
+                ], 422);
+            }
 
-        $cash->final_balance = round($final_balance + $cash->beginning_balance, 2);
-        $cash->income = round($final_balance, 2);
-        $cash->state = false;
-        $cash->save();
+            $cash->date_closed = date('Y-m-d');
+            $cash->time_closed = date('H:i:s');
 
-        return [
-            'success' => true,
-            'message' => 'Caja cerrada con éxito',
-        ];
+            $final_balance = 0;
 
+            foreach ($cash->cash_documents as $cash_document) {
+                if ($cash_document->sale_note) {
+                    if (in_array($cash_document->sale_note->state_type_id, ['01', '03', '05', '07', '13'])) {
+                        $final_balance += ($cash_document->sale_note->currency_type_id == 'PEN')
+                            ? $cash_document->sale_note->total
+                            : ($cash_document->sale_note->total * $cash_document->sale_note->exchange_rate_sale);
+                    }
+                } elseif ($cash_document->document) {
+                    if (in_array($cash_document->document->state_type_id, ['01', '03', '05', '07', '13'])) {
+                        $final_balance += ($cash_document->document->currency_type_id == 'PEN')
+                            ? $cash_document->document->total
+                            : ($cash_document->document->total * $cash_document->document->exchange_rate_sale);
+                    }
+                } elseif ($cash_document->expense_payment && $cash_document->expense_payment->expense) {
+                    if ($cash_document->expense_payment->expense->state_type_id == '05') {
+                        $final_balance -= ($cash_document->expense_payment->expense->currency_type_id == 'PEN')
+                            ? $cash_document->expense_payment->payment
+                            : ($cash_document->expense_payment->payment * $cash_document->expense_payment->expense->exchange_rate_sale);
+                    }
+                }
+            }
+
+            $cash->final_balance = round($final_balance + $cash->beginning_balance, 2);
+            $cash->income = round($final_balance, 2);
+            $cash->state = false;
+            $cash->save();
+
+            return [
+                'success' => true,
+                'message' => 'Caja cerrada con éxito',
+            ];
+        });
     }
 
 
     public function cash_document(Request $request) {
+        $data = $request->validate([
+            'document_id' => 'nullable|integer',
+            'sale_note_id' => 'nullable|integer',
+            'expense_payment_id' => 'nullable|integer',
+        ]);
 
-        $cash = Cash::where([['user_id',auth()->user()->id],['state',true]])->first();
-        $cash->cash_documents()->create($request->all());
+        if (!$data['document_id'] && !$data['sale_note_id'] && !$data['expense_payment_id']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Debe indicar un documento para asociar a la caja.',
+            ], 422);
+        }
 
-        return [
-            'success' => true,
-            'message' => 'Venta con éxito',
-        ];
+        return DB::connection('tenant')->transaction(function () use ($data) {
+            $cash = Cash::where('user_id', auth()->id())
+                ->where('state', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$cash) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No existe una caja abierta para el usuario.',
+                ], 422);
+            }
+
+            if (!empty($data['document_id'])) {
+                $document = Document::whereTypeUser()->find($data['document_id']);
+                if (!$document || (string) $document->state_type_id === '11') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'El documento no existe o está anulado.',
+                    ], 422);
+                }
+            }
+
+            if (!empty($data['sale_note_id'])) {
+                $saleNote = SaleNote::whereTypeUser()->find($data['sale_note_id']);
+                if (!$saleNote || (string) $saleNote->state_type_id === '11') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'La nota de venta no existe o está anulada.',
+                    ], 422);
+                }
+            }
+
+            $cash->cash_documents()->create($data);
+
+            return [
+                'success' => true,
+                'message' => 'Venta con éxito',
+            ];
+        });
     }
 
 
@@ -234,7 +308,11 @@ class CashController extends Controller
 
         $data = DB::connection('tenant')->transaction(function () use ($id) {
 
-            $cash = Cash::findOrFail($id);
+            $cashQuery = Cash::query();
+            if (auth()->user()->type !== 'admin') {
+                $cashQuery->where('user_id', auth()->id());
+            }
+            $cash = $cashQuery->lockForUpdate()->findOrFail($id);
 
             if($cash->global_destination()->where('payment_type', '!=', CashTransaction::class)->count() > 0){
                 return [
@@ -271,7 +349,11 @@ class CashController extends Controller
 
     public function report($cash) {
 
-        $cash = Cash::findOrFail($cash);
+        $query = Cash::query();
+        if (auth()->user()->type !== 'admin') {
+            $query->where('user_id', auth()->id());
+        }
+        $cash = $query->findOrFail($cash);
         $company = Company::first();
 
         $methods_payment = collect(PaymentMethodType::all())->transform(function($row){

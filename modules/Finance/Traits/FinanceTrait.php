@@ -95,6 +95,11 @@ trait FinanceTrait
         $destination = $this->getDestinationRecord($row); 
         $company = Company::active();
 
+        // Editing a payment must move its global payment, not append another row.
+        \Modules\Finance\Models\GlobalPayment::where('payment_id', $model->getKey())
+            ->where('payment_type', get_class($model))
+            ->delete();
+
         $model->global_payment()->create([
             'user_id' => auth()->id(),
             'soap_type_id' => $company->soap_type_id,
@@ -128,6 +133,10 @@ trait FinanceTrait
     public function deleteAllPayments($payments){
 
         foreach ($payments as $payment) {
+            \Modules\Finance\Models\GlobalPayment::where('payment_id', $payment->getKey())
+                ->where('payment_type', get_class($payment))
+                ->delete();
+
             $payment->delete();
         }
 
@@ -280,14 +289,28 @@ trait FinanceTrait
 
     public function getSumPayment($record, $model)
     {
-        return $record->where('payment_type', $model)->sum(function($row){
-            
-            $total_credit_notes = ($row->instance_type == 'document') ? $this->getTotalCreditNotes($row->payment->associated_record_payment) : 0;
-            $total_currency_type = $this->calculateTotalCurrencyType($row->payment->associated_record_payment, $row->payment->payment);
+        $total = 0;
+        $creditNotesByDocument = [];
 
-            return $total_currency_type - $total_credit_notes;
+        foreach ($record->where('payment_type', $model)->get() as $row) {
+            $payment = $row->payment;
+            $associated = $payment ? $payment->associated_record_payment : null;
 
-        });
+            if (!$associated) {
+                continue;
+            }
+
+            $total += $this->calculateTotalCurrencyType($associated, $payment->payment);
+
+            if ($row->instance_type === 'document') {
+                $key = $associated->getKey();
+                if (!array_key_exists($key, $creditNotesByDocument)) {
+                    $creditNotesByDocument[$key] = $this->getTotalCreditNotes($associated);
+                }
+            }
+        }
+
+        return $total - array_sum($creditNotesByDocument);
     }
     
 
@@ -383,15 +406,26 @@ trait FinanceTrait
 
     public function getSumByPMT($records, $include_credit_notes = false)
     {
+        $total = 0;
+        $creditNotesByDocument = [];
 
-        return $records->sum(function($row) use($include_credit_notes){
-            
-            $total_credit_notes = ($include_credit_notes) ? $this->getTotalCreditNotes($row->associated_record_payment) : 0;
-            $total_currency_type = $this->calculateTotalCurrencyType($row->associated_record_payment, $row->payment);
+        foreach ($records as $row) {
+            $associated = $row->associated_record_payment ?? null;
+            if (!$associated) {
+                continue;
+            }
 
-            return $total_currency_type - $total_credit_notes;
-        });
+            $total += $this->calculateTotalCurrencyType($associated, $row->payment);
 
+            if ($include_credit_notes && $row instanceof \App\Models\Tenant\DocumentPayment) {
+                $key = $associated->getKey();
+                if (!array_key_exists($key, $creditNotesByDocument)) {
+                    $creditNotesByDocument[$key] = $this->getTotalCreditNotes($associated);
+                }
+            }
+        }
+
+        return $total - array_sum($creditNotesByDocument);
     }
 
     public function getTotalsPaymentMethodType($records_by_pmt, $records_by_emt)

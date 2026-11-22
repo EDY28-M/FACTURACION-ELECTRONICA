@@ -63,7 +63,10 @@ class DispatchController extends Controller
 
 	public function records(Request $request)
 	{
-		$records = Dispatch::where($request->column, 'like', "%{$request->value}%")
+		$allowedColumns = array_keys($this->columns());
+		$column = in_array($request->column, $allowedColumns, true) ? $request->column : 'number';
+
+		$records = Dispatch::where($column, 'like', "%{$request->value}%")
 			->orderBy('series')
 			->orderBy('number', 'desc');
 
@@ -197,7 +200,7 @@ class DispatchController extends Controller
 					'attributes'                       => $row->attributes ? $row->attributes : [],
 					'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
 					'has_igv'                          => $row->has_igv,
-                    'lots_group' => $row->lots_group->each(function($lot){
+                    'lots_group' => $row->lots_group->map(function($lot){
                         return [
                             'id'  => $lot->id,
                             'code' => $lot->code,
@@ -234,7 +237,7 @@ class DispatchController extends Controller
 					'attributes'                       => $row->attributes ? $row->attributes : [],
 					'purchase_affectation_igv_type_id' => $row->purchase_affectation_igv_type_id,
 					'has_igv'                          => $row->has_igv,
-                    'lots_group' => $row->lots_group->each(function($lot){
+                    'lots_group' => $row->lots_group->map(function($lot){
                         return [
                             'id'  => $lot->id,
                             'code' => $lot->code,
@@ -309,7 +312,6 @@ class DispatchController extends Controller
 		$identityDocumentTypes = IdentityDocumentType::whereActive()->get();
 		$transferReasonTypes = TransferReasonType::whereActive()->get();
 		$transportModeTypes = TransportModeType::whereActive()->get();
-		$departments = Department::whereActive()->get();
 		$provinces = Province::whereActive()->get();
 		$unitTypes = UnitType::whereActive()->get();
 		$countries = Country::whereActive()->get();
@@ -371,7 +373,7 @@ class DispatchController extends Controller
 
 	public function email(Request $request)
 	{
-		$record = Dispatch::find($request->input('id'));
+		$record = Dispatch::findOrFail($request->input('id'));
 		$customer_email = $request->input('customer_email');
 
 		Mail::to($customer_email)->send(new DispatchEmail($record));
@@ -384,12 +386,12 @@ class DispatchController extends Controller
 	public function generateDocumentTables($id)
 	{
 		$dispatch = Dispatch::findOrFail($id);
-		$establishment = Establishment::where('id', auth()->user()->establishment_id)->first();
-		$establishment_id = $establishment->id;
-		$warehouse = ModuleWarehouse::where('establishment_id', $establishment_id)->first();
+		$establishmentId = optional(auth()->user())->establishment_id;
+		$establishment = $establishmentId ? Establishment::where('id', $establishmentId)->first() : null;
+		$warehouse = $establishment ? ModuleWarehouse::where('establishment_id', $establishment->id)->first() : null;
 
 		$itemsId = $dispatch->items->pluck('item_id')->all();
-		$items = Item::whereIn('id', $itemsId)->get()->transform(function ($row) use ($warehouse) {
+		$items = Item::with(['brand', 'category'])->whereIn('id', $itemsId)->get()->transform(function ($row) use ($warehouse) {
 			$detail = $this->getFullDescription($row, $warehouse);
 			return [
 				'id'                               => $row->id,
@@ -401,7 +403,7 @@ class DispatchController extends Controller
 				'internal_id'                      => $row->internal_id,
 				'description'                      => $row->description,
 				'currency_type_id'                 => $row->currency_type_id,
-				'currency_type_symbol'             => $row->currency_type->symbol,
+				'currency_type_symbol'             => optional($row->currency_type)->symbol,
 				'sale_unit_price'                  => number_format($row->sale_unit_price, 4, '.', ''),
 				'purchase_unit_price'              => $row->purchase_unit_price,
 				'unit_type_id'                     => $row->unit_type_id,
@@ -489,9 +491,11 @@ class DispatchController extends Controller
         } catch (\Throwable $th) {
             DB::connection('tenant')->rollBack();
 
+            report($th);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Ocurrió un error al asociar la guía con el comprobante. Detalles: ' . $th->getMessage()
+                'message' => 'No se pudo asociar la guía con el comprobante.',
             ], 500);
         }
 

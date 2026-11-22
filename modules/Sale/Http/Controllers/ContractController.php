@@ -160,7 +160,7 @@ class ContractController extends Controller
         $sellers = User::without(['establishment'])
             ->whereIn('type', ['seller'])
             ->orWhere('id', auth()->user()->id)
-            ->get();
+            ->get(['id', 'name']);
 
         return compact('customers', 'establishments','currency_types', 'discount_types', 'charge_types', 'configuration',
                         'company', 'document_type_03_filter','payment_method_types', 'payment_destinations', 'sellers', 'billing_series');
@@ -194,7 +194,7 @@ class ContractController extends Controller
 
     public function record($id)
     {
-        $record = new ContractResource(Contract::findOrFail($id));
+        $record = new ContractResource(Contract::whereTypeUser()->findOrFail($id));
 
         return $record;
     }
@@ -215,11 +215,19 @@ class ContractController extends Controller
 
         DB::connection('tenant')->transaction(function () use ($request) {
 
+            $id = $request->input('id');
+            $existing = $id ? Contract::whereTypeUser()->findOrFail($id) : null;
+
             $data = $this->mergeData($request);
             $data['terms_condition'] = $this->getTermsCondition();
-            $data = $this->applyRecurrence($data, $request->input('id'));
+            $data = $this->applyRecurrence($data, $id);
 
-            $this->contract =  Contract::updateOrCreate( ['id' => $request->input('id')], $data);
+            if ($existing) {
+                $data['external_id'] = $existing->external_id;
+                $data['state_type_id'] = $existing->state_type_id;
+            }
+
+            $this->contract =  Contract::updateOrCreate( ['id' => $id], $data);
 
             $this->contract->items()->delete();
             $this->deleteAllPayments($this->contract->payments);
@@ -313,13 +321,19 @@ class ContractController extends Controller
 
     public function voided($id)
     {
-        $obj =  Contract::find($id);
-        $obj->state_type_id = 11;
-        $obj->save();
-        return [
-            'success' => true,
-            'message' => 'Contrato anulado con éxito'
-        ];
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $obj = Contract::whereTypeUser()->lockForUpdate()->findOrFail($id);
+
+            if ((string) $obj->state_type_id !== '11') {
+                $obj->state_type_id = 11;
+                $obj->save();
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Contrato anulado con éxito',
+            ];
+        });
     }
 
     public function mergeData($inputs)
@@ -617,13 +631,19 @@ class ContractController extends Controller
 
     public function updateStateType($state_type_id, $id)
     {
-        $record = Contract::find($id);
-        $record->state_type_id = $state_type_id;
-        $record->save();
+        return DB::connection('tenant')->transaction(function () use ($state_type_id, $id) {
+            if (!ContractStateType::whereKey($state_type_id)->exists()) {
+                return ['success' => false, 'message' => 'Estado de contrato no válido.'];
+            }
 
-        return [
-            'success' => true,
-            'message' => 'Estado actualizado correctamente'
-        ];
+            $record = Contract::whereTypeUser()->lockForUpdate()->findOrFail($id);
+            $record->state_type_id = $state_type_id;
+            $record->save();
+
+            return [
+                'success' => true,
+                'message' => 'Estado actualizado correctamente',
+            ];
+        });
     }
 }

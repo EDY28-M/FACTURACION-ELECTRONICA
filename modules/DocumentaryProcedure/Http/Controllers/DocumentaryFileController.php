@@ -6,6 +6,7 @@ use App\Models\Tenant\Person;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Modules\DocumentaryProcedure\Models\DocumentaryFile;
 use Modules\DocumentaryProcedure\Models\DocumentaryAction;
 use Modules\DocumentaryProcedure\Models\DocumentaryOffice;
@@ -43,7 +44,6 @@ class DocumentaryFileController extends Controller
 			return response()->json(['data' => $files], 200);
 		}
 		$files = $files->get();
-        $files->load('offices');
         // return $files;
         $offices = DocumentaryOffice::whereActive(true)
             ->get();
@@ -52,9 +52,8 @@ class DocumentaryFileController extends Controller
 
 	private function storeFile(UploadedFile $file): string
 	{
-		$ext = $file->getClientOriginalExtension();
-		$filenameOriginal = str_replace('.' . $ext, '', $file->getClientOriginalName());
-		$name = $filenameOriginal . '-' . time() . '.' . $ext;
+		$ext = $file->extension() ?: 'bin';
+		$name = Str::uuid() . '.' . $ext;
 		$path = 'storage/uploads/files/';
 		$fullpath = $path . $name;
 		$file->storeAs('public/uploads/files', $name);
@@ -83,8 +82,10 @@ class DocumentaryFileController extends Controller
 			], 200);
 		} catch (\Throwable $th) {
             DB::connection('tenant')->rollBack();
+			report($th);
+
 			return response()->json([
-				'message' => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage(),
+				'message' => 'Ocurrió un error al procesar su petición.',
 				'succes'  => false,
 			], 500);
 		}
@@ -129,8 +130,9 @@ class DocumentaryFileController extends Controller
 
 	public function destroy($id)
 	{
+		$file = DocumentaryFile::findOrFail($id);
+
 		try {
-			$file = DocumentaryFile::findOrFail($id);
 			$file->delete();
 
 			return response()->json([
@@ -139,9 +141,11 @@ class DocumentaryFileController extends Controller
 				'succes'  => true,
 			], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success' => false,
-				'data'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message' => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}

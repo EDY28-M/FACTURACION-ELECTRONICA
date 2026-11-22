@@ -15,10 +15,10 @@ class DocumentaryDocumentController extends Controller
 		if (request()->ajax()) {
 			$filter = request('name');
 			if ($filter) {
-				$documents = $documents->where('name', 'like', "%$filter%")->get();
+				$documents = $documents->where('name', 'like', "%$filter%");
 			}
 
-			return response()->json(['data' => $documents], 200);
+			return response()->json(['data' => $documents->get()], 200);
 		}
 		$documents = $documents->get();
 
@@ -67,8 +67,9 @@ class DocumentaryDocumentController extends Controller
 	 */
 	public function destroy($id)
 	{
+		$document = DocumentaryDocument::findOrFail($id);
+
 		try {
-			$document = DocumentaryDocument::findOrFail($id);
 			$document->delete();
 
 			return response()->json([
@@ -77,9 +78,11 @@ class DocumentaryDocumentController extends Controller
                 'succes' => true,
             ], 200);
 		} catch (\Throwable $th) {
+			report($th);
+
 			return response()->json([
 				'success' => false,
-				'data'    => 'Ocurrió un error al procesar su petición. Detalles: ' . $th->getMessage()
+				'message' => 'Ocurrió un error al procesar su petición. Verifique que no tenga registros asociados.'
 			], 500);
 		}
 	}

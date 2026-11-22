@@ -2,6 +2,8 @@
 
 namespace Modules\Sale\Http\Controllers;
 
+use App\Support\Files\SafeTempFile;
+
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Str;
@@ -21,13 +23,16 @@ class SaleOpportunityFileController extends Controller
 
             if($file){
 
-                $temp_path = $file['temp_path']; 
+                $temp_path = SafeTempFile::realPath($file['temp_path'] ?? null);
+                $extension = strtolower(pathinfo($file['filename'] ?? '', PATHINFO_EXTENSION));
+                $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'];
 
-                $file_name_old = $file['filename'];
-                $file_name_old_array = explode('.', $file_name_old);
+                if (!$temp_path || !in_array($extension, $allowed, true)) {
+                    abort(422, 'El archivo adjunto no es válido.');
+                }
+
                 $file_content = file_get_contents($temp_path);
-                $extension = $file_name_old_array[1];
-                $file_name = Str::slug($file_name_old_array[0]).'-'.$sale_opportunity->id.'.'.$extension;
+                $file_name = Str::slug(pathinfo($file['filename'], PATHINFO_FILENAME)).'-'.$sale_opportunity->id.'.'.$extension;
 
                 Storage::disk('tenant')->put('sale_opportunity_files'.DIRECTORY_SEPARATOR.$file_name, $file_content);
     

@@ -17,6 +17,7 @@ class PurchasePaymentController extends Controller
 
     public function records($purchase_id)
     {
+        Purchase::whereTypeUser()->findOrFail($purchase_id);
         $records = PurchasePayment::where('purchase_id', $purchase_id)->get();
 
         return new PurchasePaymentCollection($records);
@@ -52,31 +53,60 @@ class PurchasePaymentController extends Controller
     {
         $id = $request->input('id');
 
-        DB::connection('tenant')->transaction(function () use ($id, $request) {
+        return DB::connection('tenant')->transaction(function () use ($id, $request) {
 
-            $record = PurchasePayment::firstOrNew(['id' => $id]);
-            $record->fill($request->all());
+            if ($id) {
+                $record = PurchasePayment::lockForUpdate()->findOrFail($id);
+                $purchase = Purchase::whereTypeUser()->lockForUpdate()->findOrFail($record->purchase_id);
+            } else {
+                $purchase = Purchase::whereTypeUser()
+                    ->lockForUpdate()
+                    ->findOrFail($request->input('purchase_id'));
+                $record = new PurchasePayment();
+                $record->purchase_id = $purchase->id;
+            }
+
+            if ((string) $purchase->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden registrar pagos de una compra anulada.',
+                ], 422);
+            }
+
+            $record->fill($request->except(['id', 'purchase_id']));
+            $record->purchase_id = $purchase->id;
             $record->save();
+
             $this->createGlobalPayment($record, $request->all());
             $this->saveFiles($record, $request, 'purchases');
 
+            return [
+                'success' => true,
+                'message' => ($id) ? 'Pago editado con éxito' : 'Pago registrado con éxito',
+            ];
         });
-
-        return [
-            'success' => true,
-            'message' => ($id)?'Pago editado con éxito':'Pago registrado con éxito'
-        ];
     }
 
     public function destroy($id)
     {
-        $item = PurchasePayment::findOrFail($id);
-        $item->delete();
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $item = PurchasePayment::lockForUpdate()->findOrFail($id);
+            $purchase = Purchase::whereTypeUser()->lockForUpdate()->findOrFail($item->purchase_id);
 
-        return [
-            'success' => true,
-            'message' => 'Pago eliminado con éxito'
-        ];
+            if ((string) $purchase->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden eliminar pagos de una compra anulada.',
+                ], 422);
+            }
+
+            $item->delete();
+
+            return [
+                'success' => true,
+                'message' => 'Pago eliminado con éxito',
+            ];
+        });
     }
  
 

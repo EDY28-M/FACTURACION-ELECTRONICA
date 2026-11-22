@@ -2,14 +2,27 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Models\Tenant\Company;
+use App\Models\Tenant\Configuration;
 use App\Models\Tenant\SoapType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tenant\CompanyRequest;
 use App\Http\Resources\Tenant\CompanyResource;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 
 class CompanyController extends Controller
 {
+    /**
+     * Fields the company can only change when the system admin enabled config_system_env.
+     */
+    private const LOCKED_SUNAT_FIELDS = [
+        'soap_type_id',
+        'soap_send_id',
+        'soap_username',
+        'soap_password',
+        'soap_url',
+    ];
+
     public function create()
     {
         return view('tenant.companies.form');
@@ -35,8 +48,17 @@ class CompanyController extends Controller
     public function store(CompanyRequest $request)
     {
         $id = $request->input('id');
-        $company = Company::find($id);
-        $company->fill($request->all());
+        $company = Company::findOrFail($id);
+
+        // The certificate is only set through CertificateController::uploadFile; accepting it here
+        // would let a tenant point to any .pem stored in the shared certificates directory.
+        $data = Arr::except($request->all(), ['certificate']);
+
+        if (!Configuration::allowsSunatSettingsChanges()) {
+            $data = Arr::except($data, self::LOCKED_SUNAT_FIELDS);
+        }
+
+        $company->fill($data);
 
         // Write-only: an empty value keeps the stored (encrypted) secret.
         if (filled($request->input('gre_client_secret'))) {
@@ -61,54 +83,63 @@ class CompanyController extends Controller
 
     public function uploadFile(Request $request)
     {
-        if ($request->hasFile('file')) {
-
-            $company = Company::active();
-
-            $type = $request->input('type');
-
-            $file = $request->file('file');
-            $ext = $file->getClientOriginalExtension();
-            $name = $type.'_'.$company->number.'.'.$ext;
-
-
-            if (($type === 'logo')) {
-                $v = request()->validate(['file' => 'required|mimes:jpeg,png,jpg,gif,svg|max:2048']);
-                $file->storeAs(($type === 'logo') ? 'public/uploads/logos' : 'certificates', $name);
-            }
-
-            if (($type === 'logo_store')) {
-                request()->validate(['file' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048']);
-                $file->storeAs(($type === 'logo_store') ? 'public/uploads/logos' : 'certificates', $name);
-            }
-
-			if (($type === 'favicon')) {
-                request()->validate(['file' => 'required|image|mimes:png|max:1024']);
-                $filename = time() . '.' . $ext;
-                $name = 'storage/uploads/favicons/' . $filename;
-			    $file->storeAs('public/uploads/favicons', $filename);
-            }
-
-
-            if (($type === 'img_firm')) request()->validate(['file' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048']);
-
-            $file->storeAs(($type === 'img_firm') ? 'public/uploads/firms' : 'certificates', $name);
-
-
-            $company->$type = $name;
-
-            $company->save();
-
+        if (!$request->hasFile('file') || !$request->file('file')->isValid()) {
             return [
-                'success' => true,
-                'message' => __('app.actions.upload.success'),
-                'name' => $name,
-                'type' => $type
+                'success' => false,
+                'message' => __('app.actions.upload.error'),
             ];
         }
+
+        $company = Company::active();
+        if (!$company) {
+            abort(404, 'Empresa no encontrada.');
+        }
+
+        $uploadSpecs = [
+            'logo' => [
+                'rules' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'dir' => 'public/uploads/logos',
+            ],
+            'logo_store' => [
+                'rules' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'dir' => 'public/uploads/logos',
+            ],
+            'favicon' => [
+                'rules' => 'required|image|mimes:png|max:1024',
+                'dir' => 'public/uploads/favicons',
+            ],
+            'img_firm' => [
+                'rules' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'dir' => 'public/uploads/firms',
+            ],
+        ];
+
+        $type = $request->input('type');
+        abort_unless(is_string($type) && array_key_exists($type, $uploadSpecs), 422, 'Tipo de archivo inválido.');
+
+        $spec = $uploadSpecs[$type];
+        $request->validate(['file' => $spec['rules']]);
+
+        $file = $request->file('file');
+        $ext = $file->extension();
+
+        if ($type === 'favicon') {
+            $filename = time() . '.' . $ext;
+            $file->storeAs($spec['dir'], $filename);
+            $name = 'storage/uploads/favicons/' . $filename;
+        } else {
+            $name = $type . '_' . $company->number . '.' . $ext;
+            $file->storeAs($spec['dir'], $name);
+        }
+
+        $company->{$type} = $name;
+        $company->save();
+
         return [
-            'success' => false,
-            'message' =>  __('app.actions.upload.error'),
+            'success' => true,
+            'message' => __('app.actions.upload.success'),
+            'name' => $name,
+            'type' => $type,
         ];
     }
 }
