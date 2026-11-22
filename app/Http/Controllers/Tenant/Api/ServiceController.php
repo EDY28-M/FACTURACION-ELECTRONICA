@@ -18,8 +18,12 @@ use App\CoreFacturalo\WS\Validator\XmlErrorCodeProvider;
 use App\CoreFacturalo\WS\Client\WsClient;
 use App\CoreFacturalo\WS\Services\SunatEndpoints;
 use App\Http\Requests\Tenant\ServiceRequest;
+use Carbon\Carbon;
 use Exception;
 use Modules\Document\Helpers\ConsultCdr;
+use Throwable;
+use App\CoreFacturalo\Services\Helpers\TokenProviderLookup;
+use Modules\Services\Data\ServiceData;
 
 
 class ServiceController extends Controller
@@ -56,6 +60,10 @@ class ServiceController extends Controller
 
     public function ruc($number)
     {
+        if (ServiceData::isConfigured()) {
+            return TokenProviderLookup::ruc($number);
+        }
+
         $service = new Sunat();
         $res = $service->get($number);
         if ($res) {
@@ -85,13 +93,28 @@ class ServiceController extends Controller
 
     public function dni($number)
     {
-        $res = Dni::search($number);
+        if (ServiceData::isConfigured()) {
+            return TokenProviderLookup::dni($number);
+        }
 
-        return $res;
+        return Dni::search($number);
     }
 
     public function exchangeRateTest($date)
     {
+        try {
+            $parsedDate = Carbon::createFromFormat('!Y-m-d', (string) $date);
+        } catch (Throwable $e) {
+            $parsedDate = false;
+        }
+
+        if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Formato de fecha inválido. Use YYYY-MM-DD.',
+            ], 422);
+        }
+
         $sale = 1;
         if($date <= now()->format('Y-m-d')) {
             $ex_rate = \App\Models\Tenant\ExchangeRate::where('date', $date)->first();
@@ -128,45 +151,67 @@ class ServiceController extends Controller
     }
 
     public function documentStatus(Request $request) {
-        if($request->has('external_id') OR $request->has('serie_number')) {
-            $external_id = $request->input('external_id');
-            $request_serie = $request->input('serie_number');
-            $serie_number = explode('-', $request_serie);
+        if (!$request->filled('external_id') && !$request->filled('serie_number')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Debe proporcionar external_id o serie_number.',
+            ], 422);
+        }
+
+        $external_id = $request->input('external_id');
+        $request_serie = $request->input('serie_number');
+        $serie = null;
+        $number = null;
+
+        if ($request->filled('serie_number')) {
+            $serie_number = explode('-', (string) $request_serie, 2);
+            if (count($serie_number) !== 2 || trim($serie_number[0]) === '' || !ctype_digit((string) $serie_number[1])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El formato de serie_number es inválido. Use SERIE-NUMERO.',
+                ], 422);
+            }
             $serie = $serie_number[0];
             $number = $serie_number[1];
-
-            if(!$external_id) {
-                $document = Document::where('number', $number)
-                            ->where('series', $serie)
-                            ->first();
-            } else {
-                $document = Document::where('external_id', $external_id)
-                            ->where('number', $number)
-                            ->where('series', $serie)
-                            ->first();
-            }
-
-            if(!$document) {
-                throw new Exception("El documento con código externo {$external_id} o numero {$request_serie}, no se encuentra registrado.");
-            }
-            return [
-                'success' => true,
-                'data' => [
-                    'number' => $document->number_full,
-                    'filename' => $document->filename,
-                    'external_id' => $document->external_id,
-                    'status_id' => $document->state_type_id,
-                    'status' => $document->state_type->description,
-                    'qr' => $document->qr,
-                    'number_to_letter' => $document->number_to_letter,
-                ],
-                'links' => [
-                    'xml' => $document->download_external_xml,
-                    'pdf' => $document->download_external_pdf,
-                    'cdr' => ($document->download_external_cdr)?$document->download_external_cdr:'',
-                ],
-            ];
         }
+
+        $query = Document::with('state_type');
+
+        if ($request->filled('external_id')) {
+            $query->where('external_id', $external_id);
+        }
+
+        if ($serie !== null) {
+            $query->where('series', $serie)
+                  ->where('number', $number);
+        }
+
+        $document = $query->first();
+
+        if (!$document) {
+            return response()->json([
+                'success' => false,
+                'message' => "El documento con código externo {$external_id} o numero {$request_serie}, no se encuentra registrado.",
+            ], 404);
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'number' => $document->number_full,
+                'filename' => $document->filename,
+                'external_id' => $document->external_id,
+                'status_id' => $document->state_type_id,
+                'status' => optional($document->state_type)->description,
+                'qr' => $document->qr,
+                'number_to_letter' => $document->number_to_letter,
+            ],
+            'links' => [
+                'xml' => $document->download_external_xml,
+                'pdf' => $document->download_external_pdf,
+                'cdr' => ($document->download_external_cdr)?$document->download_external_cdr:'',
+            ],
+        ];
     }
 
 }

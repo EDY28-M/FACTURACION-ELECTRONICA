@@ -27,7 +27,8 @@ class Jne
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => "",
             CURLOPT_MAXREDIRS => 10,
-            CURLOPT_TIMEOUT => 0,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => "POST",
@@ -41,12 +42,18 @@ class Jne
 
         $response = curl_exec($curl);
 
+        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
         curl_close($curl);
 
-        $data = json_decode($response, true);
+        $data = is_string($response) ? json_decode($response, true) : null;
 
-        // if ($response) {
-        // $text = $response->getBody()->getContents();
+        if ($httpCode >= 400 || !is_array($data) || !isset($data['data']) || !is_string($data['data'])) {
+            return [
+                'success' => false,
+                'message' => 'El servicio de consulta de DNI del JNE no está disponible.'
+            ];
+        }
+
         $text = $data['data'];
         $parts = explode('|', $text);
 
@@ -70,11 +77,5 @@ class Jne
                 'message' => 'Datos no encontrados.'
             ];
         }
-        // }
-
-        return [
-            'success' => false,
-            'message' => 'Coneccion fallida.'
-        ];
     }
 }

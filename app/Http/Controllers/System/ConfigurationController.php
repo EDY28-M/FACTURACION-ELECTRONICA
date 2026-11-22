@@ -14,7 +14,8 @@ class ConfigurationController extends Controller
     public function index()
     {
         $config = Configuration::first();
-        $internalLookup = $config->token_apiruc === 'false';
+        // 'false' is the legacy "internal lookup" marker, not a real token.
+        $primaryToken = $config->token_apiruc === 'false' ? null : $config->token_apiruc;
         $configuration = [
             'login' => $config->login,
             'use_login_global' => $config->use_login_global,
@@ -23,8 +24,8 @@ class ConfigurationController extends Controller
                 'soap_user' => (bool) $config->soap_username,
                 'culqi_public' => (bool) $config->token_public_culqui,
                 'culqi_private' => (bool) $config->token_private_culqui,
-                'ruc' => $internalLookup || ($config->url_apiruc && $config->token_apiruc),
-                'ruc_partial' => $internalLookup || $config->url_apiruc || $config->token_apiruc,
+                'ruc' => ($config->url_apiruc && $primaryToken) || $config->secondary_token_apiruc,
+                'ruc_partial' => $config->url_apiruc || $primaryToken || $config->secondary_url_apiruc || $config->secondary_token_apiruc,
             ],
         ];
         return view('system.configuration.index', compact('configuration'));
@@ -44,6 +45,10 @@ class ConfigurationController extends Controller
 
     public function store(Request $request)
     {
+        $request->validate([
+            'apiruc_primary' => 'nullable|in:primary,secondary',
+        ]);
+
         $configuration = Configuration::first();
 
         if($request->token_public_culqui)
@@ -61,9 +66,29 @@ class ConfigurationController extends Controller
             $configuration->url_apiruc = $request->url_apiruc;
         }
 
-        if($request->token_apiruc)
+        // The internal (scraper) lookup was removed: drop its legacy 'false' marker.
+        if ($configuration->token_apiruc === 'false') {
+            $configuration->token_apiruc = null;
+        }
+
+        if($request->token_apiruc && $request->token_apiruc !== 'false')
         {
             $configuration->token_apiruc = $request->token_apiruc;
+        }
+
+        if($request->secondary_url_apiruc)
+        {
+            $configuration->secondary_url_apiruc = $request->secondary_url_apiruc;
+        }
+
+        if($request->secondary_token_apiruc)
+        {
+            $configuration->secondary_token_apiruc = $request->secondary_token_apiruc;
+        }
+
+        if($request->apiruc_primary)
+        {
+            $configuration->apiruc_primary = $request->apiruc_primary;
         }
 
         $configuration->save();
@@ -82,6 +107,9 @@ class ConfigurationController extends Controller
         return [
             'url_apiruc' => $configuration->url_apiruc,
             'token_apiruc' => $configuration->token_apiruc,
+            'secondary_url_apiruc' => $configuration->secondary_url_apiruc,
+            'secondary_token_apiruc' => $configuration->secondary_token_apiruc,
+            'apiruc_primary' => $configuration->apiruc_primary ?: 'primary',
         ];
     }
 

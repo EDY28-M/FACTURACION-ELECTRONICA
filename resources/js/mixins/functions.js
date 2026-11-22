@@ -129,6 +129,13 @@ export const serviceNumber = {
                 this.form.province_id = data.province_id
                 this.form.district_id = data.district_id
                 this.form.phone = data.phone
+                // SUNAT taxpayer status (RUC only); cleared on DNI lookups so no stale alert remains.
+                if ('state' in this.form) this.form.state = data.state || null
+                if ('condition' in this.form) this.form.condition = data.condition || null
+                // A supplier that is a perception agent charges perception on its sales.
+                if (this.type === 'suppliers' && 'perception_agent' in this.form && typeof data.perception_agent === 'boolean') {
+                    this.form.perception_agent = data.perception_agent
+                }
 
                 this.filterProvinces()
                 this.filterDistricts()

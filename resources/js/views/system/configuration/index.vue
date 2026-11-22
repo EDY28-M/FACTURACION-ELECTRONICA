@@ -80,13 +80,12 @@
                     ruc: !!config.ruc,
                     ruc_partial: !!config.ruc_partial,
                     login: !!(this.configuration && this.configuration.use_login_global),
-                    certificate_file: '',
-                    ruc_internal: false
+                    certificate_file: ''
                 },
                 sections: [
-                    {key: 'certificate', icon: 'file-key-2', help: 'El certificado .pfx firma digitalmente cada comprobante. El usuario secundario SUNAT se usa para autenticar el envío de esos comprobantes a SUNAT.', title: 'Certificado PSE y SUNAT', subtitle: 'Firma y envío a SUNAT', description: 'Certificado digital y usuario secundario que se usan para firmar y enviar comprobantes.'},
+                    {key: 'certificate', icon: 'file-key-2', help: 'El certificado (.pfx o .p12) firma digitalmente cada comprobante. El usuario secundario SUNAT se usa para autenticar el envío de esos comprobantes a SUNAT.', title: 'Certificado PSE y SUNAT', subtitle: 'Firma y envío a SUNAT', description: 'Certificado digital y usuario secundario que se usan para firmar y enviar comprobantes.'},
                     {key: 'culqi', icon: 'credit-card', help: 'Culqi es la pasarela de pagos. Aquí se guardan las llaves de tu cuenta; la llave privada es secreta y no debe compartirse.', title: 'Culqi', subtitle: 'Pasarela de pagos', description: 'Credenciales de la pasarela de pagos Culqi.'},
-                    {key: 'ruc', icon: 'search-check', help: 'Al registrar clientes, el sistema consulta el RUC o DNI para completar sus datos. Puedes usar la consulta interna o un servicio externo con URL y token.', title: 'Consulta RUC/DNI', subtitle: 'Validación de documentos', description: 'Servicio que valida RUC y DNI al registrar clientes.'},
+                    {key: 'ruc', icon: 'search-check', help: 'Al registrar clientes, el sistema consulta el RUC o DNI para completar sus datos. Puedes configurar dos proveedores con URL y token; si el principal falla, se consulta el otro.', title: 'Consulta RUC/DNI', subtitle: 'Validación de documentos', description: 'Servicio que valida RUC y DNI al registrar clientes.'},
                     {key: 'login', icon: 'shield-check', help: 'Si usas la configuración global, todos los clientes ven la misma apariencia en su pantalla de acceso: fondo, logo y redes sociales.', title: 'Acceso de clientes', subtitle: 'Login de clientes', description: 'Configuración global para el login de los clientes.'}
                 ]
             }
@@ -98,7 +97,7 @@
             checklist() {
                 const s = this.status
                 if (this.current === 'certificate') return [
-                    {label: 'Certificado .pfx', done: s.certificate, value: s.certificate_file || ''},
+                    {label: 'Certificado digital', done: s.certificate, value: s.certificate_file || ''},
                     {label: 'Usuario secundario SUNAT', done: s.soap_user}
                 ]
                 if (this.current === 'culqi') return [
@@ -106,7 +105,7 @@
                     {label: 'Token privado', done: s.culqi_private}
                 ]
                 if (this.current === 'ruc') return [
-                    {label: s.ruc_internal ? 'Consulta interna' : 'Servicio externo (URL y token)', done: s.ruc}
+                    {label: 'Servicio externo (URL y token)', done: s.ruc}
                 ]
                 return [{label: 'Login global de clientes', done: s.login}]
             },
