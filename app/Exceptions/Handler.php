@@ -2,10 +2,17 @@
 
 namespace App\Exceptions;
 
+use Error;
+use ErrorException;
+use Exception;
+use InvalidArgumentException;
+use PDOException;
 use Throwable;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -33,6 +40,9 @@ class Handler extends ExceptionHandler
         'password_confirmation',
     ];
 
+    /** @var array<int, bool> */
+    private array $reportedIds = [];
+
     /**
      * Report or log an exception.
      *
@@ -42,6 +52,7 @@ class Handler extends ExceptionHandler
      */
     public function report(Throwable $exception)
     {
+        $this->reportedIds[spl_object_id($exception)] = true;
         parent::report($exception);
     }
 
@@ -66,6 +77,11 @@ class Handler extends ExceptionHandler
         if ($exception instanceof ValidationException) {
             return $this->convertValidationExceptionToResponse($exception, $request);
         }
+        if ($exception instanceof ModelNotFoundException) {
+            return $this->isFrontend($request)
+                ? parent::render($request, $exception)
+                : $this->errorResponse('Registro no encontrado', 404, $exception);
+        }
         if($exception instanceof NotFoundHttpException) {
             return $this->errorResponse('No se encontró la URL especificada', 404, $exception);
         }
@@ -80,7 +96,7 @@ class Handler extends ExceptionHandler
         //     return $this->errorResponse('Acceso denegado: Su cuenta está inactiva, comuníquese con el administrador', 403, $exception);
         // }
         if($exception instanceof HttpException) {
-            return $this->errorResponse('', '', $exception);
+            return $this->errorResponse('', $exception->getStatusCode(), $exception);
         }
 
         if(!$this->isFrontend($request)) {
@@ -113,16 +129,57 @@ class Handler extends ExceptionHandler
 
     private function errorResponse($message, $code, Throwable $exception)
     {
-        $message = ($message === '') ? $exception->getMessage() : $message;
         $code = ($code === '' || !is_int($code) || $code < 100 || $code > 599) ? 500 : $code;
-        $file = $exception->getFile();
-        $line = $exception->getLine();
+        $debug = (bool) config('app.debug');
 
-        return response()->json([
+        if ($code >= 500 && !isset($this->reportedIds[spl_object_id($exception)])) {
+            $this->report($exception);
+        }
+
+        if ($code >= 500 && !$debug && !$this->isUserFacing($exception)) {
+            $message = 'Error interno del servidor';
+        } elseif ($message === '') {
+            $message = $exception->getMessage();
+        }
+
+        $payload = [
             'success' => false,
             'message' => $message,
-            'file' => $file,
-            'line' => $line
-        ], $code);
+        ];
+
+        if ($debug) {
+            $payload['file'] = $exception->getFile();
+            $payload['line'] = $exception->getLine();
+        }
+
+        return response()->json($payload, $code);
+    }
+
+    /**
+     * Whether the exception message was written on purpose for the end user.
+     *
+     * The application reports business errors (SUNAT rejections, send deadline,
+     * validation of domain rules) with `new Exception('<message>')`, custom
+     * App\ / Modules\ exceptions, InvalidArgumentException and HttpException
+     * (abort()), so their messages are safe to show. Database, PHP engine and
+     * vendor/library errors are never user-facing: their messages may leak SQL,
+     * paths or credentials, so they are masked in production.
+     */
+    private function isUserFacing(Throwable $exception): bool
+    {
+        if ($exception instanceof QueryException
+            || $exception instanceof PDOException
+            || $exception instanceof ErrorException
+            || $exception instanceof Error) {
+            return false;
+        }
+
+        $class = get_class($exception);
+
+        return $class === Exception::class
+            || $exception instanceof InvalidArgumentException
+            || $exception instanceof HttpException
+            || str_starts_with($class, 'App\\')
+            || str_starts_with($class, 'Modules\\');
     }
 }

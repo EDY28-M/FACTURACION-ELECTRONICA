@@ -16,14 +16,15 @@ class UserResource extends JsonResource
 	public function toArray($request)
 	{
 		$isOwner = $this->isOwner();
-		$modulesInUser = $this->modules->pluck('id')->toArray();
-		$levelsInUser = $this->levels->pluck('id')->toArray();
+		$modulesInUser = $this->moduleIds();
+		$levelsInUser = $this->levelIds();
 
 		return [
 			'id'               => $this->id,
 			'email'            => $this->email,
 			'name'             => $this->name,
-			'api_token'        => $this->api_token,
+			'api_token'        => $this->apiTokenVisibleTo($request->user()) ? $this->api_token : null,
+			'api_token_hint'   => $this->apiTokenHint(),
 			'establishment_id' => $this->establishment_id,
 			'type'             => $this->type,
 			'is_owner'         => $isOwner,

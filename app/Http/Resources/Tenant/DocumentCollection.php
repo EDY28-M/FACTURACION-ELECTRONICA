@@ -55,7 +55,7 @@ class DocumentCollection extends ResourceCollection
 
                 if($row->document_type_id === '03' && config('tenant.delete_document_type_03')){
 
-                    if ($row->state_type_id === '01' && $row->doesntHave('summary_document')) {
+                    if ($row->state_type_id === '01' && $row->doesntHave('summary_document') && $row->payments->isEmpty()) {
                         $btn_delete_doc_type_03 = true;
                     }
 
@@ -67,10 +67,11 @@ class DocumentCollection extends ResourceCollection
                 $btn_constancy_detraction = ($row->detraction) ? true:false;
             }
 
-            $btn_recreate_document = config('tenant.recreate_document');
+            $btn_recreate_document = config('tenant.recreate_document')
+                && in_array((string) $row->state_type_id, ['01', '03'], true);
 
             $btn_change_to_registered_status = false;
-            if($row->state_type_id === '01') {
+            if($row->state_type_id === '01' && auth()->user()->type === 'admin') {
                 $btn_change_to_registered_status = config('tenant.change_to_registered_status');
             }
 

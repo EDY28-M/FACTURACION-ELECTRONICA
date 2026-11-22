@@ -32,7 +32,9 @@ class ClientRequest extends FormRequest
                 'required',
             ],
             'subdomain' => [
-                'required'
+                'required',
+                'alpha_dash',
+                'max:50',
             ],
             'plan_id' => [
                 'required',

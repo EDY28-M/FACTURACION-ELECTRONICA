@@ -24,8 +24,10 @@ class UserRequest extends FormRequest
                 'required'
             ],
             'password' => [
+                'nullable',
                 'min:6',
                 'confirmed',
+                'required_without:id',
             ]
         ];
     }

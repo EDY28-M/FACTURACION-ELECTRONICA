@@ -4,6 +4,7 @@ namespace App\Http\Resources\Tenant;
 
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use App\Models\Tenant\Configuration;
+use App\Models\Tenant\Warehouse;
 
 class ItemCollection extends ResourceCollection
 {
@@ -17,8 +18,12 @@ class ItemCollection extends ResourceCollection
     {
 
         $configuration =  Configuration::first();
+        $warehouse = auth()->user()
+            ? Warehouse::where('establishment_id', auth()->user()->establishment_id)->first()
+            : null;
+        $warehouseId = $warehouse ? $warehouse->id : null;
 
-        return $this->collection->transform(function($row, $key) use($configuration){
+        return $this->collection->transform(function($row, $key) use($configuration, $warehouseId){
 
             $has_igv_description = null;
             $purchase_has_igv_description = null;
@@ -49,10 +54,10 @@ class ItemCollection extends ResourceCollection
                 'internal_id' => $row->internal_id,
                 'item_code' => $row->item_code,
                 'item_code_gs1' => $row->item_code_gs1,
-                'stock' => $row->getStockByWarehouse(),
+                'stock' => $row->getStockByWarehouse($warehouseId),
                 'stock_min' => $row->stock_min,
                 'currency_type_id' => $row->currency_type_id,
-                'currency_type_symbol' => $row->currency_type->symbol,
+                'currency_type_symbol' => optional($row->currency_type)->symbol,
                 'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
                 'igv_general_rate' => (bool) $row->igv_general_rate,
                 'amount_sale_unit_price' => $row->sale_unit_price,
@@ -67,7 +72,7 @@ class ItemCollection extends ResourceCollection
                 'updated_at' => ($row->created_at) ? $row->updated_at->format('Y-m-d H:i:s') : '',
                 'warehouses' => collect($row->warehouses)->transform(function($row) {
                     return [
-                        'warehouse_description' => $row->warehouse->description,
+                        'warehouse_description' => optional($row->warehouse)->description,
                         'stock' => $row->stock,
                     ];
                 }),

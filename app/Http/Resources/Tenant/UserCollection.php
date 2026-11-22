@@ -36,7 +36,8 @@ class UserCollection extends ResourceCollection
                 'id' => $row->id,
                 'email' => $row->email,
                 'name' => $row->name,
-                'api_token' => $row->api_token,
+                // The list never carries the full credential; it is only revealed in the user form.
+                'api_token_hint' => $row->apiTokenHint(),
                 'establishment_description' => optional($row->establishment)->description,
                 'type' => $type,
                 'is_owner' => $row->isOwner(),

@@ -24,6 +24,7 @@ class UserRequest extends FormRequest
                 'min:6',
                 'confirmed',
                 'nullable',
+                'required_without:id',
             ],
             'phone' => [
                 'numeric',

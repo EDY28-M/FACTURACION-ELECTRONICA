@@ -9,12 +9,23 @@ use Modules\Finance\Models\PaymentFile;
 use App\Models\Tenant\Cash;
 use Illuminate\Support\Facades\Storage;
 use Modules\Finance\Helpers\UploadFileHelper;
+use Modules\Finance\Helpers\PaymentFileHelper;
 
 class PaymentFileController extends Controller
 { 
 
     public function download($filename, $type) { 
-        return Storage::disk('tenant')->download('payment_files'.DIRECTORY_SEPARATOR.$type.DIRECTORY_SEPARATOR.$filename);
+        $allowedTypes = ['documents', 'sale_notes', 'quotations', 'purchases', 'expenses'];
+        if (!in_array($type, $allowedTypes, true)) {
+            abort(404);
+        }
+
+        $filename = basename($filename);
+
+        return Storage::disk('tenant')->download('payment_files'.DIRECTORY_SEPARATOR.$type.DIRECTORY_SEPARATOR.$filename, null, [
+            'Content-Type' => 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function uploadAttached(Request $request)
@@ -29,7 +40,6 @@ class PaymentFileController extends Controller
         if ($request->hasFile('file')) {
             $new_request = [
                 'file' => $request->file('file'),
-                'type' => $request->input('type'),
                 'index' => $request->input('index'),
             ];
 
@@ -44,25 +54,7 @@ class PaymentFileController extends Controller
 
     function upload_attached($request)
     {
-        $file = $request['file'];
-        $type = $request['type'];
-        $index = $request['index'];
-
-        $temp = tempnam(sys_get_temp_dir(), $type);
-        file_put_contents($temp, file_get_contents($file));
-
-        $mime = mime_content_type($temp);
-        $data = file_get_contents($temp);
-
-        return [
-            'success' => true,
-            'data' => [
-                'filename' => $file->getClientOriginalName(),
-                'temp_path' => $temp,
-                'index' => (int) $index,
-                // 'temp_image' => 'data:' . $mime . ';base64,' . base64_encode($data)
-            ]
-        ];
+        return PaymentFileHelper::storeTemp($request['file'], $request['index'] ?? null);
     }
 
 
