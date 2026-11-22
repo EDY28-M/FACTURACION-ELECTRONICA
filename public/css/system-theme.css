@@ -2573,7 +2573,7 @@ html.dashboard-system .v-modal {
 html.dashboard-system .el-dialog {
     border-radius: 12px;
     box-shadow: 0 20px 50px rgba(19,26,46,.22);
-    margin-top: 8vh !important;
+    margin-top: 5vh !important;
 }
 html.dashboard-system .el-dialog__header {
     padding: 16px 20px 8px;

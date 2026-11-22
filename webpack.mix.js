@@ -36,6 +36,32 @@ mix.webpackConfig({
     plugins: [
         // Stable module ids keep unchanged chunks cacheable across builds.
         new webpack.HashedModuleIdsPlugin(),
+        // Stable chunk ids: webpack 3 numbers chunks by order and [chunkhash] ignores that number,
+        // so adding a page renumbered chunks while their file names stayed the same. Browsers
+        // then reused a cached chunk carrying the old id and the page rendered blank
+        // ("Loading chunk N failed"). Naming chunks ties the id to the file content.
+        new webpack.NamedChunksPlugin(chunk => {
+            if (chunk.name) return chunk.name;
+            const ids = chunk.mapModules(m => m.id).sort().join('_');
+            return require('crypto').createHash('md5').update(ids).digest('hex').slice(0, 8);
+        }),
+        // Mix's webpack-chunk-hash hashes module sources only. Fold the chunk id into the
+        // hash so a chunk whose id changes always gets a new file name.
+        {
+            apply(compiler) {
+                compiler.plugin('compilation', compilation => {
+                    compilation.plugin('after-hash', () => {
+                        const length = compilation.outputOptions.hashDigestLength;
+                        compilation.chunks.forEach(chunk => {
+                            if (chunk.hasRuntime() || chunk.isInitial()) return;
+                            chunk.hash = require('crypto').createHash('md5')
+                                .update(`${chunk.hash}|${chunk.id}`).digest('hex');
+                            chunk.renderedHash = chunk.hash.substr(0, length);
+                        });
+                    });
+                });
+            },
+        },
     ],
     resolve: {
         alias: {

@@ -1177,6 +1177,15 @@ html:not(.dashboard-system) .card-header {
     font-weight: 600;
 }
 
+/* Header with an action button: keep natural button size and gap when wrapping */
+html:not(.dashboard-system) .card-header.d-flex {
+    gap: 8px 12px;
+}
+
+html:not(.dashboard-system) .card-header.d-flex .btn {
+    flex: 0 0 auto;
+}
+
 html:not(.dashboard-system) .card-header .card-title {
     font-size: 17.1px;
     font-weight: 600;
