@@ -11,7 +11,7 @@
                 </div>
                 <div class="col-md-5">
                     <div class="form-group" :class="{'has-danger': errors.certificate}">
-                        <label class="control-label">Certificado pfx</label>
+                        <label class="control-label">Certificado (.pfx o .p12)</label>
                         <el-upload
                             ref="upload"
                             :headers="headers"
@@ -73,7 +73,7 @@
                 this.selectedFile = null
             },
             create() {
-                this.titleDialog = 'Subir certificado .pfx'
+                this.titleDialog = 'Subir certificado (.pfx o .p12)'
                 this.selectedFile = this.initialFile || null
             },
             handleFileChange(file) {

@@ -921,6 +921,7 @@
 <script>
 import Keypress from "vue-keypress";
 import {calculateRowItem} from "../../../helpers/functions";
+import {setPosDraftContext, readPosDraft, writePosDraft, removePosDraft} from "../../../helpers/pos_draft";
 import {rowIgvFactor} from "../../../helpers/igv";
 import PaymentForm from "./partials/payment.vue";
 import ItemForm from "./partials/form.vue";
@@ -1127,8 +1128,7 @@ export default {
             });
         },
         getFormPosLocalStorage() {
-            let form_pos = localStorage.getItem("form_pos");
-            form_pos = JSON.parse(form_pos);
+            let form_pos = readPosDraft("form_pos");
             if (form_pos) {
                 this.form = form_pos;
                 this.initDateTimeIssue();
@@ -1142,13 +1142,13 @@ export default {
         },
         setFormPosLocalStorage(form_param = null) {
             if (form_param) {
-                localStorage.setItem("form_pos", JSON.stringify(form_param));
+                writePosDraft("form_pos", form_param);
             } else {
-                localStorage.setItem("form_pos", JSON.stringify(this.form));
+                writePosDraft("form_pos", this.form);
             }
         },
         cancelFormPosLocalStorage() {
-            localStorage.setItem("form_pos", JSON.stringify(null));
+            removePosDraft("form_pos");
             this.setLocalStorageIndex("customer", null);
         },
         clickOpenInputEditUP(index) {
@@ -1321,17 +1321,14 @@ export default {
         },
 
         getLocalStorageIndex(key, re_default = null) {
-            let ls_obj = localStorage.getItem(key);
-            ls_obj = JSON.parse(ls_obj);
-
-            if (ls_obj) {
-                return ls_obj;
-            }
-
-            return re_default;
+            return readPosDraft(key, re_default);
         },
         setLocalStorageIndex(key, obj) {
-            localStorage.setItem(key, JSON.stringify(obj));
+            if (obj === null || obj === undefined) {
+                removePosDraft(key);
+                return;
+            }
+            writePosDraft(key, obj);
         },
         async events() {
             await this.$eventHub.$on("initInputPerson", () => {
@@ -1464,10 +1461,11 @@ export default {
 
             if (flag > 0)
                 return this.$message.error("Cantidad negativa o incorrecta");
-            if (!this.form.customer_id)
-                return this.$message.error("Seleccione un cliente");
             if (!this.form.items[0])
                 return this.$message.error("Seleccione un producto");
+            if (!this.form.customer_id && !(await this.selectGenericCustomer())) {
+                return this.$message.error("Seleccione un cliente");
+            }
             this.form.establishment_id = this.establishment.id;
             this.loading = true;
             await this.sleep(800);
@@ -1744,6 +1742,8 @@ export default {
                 this.establishment = response.data.establishment;
                 this.currency_types = response.data.currency_types;
                 this.user = response.data.user;
+                // FEC-002: scope the local draft to tenant + user before any restore
+                setPosDraftContext(this.user ? this.user.id : null);
                 this.form.currency_type_id =
                     this.currency_types.length > 0
                         ? this.currency_types[0].id
@@ -1755,6 +1755,22 @@ export default {
                 this.changeDateOfIssue();
                 this.changeExchangeRate();
             });
+        },
+        async selectGenericCustomer() {
+            try {
+                const response = await this.$http.get("/persons/generic-customer");
+                const customer = response.data.customer;
+                if (!customer) return false;
+                if (!_.find(this.all_customers, { id: customer.id })) {
+                    this.all_customers.push(customer);
+                }
+                this.form.customer_id = customer.id;
+                this.changeCustomer();
+                this.$message.info("Venta a CLIENTES VARIOS (consumidor final)");
+                return true;
+            } catch (e) {
+                return false;
+            }
         },
         selectDefaultCustomer() {
             if (this.establishment.customer_id && !this.form.customer_id) {

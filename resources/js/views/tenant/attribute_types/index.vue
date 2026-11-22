@@ -1,14 +1,10 @@
 <template>
     <div class="card">
-        <div class="card-header bg-info">
+        <div class="card-header bg-info d-flex align-items-center justify-content-between flex-wrap">
             <h3 class="my-0">Listado de Atributos</h3>
+            <button type="button" class="btn btn-custom btn-sm" @click.prevent="clickCreate()"><i class="fa fa-plus-circle"></i> Nuevo</button>
         </div>
         <div class="card-body">
-            <div class="row">
-                <div class="col">
-                    <button type="button" class="btn btn-custom btn-sm  mt-2 mr-2" @click.prevent="clickCreate()"><i class="fa fa-plus-circle"></i> Nuevo</button>
-                </div>
-            </div>
             <div class="table-responsive">
                 <table class="table">
                     <thead>
@@ -16,7 +12,7 @@
                         <th width="5%">#</th>
                         <th width="10%">Código</th>
                         <th width="50%">Descripción</th>
-                        <th width="5%">Activo</th>
+                        <th width="5%" class="text-center">Activo</th>
                         <th width="30%" class="text-right">Acciones</th>
                     </tr>
                     </thead>

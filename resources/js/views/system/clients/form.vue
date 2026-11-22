@@ -90,6 +90,10 @@
                                 :check-strictly="true"
                                 highlight-current
                                 :props="defaultProps">
+                                <span slot-scope="{ node, data }">
+                                    {{ node.label }}
+                                    <small v-if="isRequiredModule(data)" class="text-muted">(obligatorio)</small>
+                                </span>
                             </el-tree>
                         </div>
                     </el-collapse-item>
@@ -163,7 +167,7 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="form-group" :class="{'has-danger': errors.certificate}">
-                                    <label class="control-label">Certificado pfx</label>
+                                    <label class="control-label">Certificado (.pfx o .p12)</label>
                                     <el-upload
                                             ref="upload"
                                             :headers="headers"
@@ -229,8 +233,11 @@
             return {
                 defaultProps: {
                     children: 'childrens',
-                    label: 'description'
+                    label: 'description',
+                    disabled: 'required'
                 },
+                // Modules every plan must include (company/SUNAT setup, users/branches/series).
+                requiredModuleValues: ['configuration', 'establishments'],
                 headers: headers_token,
                 loading_submit: false,
                 loading_search: false,
@@ -258,7 +265,10 @@
                 .then(response => {
                     this.url_base = response.data.url_base
                     this.plans = response.data.plans
-                    this.modules = response.data.modules
+                    this.modules = response.data.modules.map(m => {
+                        m.required = this.requiredModuleValues.includes(m.value)
+                        return m
+                    })
                     this.types = response.data.types
                     this.certificate_admin = response.data.certificate_admin
                     this.soap_username = response.data.soap_username
@@ -273,6 +283,32 @@
 
         },
         methods: {
+            isRequiredModule(data) {
+                return data.is_parent && this.requiredModuleValues.includes(data.value)
+            },
+            /**
+             * Module combinations that are allowed but leave the company unable to do something
+             * important. Messages are static (safe for the HTML confirm dialog).
+             */
+            planWarnings(moduleIds) {
+                const selected = this.modules
+                    .filter(m => moduleIds.includes(m.id))
+                    .map(m => m.value)
+                const has = value => selected.includes(value)
+                const warnings = []
+
+                if (!has('documents') && !has('pos')) {
+                    warnings.push('Sin <b>Ventas</b> ni <b>Punto de venta (POS)</b>, la empresa no podrá emitir facturas, boletas ni notas de venta.')
+                }
+                if (!has('inventory') && !has('purchases')) {
+                    warnings.push('Sin <b>Inventario</b> ni <b>Compras</b>, la empresa no podrá reponer stock. Si tiene activo el control de stock, no podrá vender productos que se queden sin stock.')
+                }
+
+                return warnings
+            },
+            requiredModuleIds() {
+                return this.modules.filter(m => m.required).map(m => m.id)
+            },
             initForm() {
                 this.errors = {}
                 this.form = {
@@ -323,11 +359,11 @@
                             this.$refs.tree.setCheckedKeys([]);
                             this.form = response.data.data;
                             this.form.is_update = true;
-                            const preSelecteds = [];
+                            const preSelecteds = [...this.requiredModuleIds()];
                             const preSelectedsModules = this.form.modules;
                             const preSelectedsLevels = this.form.levels;
                             this.modules.map(m => {
-                                if (preSelectedsModules.includes(m.id)) {
+                                if (preSelectedsModules.includes(m.id) && !preSelecteds.includes(m.id)) {
                                     preSelecteds.push(m.id);
                                 }
                                 m.childrens.map(c => {
@@ -358,6 +394,12 @@
                         levels.push(idArray[1]);
                     }
                 })
+                // Required modules are always part of the plan, even if the tree state was lost.
+                this.requiredModuleIds().forEach(id => {
+                    if (!modules.includes(id)) {
+                        modules.push(id)
+                    }
+                })
                 this.form.modules = modules;
                 this.form.levels = levels;
 
@@ -373,6 +415,24 @@
                 } else {
                     if(this.form.temp_path && !this.form.password_certificate){
                          return this.$message.error('Si carga un certificado, es necesario ingresar el password del certificado')
+                    }
+                }
+
+                const warnings = this.planWarnings(modules)
+                if (warnings.length) {
+                    try {
+                        await this.$confirm(
+                            `<p>Con esta selección de módulos:</p><ul>${warnings.map(w => `<li>${w}</li>`).join('')}</ul><p>¿Deseas guardar de todas formas?</p>`,
+                            'Revisa los módulos',
+                            {
+                                type: 'warning',
+                                dangerouslyUseHTMLString: true,
+                                confirmButtonText: 'Guardar de todas formas',
+                                cancelButtonText: 'Revisar',
+                            }
+                        )
+                    } catch (e) {
+                        return
                     }
                 }
 

@@ -24,24 +24,17 @@
                     Selección de plantilla de impresión para imprimir
                 </h3>
             </div>
-            <div class="card-body pt-0 pb-5">
+            <div class="card-body pt-0 pb-5" v-loading="loading">
                 <div class="row">
-                    <div v-for="(o, index) in formatos" class="col-md-3 my-2">
+                    <div v-for="o in formatos" :key="o.formats" class="col-md-3 my-2">
                         <el-card
                             :body-style="{ padding: '0px' }"
                             :id="o.formats"
                         >
-                            <a @click="viewImage(o.formats)"
-                                ><img
-                                    :src="
-                                        path.origin +
-                                            '/templates/preprinted_pdf/' +
-                                            o.formats +
-                                            '/image.png'
-                                    "
-                                    class="image"
-                                    style="width: 100%"
-                            /></a>
+                            <a @click="viewImage(o.formats)">
+                                <img v-if="o.preview && !failed[o.formats]" :src="path.origin + o.preview" class="image" style="width: 100%" @error="onImageError(o.formats)">
+                                <div v-else class="tpl-placeholder">{{ o.formats }}</div>
+                            </a>
                             <div style="padding: 14px;">
                                 <span class="text-center">{{ o.formats }}</span>
                                 <div class="bottom clearfix text-right">
@@ -63,26 +56,20 @@
                         </el-card>
                     </div>
                 </div>
+                <div v-if="!loading && !formatos.length" class="tpl-empty">
+                    <p class="mb-1">No hay plantillas disponibles.</p>
+                    <small>Presione "Actualizar listado" para volver a cargar las plantillas.</small>
+                </div>
             </div>
         </div>
         <el-dialog :visible.sync="modalImage" width="60">
             <span>
-                <img
-                    :src="
-                        path.origin +
-                            '/templates/preprinted_pdf/' +
-                            template +
-                            '/image.png'
-                    "
-                    class="image"
-                    style="width: 100%"
-                />
+                <img v-if="templatePreview" :src="path.origin + templatePreview" class="image" style="width: 100%" @error="onImageError(template)">
+                <div v-else class="tpl-placeholder">{{ template }}</div>
             </span>
             <span slot="footer" class="dialog-footer">
                 <el-button @click="modalImage = false">Cerrar</el-button>
-                <el-button @click="changeFormat(template)" type="primary"
-                    >Activar</el-button
-                >
+                <el-button @click="printTemplate" type="primary">Imprimir</el-button>
             </span>
         </el-dialog>
     </div>
@@ -99,10 +86,18 @@ export default {
             errors: {},
             form: {},
             formatos: [],
+            loading: false,
+            failed: {},
             path: location,
             modalImage: false,
             template: ""
         };
+    },
+    computed: {
+        templatePreview() {
+            const f = this.formatos.find(r => r.formats === this.template);
+            return f && !this.failed[this.template] ? f.preview : null;
+        }
     },
     async created() {
         // await this.$http.get(`/${this.resource}/record`).then(response => {
@@ -111,10 +106,15 @@ export default {
         //     }
         // });
 
-        await this.$http.get(`/${this.resource}/preprinted/getFormats`).then(response => {
-            if (response.data !== "") this.formatos = response.data;
-            // console.log(this.formatos)
-        });
+        this.loading = true;
+        try {
+            const response = await this.$http.get(`/${this.resource}/preprinted/getFormats`);
+            this.formatos = Array.isArray(response.data) ? response.data : [];
+        } catch (e) {
+            this.formatos = [];
+        } finally {
+            this.loading = false;
+        }
     },
     methods: {
         showPdf(template){
@@ -126,18 +126,12 @@ export default {
 
             });
         },
-        changeFormat(value) {
+        printTemplate() {
             this.modalImage = false;
-            this.formatos = {
-                formats: value
-            };
-
-            this.$http
-                .post(`/${this.resource}/changeFormat`, this.formatos)
-                .then(response => {
-                    this.$message.success(response.data.message);
-                    location.reload();
-                });
+            this.showPdf(this.template);
+        },
+        onImageError(name) {
+            this.$set(this.failed, name, true);
         },
         addSeeder() {
             var ruta = location.host;
@@ -154,3 +148,23 @@ export default {
     }
 };
 </script>
+
+<style scoped>
+.tpl-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 12px;
+    background: #f5f7fa;
+    color: #909399;
+    text-align: center;
+    word-break: break-word;
+    cursor: pointer;
+}
+.tpl-empty {
+    padding: 40px 0;
+    text-align: center;
+    color: #909399;
+}
+</style>

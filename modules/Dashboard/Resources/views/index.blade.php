@@ -10,6 +10,7 @@
     	:type-user="{{ json_encode(auth()->user()->type) }}"
     	:user-name="{{ json_encode(auth()->user()->name) }}"
     	:user-id="{{ json_encode(auth()->id()) }}"
+    	:user-modules="{{ json_encode(auth()->user()->moduleValues()) }}"
     	:soap-company="{{ json_encode($soap_company) }}">
     </tenant-dashboard-index>
 

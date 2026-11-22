@@ -1,27 +1,17 @@
 <template>
-    <div class="card">
+    <div v-if="embedded" class="cfg-row">
+        <div class="cfg-text">
+            <span class="cfg-label">Eliminar documentos de prueba</span>
+            <small class="cfg-help">Borra los comprobantes emitidos en modo demo. Esta acción no se puede deshacer.</small>
+        </div>
+        <el-button type="danger" size="small" :loading="loading_submit" @click="deleteDocuments">Eliminar documentos de prueba</el-button>
+    </div>
+    <div v-else class="card">
         <div class="card-header bg-info">
             <h3 class="my-0">Otras Operaciones</h3>
         </div>
         <div class="card-body">
-            <form autocomplete="off" @submit.prevent="deleteDocuments">
-                <div class="form-body">
-                    <div class="row">
-                        <div class="col-md-12">
-                            <el-button type="primary" native-type="submit" :loading="loading_submit">Eliminar documentos de prueba</el-button>
-                        </div>
-                    </div>
-                </div>
-            </form> <br/>
-            <!--<form autocomplete="off" @submit.prevent="consultVoided">
-                <div class="form-body">
-                    <div class="row">
-                        <div class="col-md-12">
-                            <el-button type="primary" native-type="submit" :loading="loading_submit_voided">Consultar documentos anulados</el-button>
-                        </div>
-                    </div>
-                </div>
-            </form> -->
+            <el-button type="primary" :loading="loading_submit" @click="deleteDocuments">Eliminar documentos de prueba</el-button>
         </div>
     </div>
 </template>
@@ -29,6 +19,9 @@
 <script>
 
     export default {
+        props: {
+            embedded: { type: Boolean, default: false },
+        },
         data() {
             return {
                 loading_submit: false,
@@ -43,7 +36,16 @@
                 this.errors = {}
                 this.form = {}
             },
-            deleteDocuments() {
+            async deleteDocuments() {
+                try {
+                    await this.$confirm('Se eliminarán los documentos de prueba. Esta acción no se puede deshacer.', 'Eliminar documentos de prueba', {
+                        confirmButtonText: 'Eliminar',
+                        cancelButtonText: 'Cancelar',
+                        type: 'warning',
+                    })
+                } catch (e) {
+                    return
+                }
                 this.loading_submit = true
                 this.$http.post(`/${this.resource}/delete_documents`)
                     .then(response => {

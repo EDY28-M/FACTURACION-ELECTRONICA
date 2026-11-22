@@ -11,9 +11,10 @@
                 </div>
                 <div class="col-md-5">
                     <div class="form-group" :class="{'has-danger': errors.certificate}">
-                        <label class="control-label">Certificado pfx</label>
+                        <label class="control-label">Certificado (.pfx o .p12)</label>
                         <el-upload
                                    ref="upload"
+                                   accept=".pfx,.p12"
                                    :headers="headers"
                                    :data="{'password': form.password}"
                                    action="/certificates/uploads"
@@ -108,8 +109,17 @@
                     this.$message({message:response.message, type: 'error'})
                 }
             },
-            errorUpload(response) {
-                console.log(response)
+            errorUpload(error) {
+                let message = 'No se pudo subir el certificado.'
+                try {
+                    const body = JSON.parse(error.message)
+                    if (body && body.message) {
+                        message = body.message
+                    }
+                } catch (e) {
+                    // Non-JSON error body: keep the generic message.
+                }
+                this.$message({message, type: 'error'})
             }
         }
     }

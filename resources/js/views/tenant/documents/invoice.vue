@@ -117,6 +117,7 @@
                                     <label class="control-label font-weight-bold text-info">
                                         Cliente
                                         <a href="#" @click.prevent="showDialogNewPerson = true">[+ Nuevo]</a>
+                                        <a v-if="form.document_type_id === '03'" href="#" class="ml-2" @click.prevent="selectGenericCustomer">[Clientes varios]</a>
                                     </label>
                                     <el-select v-model="form.customer_id" filterable remote class="border-left rounded-left border-info" popper-class="el-select-customers"
                                         dusk="customer_id"
@@ -2293,6 +2294,24 @@
                     this.customers = response.data.customers
                     this.form.customer_id = customer_id
                 })
+            },
+            async selectGenericCustomer() {
+                try {
+                    const response = await this.$http.get('/persons/generic-customer')
+                    const customer = response.data.customer
+                    if (!customer) throw new Error('missing customer')
+                    if (!_.find(this.all_customers, {'id': customer.id})) {
+                        this.all_customers.push(customer)
+                    }
+                    this.filterCustomers()
+                    if (!_.find(this.customers, {'id': customer.id})) {
+                        this.customers.push(customer)
+                    }
+                    this.form.customer_id = customer.id
+                    this.changeCustomer()
+                } catch (e) {
+                    this.$message.error('No se pudo cargar el cliente CLIENTES VARIOS')
+                }
             },
             changeCustomer() {
                 this.customer_addresses = [];

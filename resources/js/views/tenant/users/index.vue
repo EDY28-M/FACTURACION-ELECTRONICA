@@ -35,7 +35,7 @@
                             <td>{{ row.email }}</td>
                             <td>{{ row.name }}</td>
                             <td>{{ row.type }}</td>
-                            <td>{{ row.api_token }}</td>
+                            <td><code class="user-token-hint">{{ row.api_token_hint || '—' }}</code></td>
                             <td>{{ row.establishment_description }}</td>
                             <td class="text-right">
                                 <button v-if="typeUser === 'admin'" type="button" class="btn waves-effect waves-light btn-xs btn-info" @click.prevent="clickCreate(row.id)">Editar</button>
@@ -96,3 +96,14 @@
         }
     }
 </script>
+
+<style>
+.user-token-hint {
+    font-family: var(--tenant-font-mono, ui-monospace, monospace);
+    font-size: 0.85em;
+    color: var(--tenant-muted, #5f6e83);
+    background: none;
+    padding: 0;
+    white-space: nowrap;
+}
+</style>

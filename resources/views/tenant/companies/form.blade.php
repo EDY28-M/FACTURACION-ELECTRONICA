@@ -3,11 +3,8 @@
 @section('content')
 
     <div class="row">
-        <div class="col-lg-6 col-md-12 pt-2 pt-md-0">
+        <div class="col-xl-10 col-12 pt-2 pt-md-0">
             <tenant-companies-form></tenant-companies-form>
-        </div>
-        <div class="col-lg-6 col-md-12">
-            <tenant-certificates-index></tenant-certificates-index>
         </div>
     </div>
     {{--<div class="row">--}}

@@ -28,6 +28,7 @@
                                     <label class="control-label font-weight-bold text-info">
                                         Cliente
                                         <a href="#" @click.prevent="showDialogNewPerson = true">[+ Nuevo]</a>
+                                        <a href="#" class="ml-2" @click.prevent="selectGenericCustomer">[Clientes varios]</a>
                                     </label>
                                     <el-select v-model="form.customer_id" filterable remote class="border-left rounded-left border-info" popper-class="el-select-customers"
                                         dusk="customer_id"
@@ -792,6 +793,19 @@
             },
             close() {
                 location.href = '/sale-notes'
+            },
+            async selectGenericCustomer() {
+                try {
+                    const response = await this.$http.get('/persons/generic-customer')
+                    const customer = response.data.customer
+                    if (!customer) throw new Error('missing customer')
+                    if (!_.find(this.customers, {'id': customer.id})) {
+                        this.customers.push(customer)
+                    }
+                    this.form.customer_id = customer.id
+                } catch (e) {
+                    this.$message.error('No se pudo cargar el cliente CLIENTES VARIOS')
+                }
             },
             reloadDataCustomers(customer_id) {
                 this.$http.get(`/${this.resource}/search/customer/${customer_id}`).then((response) => {

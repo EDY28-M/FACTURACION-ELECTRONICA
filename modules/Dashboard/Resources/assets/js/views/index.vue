@@ -181,7 +181,7 @@
 
             <div class="td-panel">
                 <div class="td-ph"><div><h2>Compras del año</h2>
-                    <p>{{ purchaseView.note }}</p></div><a href="/purchases">Ver compras</a></div>
+                    <p>{{ purchaseView.note }}</p></div><a v-if="userModules.includes('purchases')" href="/purchases">Ver compras</a></div>
                 <div class="td-skel td-skel-tall" v-if="loaders.insights"></div>
                 <template v-else>
                     <p class="td-empty" v-if="!purchaseView.has">{{ emptyText('insights', 'Sin compras en el año.') }}</p>
@@ -258,7 +258,7 @@
 
             <div class="td-panel">
                 <div class="td-ph"><div><h2>Por reponer</h2><p>Stock frente al mínimo</p></div>
-                    <a href="/inventory">Inventario</a></div>
+                    <a v-if="userModules.includes('inventory')" href="/inventory">Inventario</a></div>
                 <dashboard-stock :initial="initialStock" @fetched="onStockFetched"></dashboard-stock>
             </div>
         </section>
@@ -531,7 +531,14 @@ function withDefaults(block) {
 }
 
 export default {
-  props: ["typeUser", "soapCompany", "userName", "userId"],
+  props: {
+    typeUser: {},
+    soapCompany: {},
+    userName: {},
+    userId: {},
+    // Effective module values (tenant plan applied). Used to hide links the user cannot open.
+    userModules: { type: Array, default: () => [] },
+  },
   components: { DashboardStock, RowTop },
   data() {
     return {

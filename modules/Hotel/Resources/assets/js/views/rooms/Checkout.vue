@@ -469,6 +469,8 @@ export default {
       resource_documents: "documents",
       showDialogDocumentOptions: false,
       documentNewId: null,
+      // Id of a document already emitted whose stay is not finalized yet (retry must not re-emit).
+      pendingFinalizationDocumentId: null,
       form_cash_document: {},
       maxStayDays: 60,
       lodgingExport: {
@@ -522,6 +524,11 @@ export default {
     });
   },
   watch: {
+    // A stale emitted id must never leak into a different rent.
+    "rent.id"() {
+      this.documentNewId = null;
+      this.pendingFinalizationDocumentId = null;
+    },
     arrears(value) {
       if (isNaN(value)) {
         return;
@@ -664,58 +671,88 @@ export default {
       };
     },
     async onGoToInvoice() {
-      // Always start from the stored rows: a previous attempt may have re-rated the room line.
-      this.document.items = this.rent.items.map((i) => i.item);
-      this.onUpdateItemsWithExtras();
-      if (this.canOfferLodgingExport && this.lodgingExport.enabled) {
-        const lodgingError = this.validateLodgingExport();
-        if (lodgingError) {
-          return this.$message.error(lodgingError);
+      // A finalize-only retry (document already emitted) must not depend on form validations.
+      if (!this.pendingFinalizationDocumentId) {
+        // Always start from the stored rows: a previous attempt may have re-rated the room line.
+        this.document.items = this.rent.items.map((i) => i.item);
+        this.onUpdateItemsWithExtras();
+        if (this.canOfferLodgingExport && this.lodgingExport.enabled) {
+          const lodgingError = this.validateLodgingExport();
+          if (lodgingError) {
+            return this.$message.error(lodgingError);
+          }
+          this.applyLodgingExport();
+        } else {
+          this.document.operation_type_id = "0101";
         }
-        this.applyLodgingExport();
-      } else {
-        this.document.operation_type_id = "0101";
-      }
-      this.onCalculateTotals();
-      let validate_payment_destination = this.validatePaymentDestination();
+        this.onCalculateTotals();
+        let validate_payment_destination = this.validatePaymentDestination();
 
-      if (validate_payment_destination.error_by_item > 0) {
-        return this.$message.error("El destino del pago es obligatorio");
+        if (validate_payment_destination.error_by_item > 0) {
+          return this.$message.error("El destino del pago es obligatorio");
+        }
       }
       this.loading = true;
-      this.$http
-        .post(`/${this.resource_documents}`, this.document)
-        .then((response) => {
-          if (response.data.success) {
-            this.documentNewId = response.data.data.id;
-            this.form_cash_document.document_id = response.data.data.id;
-            this.showDialogDocumentOptions = true;
-            this.$emit("update:showDialog", false);
-            this.saveCashDocument();
-
-            const payloadFinalizedRent = {
-              arrears: this.arrears,
-            };
-            this.loading = true;
-            this.$http
-              .post(
-                `/hotels/reception/${this.rent.id}/rent/finalized`,
-                payloadFinalizedRent
-              )
-              .then(() => {
-                this.response = response.data;
-              })
-              .finally(() => (this.loading = false));
-          } else {
+      // Once the document exists, a retry must only finalize the stay, never emit again.
+      let emission;
+      if (this.pendingFinalizationDocumentId) {
+        emission = Promise.resolve(true);
+      } else {
+        emission = this.$http
+          .post(`/${this.resource_documents}`, this.document)
+          .then((response) => {
+            if (response.data.success) {
+              this.documentNewId = response.data.data.id;
+              this.pendingFinalizationDocumentId = response.data.data.id;
+              this.response = response.data;
+              this.form_cash_document.document_id = response.data.data.id;
+              this.showDialogDocumentOptions = true;
+              this.$emit("update:showDialog", false);
+              this.saveCashDocument();
+              return true;
+            }
             this.$message.error(response.data.message);
+            return false;
+          })
+          .catch((error) => {
+            if (error.response && error.response.status === 422) {
+              this.errors = error.response.data;
+            } else {
+              this.$message.error(
+                error.response && error.response.data
+                  ? error.response.data.message
+                  : error.message
+              );
+            }
+            return false;
+          });
+      }
+
+      return emission
+        .then((emitted) => {
+          if (!emitted) {
+            return;
           }
-        })
-        .catch((error) => {
-          if (error.response.status === 422) {
-            this.errors = error.response.data;
-          } else {
-            this.$message.error(error.response.data.message);
-          }
+          const payloadFinalizedRent = {
+            arrears: this.arrears,
+          };
+          return this.$http
+            .post(
+              `/hotels/reception/${this.rent.id}/rent/finalized`,
+              payloadFinalizedRent
+            )
+            .then(() => {
+              this.pendingFinalizationDocumentId = null;
+            })
+            .catch((error) => {
+              const reason =
+                error.response && error.response.data && error.response.data.message
+                  ? ` Detalle: ${error.response.data.message}`
+                  : "";
+              this.$message.error(
+                `El comprobante YA fue emitido, pero la estancia sigue pendiente de finalizar. Pulse nuevamente "Guardar y Generar Comprobante" para reintentar solo la finalización.${reason}`
+              );
+            });
         })
         .finally(() => {
           this.loading = false;

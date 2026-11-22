@@ -1,24 +1,20 @@
 <template>
   <div class="card">
-    <div class="card-header bg-info">
+    <div class="card-header bg-info d-flex align-items-center justify-content-between flex-wrap">
       <h3 class="my-0">Listado de métodos de pago
         <el-tooltip class="item" effect="dark" content="Catálogo de Sunat - Operaciones relacionadas a la misma" placement="top-start">
             <i class="fa fa-info-circle"></i>
         </el-tooltip>
       </h3>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        <div class="col">
-          <button
+        <button
             type="button"
-            class="btn btn-custom btn-sm mt-2 mr-2"
+            class="btn btn-custom btn-sm"
             @click.prevent="clickCreate()"
           >
             <i class="fa fa-plus-circle"></i> Nuevo
           </button>
-        </div>
-      </div>
+    </div>
+    <div class="card-body">
       <div class="table-responsive">
         <table class="table">
           <thead>

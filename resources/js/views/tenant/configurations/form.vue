@@ -7,255 +7,196 @@
                 <li><span class="text-muted">Avanzado</span></li>
             </ol>
         </div>
-        <div class="card">
+        <div class="card cfg-card">
             <div class="card-header bg-info">
                 <h3 class="my-0">Configuraciones</h3>
             </div>
-            <div class="card-body pt-0 pb-5">
-                <form autocomplete="off">
-                    <div class="form-body">
-                        <div class="row">
-                            <div class="col-md-12">
-                                <h3 class="separator-title">Servicios</h3>
+            <div class="card-body">
+                <el-tabs v-model="activeTab" class="cfg-tabs">
+                    <el-tab-pane label="Servicios" name="services">
+                        <div class="cfg-row" :class="{'has-danger': errors.send_auto}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Envío de comprobantes automático</span>
+                                <small class="cfg-help">Envía a SUNAT cada comprobante al emitirlo.</small>
+                                <small class="form-control-feedback" v-if="errors.send_auto" v-text="errors.send_auto[0]"></small>
+                            </div>
+                            <el-switch v-model="form.send_auto" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" v-if="typeUser != 'integrator'" :class="{'has-danger': errors.cron}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Crontab</span>
+                                <small class="cfg-help">Ejecuta las tareas programadas del sistema.</small>
+                                <small class="form-control-feedback" v-if="errors.cron" v-text="errors.cron[0]"></small>
+                            </div>
+                            <el-switch v-model="form.cron" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" v-if="typeUser != 'integrator'" :class="{'has-danger': errors.sunat_alternate_server}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Envío de comprobantes a servidor alterno de SUNAT</span>
+                                <small class="form-control-feedback" v-if="errors.sunat_alternate_server" v-text="errors.sunat_alternate_server[0]"></small>
+                            </div>
+                            <el-switch v-model="form.sunat_alternate_server" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                    </el-tab-pane>
+
+                    <el-tab-pane label="Contable" name="accounting">
+                        <div class="cfg-row" v-if="typeUser != 'integrator'" :class="{'has-danger': errors.decimal_quantity}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Cantidad decimales POS</span>
+                                <small class="form-control-feedback" v-if="errors.decimal_quantity" v-text="errors.decimal_quantity[0]"></small>
+                            </div>
+                            <el-input-number v-model="form.decimal_quantity" size="small" @change="submit" :min="2" :max="10"></el-input-number>
+                        </div>
+                        <div class="cfg-row" v-if="typeUser != 'integrator'" :class="{'has-danger': errors.amount_plastic_bag_taxes}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Impuesto bolsa plástica</span>
+                                <small class="form-control-feedback" v-if="errors.amount_plastic_bag_taxes" v-text="errors.amount_plastic_bag_taxes[0]"></small>
+                            </div>
+                            <el-input-number v-model="form.amount_plastic_bag_taxes" size="small" @change="changeAmountPlasticBagTaxes" :precision="2" :step="0.1" :max="0.5" :min="0.1"></el-input-number>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.affectation_igv_type_id}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Tipo de afectación</span>
+                                <small class="cfg-help">Predeterminada al registrar un nuevo producto.</small>
+                                <small class="form-control-feedback" v-if="errors.affectation_igv_type_id" v-text="errors.affectation_igv_type_id[0]"></small>
+                            </div>
+                            <el-select v-model="form.affectation_igv_type_id" size="small" class="cfg-select" @change="submit" filterable>
+                                <el-option v-for="option in affectation_igv_types" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                            </el-select>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.include_igv}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Impuesto incluido en registro de productos</span>
+                                <small class="form-control-feedback" v-if="errors.include_igv" v-text="errors.include_igv[0]"></small>
+                            </div>
+                            <el-switch v-model="form.include_igv" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.igv_reduced_regime}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Régimen IGV reducido (restaurantes y hoteles - Ley 31556)</span>
+                                <small class="cfg-help">Aplica 10.5% (8% IGV + 2.5% IPM) en 2026 y 15% en 2027 a los productos gravados, salvo los marcados como 'Tasa general'. Solo para MYPE con actividad principal de restaurante u hospedaje.</small>
+                                <small class="form-control-feedback" v-if="errors.igv_reduced_regime" v-text="errors.igv_reduced_regime[0]"></small>
+                            </div>
+                            <el-switch v-model="form.igv_reduced_regime" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.destination_sale}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Caja General seleccionada por defecto</span>
+                                <small class="form-control-feedback" v-if="errors.destination_sale" v-text="errors.destination_sale[0]"></small>
+                            </div>
+                            <el-switch v-model="form.destination_sale" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                    </el-tab-pane>
+
+                    <el-tab-pane label="Comprobantes y POS" name="documents">
+                        <div class="cfg-row" :class="{'has-danger': errors.options_pos}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Opciones avanzadas en POS</span>
+                                <small class="form-control-feedback" v-if="errors.options_pos" v-text="errors.options_pos[0]"></small>
+                            </div>
+                            <el-switch v-model="form.options_pos" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.default_document_type_03}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Seleccionar boleta por defecto</span>
+                                <small class="cfg-help">Disponible en POS.</small>
+                                <small class="form-control-feedback" v-if="errors.default_document_type_03" v-text="errors.default_document_type_03[0]"></small>
+                            </div>
+                            <el-switch v-model="form.default_document_type_03" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.edit_name_product}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Editar nombre de productos</span>
+                                <small class="form-control-feedback" v-if="errors.edit_name_product" v-text="errors.edit_name_product[0]"></small>
+                            </div>
+                            <el-switch v-model="form.edit_name_product" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.restrict_receipt_date}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Restringir fecha de comprobante</span>
+                                <small class="form-control-feedback" v-if="errors.restrict_receipt_date" v-text="errors.restrict_receipt_date[0]"></small>
+                            </div>
+                            <el-switch v-model="form.restrict_receipt_date" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.product_only_location}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Productos de una ubicación</span>
+                                <small class="form-control-feedback" v-if="errors.product_only_location" v-text="errors.product_only_location[0]"></small>
+                            </div>
+                            <el-switch v-model="form.product_only_location" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.cotizaction_finance}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Mostrar cotización en finanzas</span>
+                                <small class="form-control-feedback" v-if="errors.cotizaction_finance" v-text="errors.cotizaction_finance[0]"></small>
+                            </div>
+                            <el-switch v-model="form.cotizaction_finance" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.quotation_allow_seller_generate_sale}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Permitir generar comprobante de pago desde cotización a vendedores</span>
+                                <small class="form-control-feedback" v-if="errors.quotation_allow_seller_generate_sale" v-text="errors.quotation_allow_seller_generate_sale[0]"></small>
+                            </div>
+                            <el-switch v-model="form.quotation_allow_seller_generate_sale" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row" :class="{'has-danger': errors.legend_footer}">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Mostrar leyenda en footer - PDF</span>
+                                <small class="cfg-help">"Bienes transferidos y/o servicios prestados en la Amazonía para ser consumidos en la misma". Facturas, boletas, notas y cotizaciones.</small>
+                                <small class="form-control-feedback" v-if="errors.legend_footer" v-text="errors.legend_footer[0]"></small>
+                            </div>
+                            <el-switch v-model="form.legend_footer" active-text="Si" inactive-text="No" @change="submit"></el-switch>
+                        </div>
+                        <div class="cfg-row">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Imagen para encabezado - PDF</span>
+                                <small class="cfg-help">Facturas y boletas A4 con la plantilla header_image_full_width.</small>
+                            </div>
+                            <el-input v-model="form.header_image" size="small" class="cfg-select" :readonly="true" placeholder="Sin imagen">
+                                <el-upload slot="append"
+                                           :headers="headers"
+                                           action="/configurations/uploads"
+                                           :show-file-list="false"
+                                           :on-success="successUpload">
+                                    <el-button type="primary" icon="el-icon-upload"></el-button>
+                                </el-upload>
+                            </el-input>
+                        </div>
+                        <div class="cfg-row">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Términos y condiciones</span>
+                                <small class="cfg-help">Texto que se imprime en cotizaciones y ventas.</small>
+                            </div>
+                            <div class="cfg-actions">
+                                <el-button size="small" @click="showDialogTermsCondition = true">Cotización</el-button>
+                                <el-button size="small" @click="showDialogTermsConditionSales = true">Ventas</el-button>
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <label class="control-label">Envío de comprobantes automático</label>
-                                <div class="form-group" :class="{'has-danger': errors.send_auto}">
-                                    <el-switch v-model="form.send_auto" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.send_auto" v-text="errors.send_auto[0]"></small>
-                                </div>
+                    </el-tab-pane>
+
+                    <el-tab-pane label="Finanzas" name="finances">
+                        <div class="cfg-row">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Aplicar penalidad a los pagos vencidos</span>
                             </div>
-                            <div class="col-md-6" v-if="typeUser != 'integrator'">
-                                <label class="control-label">Crontab <small>Tareas Programadas</small></label>
-                                <div class="form-group" :class="{'has-danger': errors.cron}">
-                                    <el-switch v-model="form.cron" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.cron" v-text="errors.cron[0]"></small>
-                                </div>
-                            </div>
+                            <el-switch v-model="form.finances.apply_arrears" @change="submit" active-text="Si" inactive-text="No"></el-switch>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6 mt-4" v-if="typeUser != 'integrator'">
-                                <label class="control-label">Envío de comprobantes a servidor alterno de SUNAT</label>
-                                <div class="form-group" :class="{'has-danger': errors.sunat_alternate_server}">
-                                    <el-switch v-model="form.sunat_alternate_server" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.sunat_alternate_server" v-text="errors.sunat_alternate_server[0]"></small>
-                                </div>
+                        <div class="cfg-row" v-if="form.finances.apply_arrears">
+                            <div class="cfg-text">
+                                <span class="cfg-label">Cantidad a aplicar por día</span>
                             </div>
+                            <el-input placeholder="Monto por día" v-model="form.finances.arrears_amount" size="small" class="cfg-select">
+                                <el-button slot="append" @click="submit">
+                                    <i class="fa fa-save"></i>
+                                </el-button>
+                            </el-input>
                         </div>
-                        <div class="row">
-                            <div class="col-md-12">
-                                <h3 class="separator-title">Contable</h3>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4" v-if="typeUser != 'integrator'">
-                                <label class="control-label">Cantidad decimales POS</label>
-                                <div class="form-group" :class="{'has-danger': errors.decimal_quantity}">
-                                    <el-input-number v-model="form.decimal_quantity" @change="submit" :min="2" :max="10"></el-input-number>
-                                    <small class="form-control-feedback" v-if="errors.decimal_quantity" v-text="errors.decimal_quantity[0]"></small>
-                                </div>
-                            </div>
-                            <div class="col-md-2"></div>
-                            <div class="col-md-4" v-if="typeUser != 'integrator'">
-                                <label class="control-label">Impuesto bolsa plástica</label>
-                                <div class="form-group" :class="{'has-danger': errors.amount_plastic_bag_taxes}">
-                                    <el-input-number v-model="form.amount_plastic_bag_taxes" @change="changeAmountPlasticBagTaxes" :precision="2" :step="0.1" :max="0.5" :min="0.1"></el-input-number>
-                                    <small class="form-control-feedback" v-if="errors.amount_plastic_bag_taxes" v-text="errors.amount_plastic_bag_taxes[0]"></small>
-                                </div>
-                            </div>
+                    </el-tab-pane>
 
-                            <!-- <div class="col-md-4" v-if="typeUser != 'integrator'"> <br>
-                                <label class="control-label">Cantidad de columnas en productos</label>
-                                <div class="form-group" :class="{'has-danger': errors.amount_plastic_bag_taxes}">
-                                    <el-slider  @change="submit" v-model="form.colums_grid_item" :min="2" :max="6"></el-slider>
-                                    <small class="form-control-feedback" v-if="errors.amount_plastic_bag_taxes" v-text="errors.amount_plastic_bag_taxes[0]"></small>
-                                </div>
-                            </div> -->
-
-                            <div class="col-md-2"></div>
-
-                            <div class="col-md-6 mt-4">
-                                <div class="form-group" :class="{'has-danger': errors.affectation_igv_type_id}">
-                                    <label class="control-label">Tipo de afectación
-                                        <el-tooltip class="item" effect="dark" content="Tipo de afectación predeterminada al registrar nuevo producto" placement="top-start">
-                                            <i class="fa fa-info-circle"></i>
-                                        </el-tooltip>
-                                    </label>
-                                    <el-select v-model="form.affectation_igv_type_id" @change="submit" filterable>
-                                        <el-option v-for="option in affectation_igv_types" :key="option.id" :value="option.id" :label="option.description"></el-option>
-                                    </el-select>
-                                    <small class="form-control-feedback" v-if="errors.affectation_igv_type_id" v-text="errors.affectation_igv_type_id[0]"></small>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Impuesto incluido en registro de productos</label>
-                                <div class="form-group" :class="{'has-danger': errors.include_igv}">
-                                    <el-switch v-model="form.include_igv" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.include_igv" v-text="errors.include_igv[0]"></small>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Régimen IGV reducido (restaurantes y hoteles - Ley 31556)</label>
-                                <div class="form-group" :class="{'has-danger': errors.igv_reduced_regime}">
-                                    <el-switch v-model="form.igv_reduced_regime" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-text text-muted">Aplica 10.5% (8% IGV + 2.5% IPM) en 2026 y 15% en 2027 a los productos gravados, salvo los marcados como 'Tasa general'. Solo para MYPE con actividad principal de restaurante u hospedaje.</small>
-                                    <small class="form-control-feedback" v-if="errors.igv_reduced_regime" v-text="errors.igv_reduced_regime[0]"></small>
-                                </div>
-                            </div>
-
-
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Caja General seleccionada por defecto</label>
-                                <div class="form-group" :class="{'has-danger': errors.destination_sale}">
-                                    <el-switch v-model="form.destination_sale" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.destination_sale" v-text="errors.destination_sale[0]"></small>
-                                </div>
-                            </div>
-
-                        </div>
-                        <div class="row">
-                            <div class="col-md-12">
-                                <h3 class="separator-title">Visual</h3>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <!-- <div class="col-md-6 mt-4" v-if="typeUser != 'integrator'">
-                                <label class="control-label">Menú lateral contraído</label>
-                                <div class="form-group" :class="{'has-danger': errors.compact_sidebar}">
-                                    <el-switch v-model="form.compact_sidebar" active-text="Si" inactive-text="No" @change="compactSidebar"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.compact_sidebar" v-text="errors.compact_sidebar[0]"></small>
-                                </div>
-                            </div> -->
-                            <!-- <div class="col-md-6 mt-4" v-if="typeUser != 'integrator'">
-                                <label class="control-label">Cuenta contable venta subtotal</label>
-                                <div class="form-group" :class="{'has-danger': errors.subtotal_account}">
-                                    <el-input v-model="form.subtotal_account" width="50%"></el-input>
-                                    <small class="form-control-feedback" v-if="errors.subtotal_account" v-text="errors.subtotal_account[0]"></small>
-                                </div>
-                            </div> -->
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Opciones avanzadas en POS</label>
-                                <div class="form-group" :class="{'has-danger': errors.options_pos}">
-                                    <el-switch v-model="form.options_pos" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.options_pos" v-text="errors.options_pos[0]"></small>
-                                </div>
-                            </div>
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Editar nombre de productos</label>
-                                <div class="form-group" :class="{'has-danger': errors.edit_name_product}">
-                                    <el-switch v-model="form.edit_name_product" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.edit_name_product" v-text="errors.edit_name_product[0]"></small>
-                                </div>
-                            </div>
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Restringir fecha de comprobante</label>
-                                <div class="form-group" :class="{'has-danger': errors.restrict_receipt_date}">
-                                    <el-switch v-model="form.restrict_receipt_date" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.restrict_receipt_date" v-text="errors.restrict_receipt_date[0]"></small>
-                                </div>
-                            </div>
-                            <div class="col-md-6 mt-4">
-                                <a href="#" @click.prevent="showDialogTermsCondition = true" class="text-center font-weight-bold text-info">[+ Términos y condiciones - Cotización]</a>
-                                <br>
-                                <br>
-                                <a href="#" @click.prevent="showDialogTermsConditionSales = true" class="text-center font-weight-bold text-info">[+ Términos y condiciones - Ventas]</a>
-                            </div>
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Mostrar cotización en finanzas</label>
-                                <div class="form-group" :class="{'has-danger': errors.cotizaction_finance}">
-                                    <el-switch v-model="form.cotizaction_finance" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.cotizaction_finance" v-text="errors.cotizaction_finance[0]"></small>
-                                </div>
-                            </div>
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Permitir generar comprobante de pago desde cotización a vendedores</label>
-                                <div class="form-group" :class="{'has-danger': errors.quotation_allow_seller_generate_sale}">
-                                    <el-switch v-model="form.quotation_allow_seller_generate_sale" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.quotation_allow_seller_generate_sale" v-text="errors.quotation_allow_seller_generate_sale[0]"></small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Productos de una ubicación</label>
-                                <div class="form-group" :class="{'has-danger': errors.product_only_location}">
-                                    <el-switch v-model="form.product_only_location" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.product_only_location" v-text="errors.product_only_location[0]"></small>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Seleccionar boleta por defecto
-                                    <el-tooltip class="item" effect="dark" content="Disponible POS" placement="top-start">
-                                        <i class="fa fa-info-circle"></i>
-                                    </el-tooltip>
-                                </label>
-                                <div class="form-group" :class="{'has-danger': errors.default_document_type_03}">
-                                    <el-switch v-model="form.default_document_type_03" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.default_document_type_03" v-text="errors.default_document_type_03[0]"></small>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 mt-4">
-                                <label class="control-label">Mostrar leyenda en footer - pdf
-                                    <el-tooltip class="item" effect="dark" placement="top-start">
-                                        <div slot="content">Leyenda: Bienes transferidos y/o servicios prestados en la Amazonía para ser consumidos en la misma<br/>Disponible para facturas, boletas, notas y cotizaciones</div>
-                                        <i class="fa fa-info-circle"></i>
-                                    </el-tooltip>
-                                </label>
-                                <div class="form-group" :class="{'has-danger': errors.legend_footer}">
-                                    <el-switch v-model="form.legend_footer" active-text="Si" inactive-text="No" @change="submit"></el-switch>
-                                    <small class="form-control-feedback" v-if="errors.legend_footer" v-text="errors.legend_footer[0]"></small>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 mt-4">
-                                <div class="form-group">
-                                    <label class="control-label">Imágen para encabezado - pdf
-                                        <el-tooltip class="item" effect="dark" content="Disponible para facturas y boletas en formato a4, usando la plantilla header_image_full_width" placement="top-start">
-                                            <i class="fa fa-info-circle"></i>
-                                        </el-tooltip>
-                                    </label>
-                                    <el-input v-model="form.header_image" :readonly="true">
-                                        <el-upload slot="append"
-                                                   :headers="headers"
-                                                   action="/configurations/uploads"
-                                                   :show-file-list="false"
-                                                   :on-success="successUpload">
-                                            <el-button type="primary" icon="el-icon-upload"></el-button>
-                                        </el-upload>
-                                    </el-input>
-                                    <!-- <div class="sub-title text-danger"><small>Se recomienda resoluciones 700x300</small></div> -->
-                                </div>
-                            </div>
-
-
-                        </div>
-                        <div class="row">
-                            <div class="col-md-12">
-                                <h3 class="separator-title">Finanzas</h3>
-                            </div>
-                            <div class="col-12">
-                                <div class="form-group">
-                                    <label>Aplicar penalidad a los pagos vencidos</label>
-                                    <el-switch v-model="form.finances.apply_arrears" @change="submit" active-text="Si" inactive-text="No" ></el-switch>
-                                </div>
-                                <div class="form-group" v-if="form.finances.apply_arrears" style="max-width: 300px;">
-                                    <label>Cantidad a aplicar por día</label>
-                                    <el-input placeholder="Please input" v-model="form.finances.arrears_amount" class="input-with-select">
-                                        <el-button slot="append" @click="submit">
-                                            <i class="fa fa-save"></i>
-                                        </el-button>
-                                    </el-input>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </form>
+                    <el-tab-pane label="Mantenimiento" name="maintenance">
+                        <tenant-options-form embedded></tenant-options-form>
+                    </el-tab-pane>
+                </el-tabs>
             </div>
 
             <terms-condition :showDialog.sync="showDialogTermsCondition"
@@ -282,6 +223,7 @@
                 headers: headers_token,
                 showDialogTermsCondition: false,
                 showDialogTermsConditionSales: false,
+                activeTab: 'services',
                 loading_submit: false,
                 resource: 'configurations',
                 errors: {},
@@ -409,3 +351,39 @@
         }
     }
 </script>
+<style>
+.cfg-card .card-body { padding-top: 4px; }
+.cfg-tabs .el-tabs__header { margin-bottom: 4px; }
+.cfg-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 14px 2px;
+    border-bottom: 1px solid var(--tenant-hairline, #e6e9f0);
+}
+.cfg-row:last-child { border-bottom: 0; }
+.cfg-label {
+    display: block;
+    font-weight: 500;
+    color: var(--tenant-ink, #1b2333);
+}
+.cfg-help {
+    display: block;
+    margin-top: 2px;
+    line-height: 1.45;
+    color: var(--tenant-muted, #6b7489);
+}
+.cfg-text { flex: 1 1 0; min-width: 220px; }
+.cfg-row > .el-switch,
+.cfg-row > .el-button,
+.cfg-actions { flex: 0 0 auto; }
+.cfg-row > .el-input-number { flex: 0 0 160px; width: 160px !important; }
+.cfg-select { flex: 0 0 300px; max-width: 300px; }
+.cfg-actions { display: flex; gap: 8px; }
+.cfg-actions .el-button + .el-button { margin-left: 0; }
+@media (max-width: 767px) {
+    .cfg-row { flex-wrap: wrap; gap: 10px; }
+    .cfg-select { flex-basis: 100%; max-width: 100%; }
+}
+</style>

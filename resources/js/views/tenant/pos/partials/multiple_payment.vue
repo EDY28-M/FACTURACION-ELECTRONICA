@@ -64,6 +64,8 @@
 </template> 
 
 <script>
+    import {readPosDraft} from '../../../../helpers/pos_draft'
+
     export default {
         props: ['showDialog', 'payments', 'total'],
         data() {
@@ -95,8 +97,7 @@
         methods: {
             getFormPosLocalStorage(){
 
-                let form_pos = localStorage.getItem('form_pos');
-                form_pos = JSON.parse(form_pos)
+                let form_pos = readPosDraft('form_pos');
                 if (form_pos) {
                     
                     if(form_pos.payments.length == 0){

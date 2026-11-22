@@ -95,10 +95,10 @@
                                         </div>
                                     </td>
                                     <td class="series-table-actions text-right">
-                                        <button type="button" class="btn waves-effect waves-light btn-xs btn-info" @click.prevent="clickSubmit(index)">
+                                        <button type="button" class="btn waves-effect waves-light btn-xs btn-info" :disabled="row.loading" @click.prevent="clickSubmit(index)">
                                             <i class="fa fa-check"></i>
                                         </button>
-                                        <button type="button" class="btn waves-effect waves-light btn-xs btn-danger" @click.prevent="clickCancel(index)">
+                                        <button type="button" class="btn waves-effect waves-light btn-xs btn-danger" :disabled="row.loading" @click.prevent="clickCancel(index)">
                                             <i class="fa fa-trash"></i>
                                         </button>
                                     </td>
@@ -241,6 +241,11 @@
                 this.fileList = []
             },
             clickSubmit(index) {
+                const row = this.records[index];
+                // Synchronous re-entry guard: ignore clicks while this row is already submitting.
+                if (!row || row.loading) {
+                    return;
+                }
                 if(this.records[index].payment > parseFloat(this.document.total_difference)) {
                     this.$message.error('El monto ingresado supera al monto pendiente de pago, verifique.');
                     return;
@@ -265,6 +270,8 @@
                     payment: this.records[index].payment,
                     paid: paid
                 };
+                // Lock the row before any async work; released in finally below.
+                row.loading = true;
                 this.$http.post(`/${this.resource}`, form)
                     .then(response => {
                         if (response.data.success) {
@@ -283,6 +290,9 @@
                         } else {
                             console.log(error);
                         }
+                    })
+                    .finally(() => {
+                        row.loading = false;
                     })
             },
             // filterDocumentType(row){

@@ -11,16 +11,16 @@
             <div class="system-dropzone-copy">
                 <template v-if="record">
                     <strong class="system-mono">{{ record }}</strong>
-                    <small>Certificado cargado. Puedes arrastrar o seleccionar otro .pfx para reemplazarlo.</small>
+                    <small>Certificado cargado. Puedes arrastrar o seleccionar otro .pfx o .p12 para reemplazarlo.</small>
                 </template>
                 <template v-else>
-                    <strong>Sube el certificado .pfx</strong>
-                    <small>Arrastra aquí tu archivo .pfx o selecciónalo desde tu equipo</small>
+                    <strong>Sube el certificado (.pfx o .p12)</strong>
+                    <small>Arrastra aquí tu archivo .pfx o .p12, o selecciónalo desde tu equipo</small>
                 </template>
             </div>
             <div class="system-dropzone-actions">
                 <button type="button" class="system-button" @click="clickCreate">
-                    <svg class="sys-icon" aria-hidden="true"><use :href="$icon('upload')" /></svg>Seleccionar .pfx
+                    <svg class="sys-icon" aria-hidden="true"><use :href="$icon('upload')" /></svg>Seleccionar archivo
                 </button>
                 <button v-if="record" type="button" class="system-button system-button-danger" @click.prevent="clickDelete">
                     Eliminar

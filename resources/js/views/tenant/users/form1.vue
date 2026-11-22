@@ -59,9 +59,20 @@
             <div class="form-group" :class="{ 'has-danger': errors.api_token }">
               <label class="control-label">Api Token</label>
               <el-input
-                v-model="form.api_token"
-                :readonly="form.id != null"
-              ></el-input>
+                v-if="form.api_token"
+                class="user-token-input"
+                :value="showToken ? form.api_token : form.api_token_hint"
+                readonly
+              >
+                <template slot="append">
+                  <el-button @click="showToken = !showToken">{{ showToken ? 'Ocultar' : 'Mostrar' }}</el-button>
+                  <el-button @click="copyToken">Copiar</el-button>
+                </template>
+              </el-input>
+              <template v-else>
+                <el-input class="user-token-input" :value="form.api_token_hint || ''" readonly></el-input>
+                <small class="user-token-help">Solo el propio usuario o un administrador puede ver el token completo.</small>
+              </template>
               <small
                 class="form-control-feedback"
                 v-if="errors.api_token"
@@ -219,6 +230,7 @@ export default {
       // define options
       alwaysOpen: true,
       options: [],
+      showToken: false,
     };
   },
   async created() {
@@ -239,7 +251,26 @@ export default {
     await this.initForm();
   },
   methods: {
+    copyToken() {
+      const text = this.form.api_token || "";
+      const done = () => this.$message.success("Token copiado");
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, () => this.$message.warning("No se pudo copiar el token"));
+        return;
+      }
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(area);
+      ok ? done() : this.$message.warning("No se pudo copiar el token");
+    },
     initForm() {
+      this.showToken = false;
       this.errors = {};
       this.form = {
         id: null,
@@ -392,6 +423,16 @@ export default {
   overflow: auto;
   border: 1px solid #dddddd;
   border-radius: 3px;
+}
+.user-token-input .el-input__inner {
+  font-family: var(--tenant-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.user-token-help {
+  display: block;
+  margin-top: 6px;
+  color: var(--tenant-muted, #5f6e83);
 }
 .e-checkbox-wrapper .e-frame.e-check, .e-css.e-checkbox-wrapper .e-frame.e-check {
     background-color: #0088CC;

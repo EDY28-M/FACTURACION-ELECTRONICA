@@ -95,222 +95,81 @@
                 </div>
             </div>
         </div>
-        <div class="col-lg-8 col-md-6 px-4 pt-3 hyo">
-            <div class="row d-flex justify-content-center pt-2">
-                <div class="col-lg-6 col-md-6 ">
+        <div class="col-lg-8 col-md-6 pp-panel">
+            <div class="pp-head">
+                <el-radio-group v-model="form.document_type_id" size="small" @change="filterSeries">
+                    <el-radio-button label="01">FACTURA</el-radio-button>
+                    <el-radio-button label="03">BOLETA</el-radio-button>
+                    <el-radio-button label="80">N. VENTA</el-radio-button>
+                </el-radio-group>
+                <el-select v-model="form.series_id" size="small" class="pp-series">
+                    <el-option v-for="option in series" :key="option.id" :label="option.number" :value="option.id"></el-option>
+                </el-select>
+                <button type="button" class="pp-back" @click="back"><i class="fas fa-angle-left"></i> Regresar</button>
+            </div>
 
-                    <el-radio-group v-model="form.document_type_id" size="small" @change="filterSeries">
-                        <el-radio-button label="01" >FACTURA  </el-radio-button>
-                        <el-radio-button label="03">BOLETA  </el-radio-button>
-                        <el-radio-button label="80">N. VENTA  </el-radio-button>
-                    </el-radio-group>
-                </div>
-
-                <div class="col-lg-2 col-md-2" >
-
-                    <el-select v-model="form.series_id" class="c-width">
-                        <el-option   v-for="option in series" :key="option.id" :label="option.number" :value="option.id">
-                        </el-option>
-                    </el-select>
-                </div>
-                <div class="col-lg-2 col-md-2">
-
-                     <button class="btn btn-sm btn-block btn-primary" @click="back"><i class="fas fa-angle-left"></i> Regresar</button>
-
-                </div>
-
-
-                <div class="col-lg-8">
-                    <div class="card card-default">
-
-                        <div class="card-body text-center">
-                                <p class="my-0"><small>Monto a cobrar</small></p>
-                                <h1 class="mb-2 mt-0">{{currencyTypeActive.symbol}} {{ toAmount(form.total) }}</h1>
+            <div class="pp-body">
+                <section class="pp-card pp-charge">
+                    <div class="pp-charge-total">
+                        <span class="pp-label">Monto a cobrar</span>
+                        <strong class="pp-amount">{{currencyTypeActive.symbol}} {{ toAmount(form.total) }}</strong>
+                    </div>
+                    <div class="pp-charge-tender">
+                        <label class="pp-label">Ingrese monto</label>
+                        <el-input v-model="enter_amount" @keyup.enter.native="keyupEnterAmount()" @input="enterAmount()" ref="enter_amount">
+                            <template slot="prepend">{{currencyTypeActive.symbol}}</template>
+                        </el-input>
+                        <div class="pp-quick" v-if="form_payment.payment_method_type_id=='01'">
+                            <button type="button" v-for="cash in [10, 20, 50, 100]" :key="cash" @click="setAmountCash(cash)">{{currencyTypeActive.symbol}}{{cash}}</button>
                         </div>
                     </div>
-                </div>
-                <div class="col-lg-8">
-                    <div class="card card-default">
-
-                        <div class="card-body text-center">
-
-                            <div class="row col-lg-12">
-                            <div class="col-lg-6">
-                                <div class="form-group">
-                                    <label class="control-label">Ingrese monto</label>
-                                    <el-input v-model="enter_amount" @keyup.enter.native="keyupEnterAmount()" @input="enterAmount()" ref="enter_amount">
-                                        <template slot="prepend">{{currencyTypeActive.symbol}}</template>
-                                    </el-input>
-
-                                </div>
-                            </div>
-
-                            <div class="col-lg-6">
-                                <div class="form-group" :class="{'has-danger': difference < 0}">
-                                    <label class="control-label" v-text="(difference <0) ? 'Faltante' :'Vuelto'"></label>
-                                    <!-- <el-input v-model="difference" :disabled="true">
-                                        <template slot="prepend">{{currencyTypeActive.symbol}}</template>
-                                    </el-input> -->
-                                    <h4 class="control-label font-weight-semibold m-0 text-center m-b-0">{{currencyTypeActive.symbol}} {{ toAmount(difference) }}</h4>
-                                </div>
-                            </div>
-                            </div>
-
-                        </div>
+                    <div class="pp-charge-change" :class="{'is-short': difference < 0}">
+                        <span class="pp-label" v-text="(difference < 0) ? 'Faltante' : 'Vuelto'"></span>
+                        <strong>{{currencyTypeActive.symbol}} {{ toAmount(difference) }}</strong>
                     </div>
-                </div>
+                </section>
 
-                <div class="col-lg-8">
-                    <div class="card card-default">
-
-                        <div class="card-body text-center">
-
-                            <div class="row col-lg-12">
-                                <div class="col-lg-6">
-                                    <div class="form-group">
-                                        <h2><el-switch @change="changeEnabledDiscount" v-model="enabled_discount" class="control-label font-weight-semibold m-0 text-center m-b-0" active-text="Aplicar descuento"></el-switch></h2>
-                                    </div>
-                                </div>
-                                <div class="col-lg-6">
-                                    <div class="form-group">
-                                        <label class="control-label">Monto descuento</label>
-                                        <el-input v-model="discount_amount" @input="inputDiscountAmount()" :disabled="!enabled_discount">
-                                            <template slot="prepend">{{currencyTypeActive.symbol}}</template>
-                                        </el-input>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div v-if="businessTurns.active" class="row col-md-12 col-lg-12">
-                                <div class="col-md-6 col-lg-6"></div>
-                                <div class="col-md-6 col-lg-6">
-                                    <div class="form-group">
-                                        <label class="control-label">N° Placa</label>
-                                        <el-input type="textarea" v-model="form.plate_number"></el-input>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
+                <section class="pp-card pp-payments">
+                    <div class="pp-card-head">
+                        <span class="pp-title">Pagos agregados</span>
+                        <button type="button" class="pp-link" @click="clickAddPayment()"><i class="fas fa-plus"></i> Agregar</button>
                     </div>
-                </div>
+                    <ul class="pp-pay-list">
+                        <li v-for="(pay, index) in form.payments" :key="index">
+                            <span class="pp-pay-index">{{index + 1}}</span>
+                            <span class="pp-pay-method">{{getDescriptionPaymentMethodType(pay.payment_method_type_id)}}</span>
+                            <strong>{{currencyTypeActive.symbol}} {{pay.payment}}</strong>
+                        </li>
+                        <li v-if="!form.payments || !form.payments.length" class="pp-pay-empty">Sin pagos agregados</li>
+                    </ul>
+                </section>
 
-                <div class="col-lg-8">
-                    <div class="card card-default">
-                        <div class="card-body text-center">
-                            <div class="row col-lg-12">
-                                <div class="col-md-12 col-lg-12">
-                                    <div class="form-group">
-                                        <label class="control-label">Datos de referencia</label>
-                                        <el-input type="textarea" v-model="form.reference_data"></el-input>
-                                    </div>
-                                </div> 
-                            </div>
+                <div class="pp-grid">
+                    <section class="pp-card">
+                        <div class="pp-card-head">
+                            <el-switch @change="changeEnabledDiscount" v-model="enabled_discount" active-text="Aplicar descuento"></el-switch>
                         </div>
-                    </div>
+                        <label class="pp-label">Monto descuento</label>
+                        <el-input v-model="discount_amount" @input="inputDiscountAmount()" :disabled="!enabled_discount">
+                            <template slot="prepend">{{currencyTypeActive.symbol}}</template>
+                        </el-input>
+                    </section>
+                    <section class="pp-card">
+                        <label class="pp-label">Datos de referencia</label>
+                        <el-input type="textarea" :rows="3" resize="none" v-model="form.reference_data"></el-input>
+                    </section>
+                    <section class="pp-card" v-if="businessTurns.active">
+                        <label class="pp-label">N° Placa</label>
+                        <el-input type="textarea" :rows="2" resize="none" v-model="form.plate_number"></el-input>
+                    </section>
                 </div>
-                
+            </div>
 
-                <div class="col-lg-8">
-                    <div class="card card-default">
-                        <div class="card-body">
-                            <!-- <p class="text-center">Método de Pago</p> -->
-                            <div class="input-group mb-3">
-                                <div class="col-lg-12 m-bottom">
-                                    <div class="row">
-
-                                        <div class="col-lg-6">
-                                            <h5><strong>Pagos agregados </strong></h5>
-                                        </div>
-                                        <div class="col-lg-1">
-                                        </div>
-                                        <div class="col-lg-5">
-                                            <button class="btn btn-sm btn-block btn-primary" @click="clickAddPayment()"><i class="fas fa-plus"></i> Agregar</button>
-
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-lg-12 m-bottom" >
-                                    <div class="row">
-                                        <template v-for="(pay,index) in form.payments">
-                                            <div class="col-lg-1" :key="pay.id">
-                                                <label>{{index + 1}}.-</label>
-                                            </div>
-                                            <div class="col-lg-6" :key="pay.id">
-                                                <label>{{getDescriptionPaymentMethodType(pay.payment_method_type_id)}}</label>
-                                            </div>
-                                            <div class="col-lg-5" :key="pay.id">
-                                                <label><strong>{{currencyTypeActive.symbol}} {{pay.payment}}</strong> </label>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-                                <!-- <div class="col-lg-12 m-bottom">
-                                    <div class="row">
-                                        <div class="col-lg-12">
-                                            <label class="control-label" >Método de Pago</label>
-
-                                            <el-select v-model="form_payment.payment_method_type_id" @change="changePaymentMethodType">
-                                                    <el-option v-for="option in payment_method_types" :key="option.id" :value="option.id" :label="option.description"></el-option>
-                                            </el-select>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-lg-12 m-bottom" v-if="has_card">
-                                    <div class="row">
-                                        <div class="col-lg-12">
-                                            <label class="control-label" >Tarjeta
-                                            <a class="text-info" @click.prevent="showDialogNewCardBrand = true" href="#">[+ Nueva]</a>
-                                            </label>
-                                            <el-select v-model="form_payment.card_brand_id">
-                                                    <el-option v-for="option in cards_brand" :key="option.id" :value="option.id" :label="option.description"></el-option>
-                                            </el-select>
-
-                                        </div>
-
-                                    </div>
-                                </div>
-                                <div class="col-lg-12 m-bottom" >
-                                    <div class="row">
-                                        <div class="col-lg-12">
-                                            <label class="control-label"  >Referencia</label>
-                                            <el-input v-model="form_payment.reference" >
-                                            </el-input>
-                                        </div>
-                                    </div>
-                                </div>-->
-                                <div class="col-lg-12" v-if="form_payment.payment_method_type_id=='01'">
-                                    <div class="row">
-                                        <div class="col-lg-3">
-                                            <button class="btn btn-block btn-secondary" @click="setAmountCash(10)">{{currencyTypeActive.symbol}}10</button>
-                                        </div>
-                                        <div class="col-lg-3">
-                                            <button class="btn btn-block btn-secondary" @click="setAmountCash(20)" >{{currencyTypeActive.symbol}}20</button>
-                                        </div>
-                                        <div class="col-lg-3">
-                                            <button class="btn btn-block btn-secondary" @click="setAmountCash(50)"  >{{currencyTypeActive.symbol}}50</button>
-                                        </div>
-                                        <div class="col-lg-3">
-                                            <button class="btn btn-block btn-secondary"  @click="setAmountCash(100)" >{{currencyTypeActive.symbol}}100</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-8 mb-4">
-                    <div class="row">
-                        <div class="col-lg-6">
-                            <button class="btn btn-block btn-primary" @click="clickPayment" :disabled="button_payment">PAGAR</button>
-                        </div>
-                        <div class="col-lg-6">
-                            <button class="btn btn-block btn-danger" @click="clickCancel">CANCELAR</button>
-                        </div>
-                    </div>
-                </div>
+            <div class="pp-actions">
+                <button type="button" class="pp-cancel" @click="clickCancel">Cancelar</button>
+                <button type="button" class="pp-pay" @click="clickPayment" :disabled="button_payment">
+                    Pagar <span>{{currencyTypeActive.symbol}} {{ toAmount(form.total) }}</span>
+                </button>
             </div>
         </div>
         <options-form
@@ -343,6 +202,183 @@
     margin-right: 0!important;
 }
 
+.pp-panel {
+    --pp-surface: var(--tenant-surface, #fff);
+    --pp-line: var(--tenant-hairline, #e6e9f0);
+    --pp-ink: var(--tenant-ink, #1b2333);
+    --pp-muted: var(--tenant-muted, #6b7489);
+    --pp-blue: var(--tenant-blue, #3b5bdb);
+    --pp-soft: var(--tenant-surface-subtle, #f4f6fb);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--tenant-header-h, 72px) - 92px);
+    min-height: 460px;
+    padding: 0 0 0 24px !important;
+    color: var(--pp-ink);
+}
+.pp-head, .pp-body, .pp-actions {
+    width: 100%;
+    max-width: 780px;
+    margin: 0 auto;
+}
+.pp-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 14px;
+}
+.pp-series { width: 96px; }
+.pp-back {
+    margin-left: auto;
+    border: 1px solid var(--pp-line);
+    background: var(--pp-surface);
+    color: var(--pp-ink);
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-weight: 500;
+}
+.pp-back:hover { border-color: var(--pp-blue); color: var(--pp-blue); }
+.pp-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 12px;
+}
+.pp-card {
+    background: var(--pp-surface);
+    border: 1px solid var(--pp-line);
+    border-radius: 14px;
+    padding: 16px 18px;
+}
+.pp-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--pp-muted);
+}
+.pp-title { font-weight: 600; font-size: 15px; }
+.pp-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.pp-charge {
+    display: grid;
+    grid-template-columns: 1.1fr 1.3fr 0.9fr;
+    gap: 20px;
+    align-items: start;
+}
+.pp-amount {
+    display: block;
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+.pp-charge-change strong {
+    display: block;
+    font-size: 22px;
+    font-weight: 600;
+    color: #1f9d55;
+    font-variant-numeric: tabular-nums;
+}
+.pp-charge-change.is-short strong { color: #d64545; }
+.pp-quick {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+.pp-quick button {
+    border: 1px solid var(--pp-line);
+    background: var(--pp-soft);
+    color: var(--pp-ink);
+    border-radius: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    font-weight: 500;
+}
+.pp-quick button:hover { border-color: var(--pp-blue); color: var(--pp-blue); }
+.pp-link {
+    border: 0;
+    background: none;
+    color: var(--pp-blue);
+    font-weight: 600;
+    padding: 2px 4px;
+}
+.pp-pay-list { list-style: none; margin: 0; padding: 0; }
+.pp-pay-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--pp-line);
+}
+.pp-pay-list li:first-child { border-top: 0; }
+.pp-pay-index {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--pp-soft);
+    color: var(--pp-muted);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.pp-pay-method { flex: 1; }
+.pp-pay-empty { color: var(--pp-muted); font-size: 13px; }
+.pp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.pp-actions {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 12px;
+    padding: 12px 0 4px;
+    border-top: 1px solid var(--pp-line);
+}
+.pp-actions button {
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 15px;
+    font-weight: 600;
+}
+.pp-cancel {
+    border: 1px solid var(--pp-line);
+    background: var(--pp-surface);
+    color: #d64545;
+}
+.pp-cancel:hover { border-color: #d64545; }
+.pp-pay {
+    border: 0;
+    background: var(--pp-blue);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+.pp-pay span { font-variant-numeric: tabular-nums; opacity: .9; }
+.pp-pay:hover:not(:disabled) { filter: brightness(1.08); }
+.pp-pay:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 1199px) {
+    .pp-charge { grid-template-columns: 1fr 1fr; }
+    .pp-charge-total { grid-column: 1 / -1; }
+}
+@media (max-width: 991px) {
+    .pp-panel { height: auto; padding: 16px 0 0 !important; }
+    .pp-grid { grid-template-columns: 1fr; }
+    .pp-actions { position: sticky; bottom: 0; background: var(--tenant-ground, #f4f6fb); }
+}
 </style>
 
 <script>
@@ -354,6 +390,7 @@
     import SaleNotesOptions from '../../sale_notes/partials/options.vue'
     import OptionsForm from './options.vue'
     import MultiplePaymentForm from './multiple_payment.vue'
+    import {readPosDraft, writePosDraft, removePosDraft} from '../../../../helpers/pos_draft'
 
     export default {
         components: {OptionsForm, CardBrandsForm, SaleNotesOptions, MultiplePaymentForm, Keypress},
@@ -630,8 +667,7 @@
             },
             getFormPosLocalStorage(){
 
-                let form_pos = localStorage.getItem('form_pos');
-                form_pos = JSON.parse(form_pos)
+                let form_pos = readPosDraft('form_pos');
                 if (form_pos) {
                     this.form.payments = form_pos.payments
                 }
@@ -734,17 +770,14 @@
             },
             getLocalStoragePayment(key, re_default = null){
 
-                let ls_obj = localStorage.getItem(key);
-                ls_obj = JSON.parse(ls_obj)
-
-                if (ls_obj) {
-                    return ls_obj
-                }
-
-                return re_default
+                return readPosDraft(key, re_default)
             },
             setLocalStoragePayment(key, obj){
-                localStorage.setItem(key, JSON.stringify(obj));
+                if (obj === null || obj === undefined) {
+                    removePosDraft(key)
+                    return
+                }
+                writePosDraft(key, obj)
             },
             inputAmount(){
 
@@ -853,6 +886,11 @@
                     this.customer ? this.customer.number : null
                 )) {
                     return this.$message.error(BOLETA_IDENTIFICATION_MESSAGE);
+                }
+
+                // SUNAT: a factura always requires a customer identified with RUC
+                if (this.form.document_type_id === '01' && (!this.customer || String(this.customer.identity_document_type_id) !== '6')) {
+                    return this.$message.error('La factura requiere un cliente con RUC. Use boleta o nota de venta para ventas sin identificar.');
                 }
 
                 // if(this.has_card && !this.form_payment.card_brand_id) return this.$message.error('Seleccione una tarjeta');
