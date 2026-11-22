@@ -10,7 +10,7 @@
 
     @guest
     <div class="header-contact">
-        <a class="login-link" href="{{route('tenant_ecommerce_login')}}"><strong style="font-size: 16px;">LOG
+        <a class="login-link" href="#" data-toggle="modal" data-target="#login_register_modal"><strong style="font-size: 16px;">LOG
                 IN</strong></a>
     </div>
     @else

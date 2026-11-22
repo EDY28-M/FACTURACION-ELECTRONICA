@@ -485,6 +485,49 @@ function(e) {
 				e(o.target).closest(".toolbox-item.select-custom").length || e(".select-custom").removeClass("opened")
 			})
 		},
+		// Cart entries come from localStorage / product JSON, which are untrusted. They are rendered
+		// only through DOM text/attribute APIs, never as HTML strings.
+		cartImageUrl: function(file)
+		{
+			// Fixed same-origin prefix: a value can never switch scheme or host.
+			if (typeof file !== 'string' || file === '') return null;
+			if (/[\u0000-\u001f\\]/.test(file) || /(^|\/)\.\.(\/|$)/.test(file)) return null;
+			try {
+				return '/storage/uploads/items/' + encodeURI(file);
+			} catch (err) {
+				return null;
+			}
+		},
+		buildCartProduct: function(element)
+		{
+			let $title = $('<a>').attr('href', '$').text(element.name);
+			let $info = $('<span>').addClass('cart-product-info')
+				.append($('<span>').addClass('cart-product-qty').text('1'))
+				.append(document.createTextNode(' x ' + element.sale_unit_price));
+			let $details = $('<div>').addClass('product-details')
+				.append($('<h4>').addClass('product-title').append($title))
+				.append($info);
+
+			let $image = $('<img>').attr('alt', 'product');
+			let imageUrl = this.cartImageUrl(element.image_small);
+			if (imageUrl) $image.attr('src', imageUrl);
+
+			let $figure = $('<figure>').addClass('product-image-container')
+				.append($('<a>').attr('href', '#').addClass('product-image').append($image));
+
+			let id = Number(element.id);
+			if (Number.isFinite(id)) {
+				let $remove = $('<a>').attr('href', '#').addClass('btn-remove').attr('title', 'Remove Product')
+					.append($('<i>').addClass('icon-cancel'));
+				$remove.on('click', function(event) {
+					event.preventDefault();
+					remove(id);
+				});
+				$figure.append($remove);
+			}
+
+			return $('<div>').addClass('product').append($details).append($figure);
+		},
 		productsCartDropDown: function()
 		{
 			//console.log('drop dowm')
@@ -499,26 +542,7 @@ function(e) {
 				
 			array.forEach(element => {
 				
-				jQuery(".dropdown-cart-products").append( `
-						<div class="product">
-							<div class="product-details">
-							<h4 class="product-title">
-								<a href="$">${element.name}</a>
-							</h4>
-							<span class="cart-product-info">
-								<span class="cart-product-qty">1</span> x ${element.sale_unit_price}
-							</span>
-							</div>
-							<figure class="product-image-container">
-								<a href="#" class="product-image">
-									<img alt="product" src="/storage/uploads/items/${element.image_small}" />
-								</a>
-								<a href="#" onclick="remove(${element.id})" class="btn-remove" title="Remove Product">
-									<i class="icon-cancel"></i>
-								</a>
-							</figure>
-						</div>` 
-					);
+				jQuery(".dropdown-cart-products").append(this.buildCartProduct(element));
 			});
 			
 			jQuery(".cart-count").append(count);
@@ -542,16 +566,16 @@ function(e) {
 					contex.successAddProduct();
 					contex.calculateTotalCart();
 
-					$('#product_added').html(`
-						<h1 class="product-title">${item.name}</h1>
-						<div class="price-box">
-							<span class="product-price">S/ ${ Number(item.sale_unit_price).toFixed(2) }</span>
-						</div>
-						<div class="product-desc">
-							<p> ${item.description}  </p>
-						</div>	`);
+					$('#product_added').empty()
+						.append($('<h1>').addClass('product-title').text(item.name))
+						.append($('<div>').addClass('price-box')
+							.append($('<span>').addClass('product-price').text('S/ ' + Number(item.sale_unit_price).toFixed(2))))
+						.append($('<div>').addClass('product-desc').append($('<p>').text(item.description)));
 
-					$('#product_added_image').html( `<img src="/storage/uploads/items/${item.image_medium}" class="img" alt="product">`)
+					let $addedImage = $('<img>').addClass('img').attr('alt', 'product');
+					let addedImageUrl = contex.cartImageUrl(item.image_medium);
+					if (addedImageUrl) $addedImage.attr('src', addedImageUrl);
+					$('#product_added_image').empty().append($addedImage);
 				}
 				else{
 					contex.alreadyProductCart();

@@ -80,7 +80,7 @@
                         <input class="horizontal-quantity form-control" type="text">
                     </div><!-- End .product-single-qty -->
 
-                    <a href="#" onclick="cart_add('{{ json_encode( $record ) }}')" class="paction add-cart"
+                    <a href="#" data-product="{{ json_encode( $record ) }}" class="paction add-cart"
                         title="Add to Cart">
                         <span>Agregar a Carrito</span>
                     </a>
@@ -91,3 +91,12 @@
         </div><!-- End .col-lg-5 -->
     </div><!-- End .row -->
 </div><!-- End .product-single-container -->
+
+<script type="text/javascript">
+    // The product JSON travels in an HTML-escaped data attribute and is read back as a string
+    // (cart_add parses it as data); it is never placed inside inline JavaScript.
+    jQuery('.product-quick-view .add-cart').off('click.cartAdd').on('click.cartAdd', function (event) {
+        event.preventDefault();
+        cart_add(jQuery(this).attr('data-product'));
+    });
+</script>

@@ -30,14 +30,18 @@ class EcommerceController extends Controller
      * @return Response
      */
     public function __construct(){
-        return view()->share('records', Item::where('apply_store', 1)->orderBy('id', 'DESC')->take(2)->get());
+        // Route/console commands must not require a tenant database just to
+        // instantiate the controller (php artisan route:list, queue workers).
+        if (!app()->runningInConsole()) {
+            view()->share('records', Item::where('apply_store', 1)->orderBy('id', 'DESC')->take(2)->get());
+        }
     }
 
     public function index()
     {
       $dataPaginate = Item::where([['apply_store', 1], ['internal_id','!=', null]])->paginate(15);
       $configuration = InventoryConfiguration::first();
-      return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => $configuration->stock_control]);
+      return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => optional($configuration)->stock_control]);
     }
 
     public function category(Request $request)
@@ -47,12 +51,12 @@ class EcommerceController extends Controller
         ->from('items as i')
         ->join('item_tags as it', 'it.item_id','i.id')->paginate(15);
         $configuration = InventoryConfiguration::first();
-      return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => $configuration->stock_control]);
+      return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => optional($configuration)->stock_control]);
     }
 
     public function item($id)
     {
-        $row = Item::find($id);
+        $row = Item::findOrFail($id);
         $exchange_rate_sale = $this->getExchangeRateSale();
         $sale_unit_price = ($row->has_igv) ? $row->sale_unit_price : $row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
 
@@ -98,7 +102,7 @@ class EcommerceController extends Controller
 
     public function partialItem($id)
     {
-        $record = Item::find($id);
+        $record = Item::findOrFail($id);
         return view('ecommerce::items.partial', compact('record'));
     }
 
@@ -115,13 +119,16 @@ class EcommerceController extends Controller
 
     public function showLogin()
     {
-        return view('ecommerce::user.login');
+        // The store login is a modal included by the store layout. Keep the
+        // direct URL working instead of returning a missing view.
+        return redirect()->route('tenant.ecommerce.index');
     }
 
     public function login(Request $request)
     {
         $credentials = $request->only('email', 'password');
         if (Auth::attempt($credentials)) {
+           $request->session()->regenerate();
            return[
                'success' => true,
                'message' => 'Login Success'
@@ -163,22 +170,26 @@ class EcommerceController extends Controller
             $user->email = $request->email;
             $user->establishment_id = 1;
             $user->type = 'client';
-            $user->api_token = str_random(50);
+            $user->api_token = null;
             $user->password = bcrypt($request->pswd);
             $user->save();
             $user->modules()->sync([10]);
 
             $credentials = [ 'email' => $user->email, 'password' => $request->pswd ];
-            Auth::attempt($credentials);
+            if (Auth::attempt($credentials)) {
+                $request->session()->regenerate();
+            }
             return [
                 'success' => true,
                 'message' => 'Usuario registrado'
             ];
         }catch(Exception $e)
         {
+            report($e);
+
             return [
                 'success' => false,
-                'message' =>  $e->getMessage()
+                'message' => 'No se pudo registrar el usuario.',
             ];
         }
 
@@ -304,22 +315,27 @@ class EcommerceController extends Controller
 
     public function ratingItem(Request $request)
     {
-        if(auth()->user())
-        {
+        if (auth()->user()) {
+            $request->validate([
+                'item_id' => 'required|integer|exists:tenant.items,id',
+                'value'   => 'required|numeric|min:1|max:5',
+            ]);
+
             $user_id = auth()->id();
-            $row = ItemsRating::firstOrNew( ['user_id' => $user_id, 'item_id' => $request->item_id ] );
+            $row = ItemsRating::firstOrNew(['user_id' => $user_id, 'item_id' => $request->item_id]);
             $row->value = $request->value;
             $row->save();
-            return[
-                'success' => false,
+
+            return [
+                'success' => true,
                 'message' => 'Rating Guardado'
             ];
         }
-        return[
+
+        return [
             'success' => false,
             'message' => 'No se guardo Rating'
         ];
-
     }
 
     public function getRating($id)
@@ -354,10 +370,17 @@ class EcommerceController extends Controller
     public function saveDataUser(Request $request)
     {
         $user = auth()->user();
-        if ($request->address) {
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No autenticado',
+            ], 401);
+        }
+
+        if ($request->filled('address')) {
             $user->address = $request->address;
         }
-        if ($user->telephone = $request->telephone) {
+        if ($request->filled('telephone')) {
             $user->telephone = $request->telephone;
         }
 

@@ -396,3 +396,8 @@ html.dark .el-switch__label *,
 html.dashboard-system .content-body {
   /*margin-top: 60px;*/
 }
+
+/* Element UI sets an inline margin-top of 15vh; keep every dialog close to the top. */
+.el-dialog:not(.is-fullscreen) {
+  margin-top: 5vh !important;
+}

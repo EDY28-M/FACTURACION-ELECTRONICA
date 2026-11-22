@@ -37,6 +37,13 @@ class CulqiController extends Controller
             'token' => 'required|string',
             'email' => 'required|email',
             'installments' => 'nullable|integer',
+            'device_finger_print_id' => 'nullable|string|max:100',
+            'authentication_3DS' => 'nullable|array',
+            'authentication_3DS.eci' => 'nullable|string|max:255',
+            'authentication_3DS.xid' => 'nullable|string|max:255',
+            'authentication_3DS.cavv' => 'nullable|string|max:255',
+            'authentication_3DS.protocolVersion' => 'nullable|string|max:255',
+            'authentication_3DS.directoryServerTransactionId' => 'nullable|string|max:255',
         ]);
 
         if (auth()->check()) {
@@ -52,7 +59,10 @@ class CulqiController extends Controller
         try {
             $cart = CartPricing::forStore((array) json_decode((string) $request->items, true));
         } catch (InvalidArgumentException $e) {
-            return ['success' => false, 'message' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'message' => 'No se pudo procesar el pago.'];
+
         }
 
         $result = $checkout->pay(function () use ($customer, $cart, $request) {
@@ -66,10 +76,13 @@ class CulqiController extends Controller
                 'status_order_id' => 1,
                 'purchase' => json_decode((string) $request->purchase),
             ]);
-        }, $cart['total'], $secret, $request->token, $request->email, $request->installments);
+        }, $cart['total'], $secret, $request->token, $request->email, $request->installments, [
+            'antifraud' => ['device_finger_print_id' => $request->input('device_finger_print_id')],
+            'authentication_3DS' => (array) $request->input('authentication_3DS', []),
+        ]);
 
         if (! $result['success']) {
-            return ['success' => false, 'message' => $result['message']];
+            return ['success' => false, 'needs_3ds' => ! empty($result['needs_3ds']), 'message' => $result['message']];
         }
 
         try {

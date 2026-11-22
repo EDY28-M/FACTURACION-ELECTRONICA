@@ -7,7 +7,6 @@
     "require": {
         "php": "^8.1|^8.2|^8.3",
         "barryvdh/laravel-dompdf": "^2.2|^3.0",
-        "culqi/culqi-php": "1.3.4",
         "graham-campbell/markdown": "^15.0",
         "guzzlehttp/guzzle": "^7.8",
         "ifsnop/mysqldump-php": "^2.12",
@@ -72,7 +71,9 @@
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover"
-        ]
+        ],
+        "test:unit": "@php vendor/bin/phpunit --testsuite Unit",
+        "lint": "find app modules routes config tests bootstrap -name '*.php' -not -path '*/vendor/*' -print0 | xargs -0 -n 1 php -l"
     },
     "config": {
         "preferred-install": "dist",

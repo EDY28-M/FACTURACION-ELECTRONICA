@@ -22,6 +22,10 @@ class CartPricing
      */
     public static function total(array $lines, $items, float $exchangeRate, callable $igvRate): array
     {
+        if ($exchangeRate <= 0) {
+            throw new InvalidArgumentException('El tipo de cambio no es válido.');
+        }
+
         $quantities = [];
         foreach ($lines as $line) {
             $line = (array) $line;
@@ -98,7 +102,11 @@ class CartPricing
             return $item->currency_type_id !== 'PEN';
         })) {
             $rate = app(ServiceController::class)->exchangeRateTest(date('Y-m-d'));
-            $exchangeRate = (float) ($rate['sale'] ?? 1);
+            $exchangeRate = (float) ($rate['sale'] ?? 0);
+
+            if ($exchangeRate <= 0) {
+                throw new InvalidArgumentException('No se pudo obtener el tipo de cambio.');
+            }
         }
 
         return self::total($lines, $items, $exchangeRate, function ($general) {

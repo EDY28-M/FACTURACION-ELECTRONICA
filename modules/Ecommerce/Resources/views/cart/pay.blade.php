@@ -16,7 +16,7 @@
                 <li>
                     <h2 class="step-title">Shipping Address</h2>
                     @guest
-                <li><a href="{{route('tenant_ecommerce_login')}}" class="btn btn-primary login-link">LOG IN</a></li>
+                <li><a href="#" class="btn btn-primary login-link" data-toggle="modal" data-target="#login_register_modal">LOG IN</a></li>
                 @else
                 <form action="#">
                     <div class="form-group required-field">

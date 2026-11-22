@@ -44,7 +44,7 @@
                                 <li><a href="{{ route('tenant_detail_cart') }}">Ver Carrito</a></li>
                                 <li><a href="#">Ver Perfil</a></li>
                                 @guest
-                                <li><a href="{{route('tenant_ecommerce_login')}}" class="login-link">Login</a></li>
+                                <li><a href="#" class="login-link" data-toggle="modal" data-target="#login_register_modal">Login</a></li>
                                 @else
                                 <li><a role="menuitem" href="{{ route('logout') }}" class="login-link" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
                                     Salir

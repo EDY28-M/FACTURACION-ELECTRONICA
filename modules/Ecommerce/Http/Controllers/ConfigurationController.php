@@ -3,6 +3,7 @@
 namespace Modules\Ecommerce\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\ConfigurationEcommerce;
 use App\Models\Tenant\Company;
@@ -87,17 +88,19 @@ class ConfigurationController extends Controller
     public function uploadFile(Request $request)
     {
         if ($request->hasFile('file')) {
+            $request->validate([
+                'file' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'type' => ['required', Rule::in(['logo_store'])],
+            ]);
 
-            $config = ConfigurationEcommerce::first();
-            $company = Company::first();
+            $config = ConfigurationEcommerce::firstOrFail();
+            $company = Company::firstOrFail();
 
-            $type = $request->input('type'); //logo_store
+            $type = $request->input('type'); // logo_store
 
             $file = $request->file('file');
-            $ext = $file->getClientOriginalExtension();
-            $name = $type.'_'.$company->number.'.'.$ext;
-
-            request()->validate(['file' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048']);
+            $ext = $file->extension() ?: 'png';
+            $name = $type . '_' . $company->number . '.' . $ext;
 
             $file->storeAs('public/uploads/logos', $name);
 

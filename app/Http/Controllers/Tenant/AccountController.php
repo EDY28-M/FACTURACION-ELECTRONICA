@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\Tenant\CulqiEmail;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use stdClass;
 use App\Models\System\Configuration as ConfigurationAdmin;
 
@@ -45,7 +46,7 @@ class AccountController extends Controller
     public function paymentIndex()
     {
         $configuration = ConfigurationAdmin::first();
-        $token_public_culqui = $configuration->token_public_culqui;
+        $token_public_culqui = optional($configuration)->token_public_culqui;
 
         return view('tenant.account.payment_index', compact('token_public_culqui'));
     }
@@ -59,29 +60,44 @@ class AccountController extends Controller
 
     public function updatePlan(Request $request)
     {
+        $request->validate([
+            'plan_id' => 'required|integer',
+        ]);
+
         try{
-
+            $plan = Plan::findOrFail($request->plan_id);
             $company = Company::active();
-            $client = Client::where('number', $company->number)->first();
-            $configuration = Configuration::first();
+            $client = $company ? Client::where('number', $company->number)->first() : null;
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se encontró el cliente asociado en el sistema.',
+                ], 404);
+            }
+            $configuration = Configuration::firstOrFail();
 
-            $configuration->plan = Plan::find($request->plan_id);
-            $configuration->save();
-
-            $client->plan_id = $request->plan_id;
+            $client->plan_id = $plan->id;
             $client->save();
+
+            $configuration->plan = $plan;
+            $configuration->save();
 
             return [
                 'success' => true,
                 'message' => 'Cliente Actualizado satisfactoriamente'
             ];
 
-        }catch(Exception $e)
-        {
-            return [
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
-            ];
+                'message' => 'El plan solicitado no existe.',
+            ], 404);
+        } catch (Exception $e) {
+            Log::error('Error updating tenant plan', ['exception' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pudo actualizar el plan.',
+            ], 500);
         }
 
     }
@@ -93,6 +109,13 @@ class AccountController extends Controller
             'token' => 'required|string',
             'email' => 'required|email',
             'installments' => 'nullable|integer',
+            'device_finger_print_id' => 'nullable|string|max:100',
+            'authentication_3DS' => 'nullable|array',
+            'authentication_3DS.eci' => 'nullable|string|max:255',
+            'authentication_3DS.xid' => 'nullable|string|max:255',
+            'authentication_3DS.cavv' => 'nullable|string|max:255',
+            'authentication_3DS.protocolVersion' => 'nullable|string|max:255',
+            'authentication_3DS.directoryServerTransactionId' => 'nullable|string|max:255',
         ]);
         if ($validator->fails()) {
             return ['success' => false, 'message' => 'Los datos del pago no son válidos.'];
@@ -111,14 +134,17 @@ class AccountController extends Controller
                 return ['success' => false, 'message' => 'El pago solicitado no existe.', 'charge_id' => null, 'payment' => null];
             }
 
-            $result = $platform->pay($payment, $secret, $request->token, $request->email, $request->installments);
+            $result = $platform->pay($payment, $secret, $request->token, $request->email, $request->installments, [
+            'antifraud' => ['device_finger_print_id' => $request->input('device_finger_print_id')],
+            'authentication_3DS' => (array) $request->input('authentication_3DS', []),
+        ]);
             $result['payment'] = $payment;
 
             return $result;
         });
 
         if (! $result['success']) {
-            return ['success' => false, 'message' => $result['message']];
+            return ['success' => false, 'needs_3ds' => ! empty($result['needs_3ds']), 'message' => $result['message']];
         }
 
         // Side effects after a verified payment must never turn it into an error.

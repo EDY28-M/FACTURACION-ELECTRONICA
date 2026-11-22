@@ -24,8 +24,8 @@ Route::middleware(['locked.tenant'])->prefix('ecommerce')->group(function() {
     Route::get('login', 'EcommerceController@showLogin')->name('tenant_ecommerce_login');
     Route::get('logout', 'EcommerceController@logout')->name('tenant_ecommerce_logout');
     Route::get('items_bar', 'EcommerceController@itemsBar');
-    Route::post('login', 'EcommerceController@login')->name('tenant_ecommerce_login');
-    Route::post('storeUser', 'EcommerceController@storeUser')->name('tenant_ecommerce_store_user');
+    Route::post('login', 'EcommerceController@login')->middleware('throttle:5,1')->name('tenant_ecommerce_login_post');
+    Route::post('storeUser', 'EcommerceController@storeUser')->middleware('throttle:5,1')->name('tenant_ecommerce_store_user');
     Route::post('rating_item', 'EcommerceController@ratingItem')->name('tenant_ecommerce_rating_item');
     Route::get('rating_item/{id}', 'EcommerceController@getRating');
 
@@ -33,9 +33,9 @@ Route::middleware(['locked.tenant'])->prefix('ecommerce')->group(function() {
 
 
     Route::post('cart_quote', 'EcommerceController@quote')->name('tenant_ecommerce_cart_quote');
-    Route::post('culqi', 'CulqiController@payment')->name('tenant_ecommerce_culqui');
+    Route::post('culqi', 'CulqiController@payment')->middleware('throttle:10,1')->name('tenant_ecommerce_culqui');
     Route::post('transaction_finally', 'EcommerceController@transactionFinally')->name('tenant_ecommerce_transaction_finally');
-    Route::post('payment_cash', 'EcommerceController@paymentCash')->name('tenant_ecommerce_payment_cash');
+    Route::post('payment_cash', 'EcommerceController@paymentCash')->middleware('throttle:10,1')->name('tenant_ecommerce_payment_cash');
     Route::post('saveDataUser', 'EcommerceController@saveDataUser')->name('tenant_ecommerce_user_data');
 
     Route::middleware(['auth', 'redirect.module'])->group(function () {

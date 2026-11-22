@@ -89,9 +89,9 @@
             <div class="checkout-methods text-center">
 
                 @guest
-                <a href="{{route('tenant_ecommerce_login')}}" class="btn btn-block btn-sm btn-primary login-link culqi">Pagar
+                <a href="#" class="btn btn-block btn-sm btn-primary login-link culqi" data-toggle="modal" data-target="#login_register_modal">Pagar
                     con VISA</a>
-                <a href="{{route('tenant_ecommerce_login')}}" class="btn btn-block btn-sm btn-primary login-link">Pagar
+                <a href="#" class="btn btn-block btn-sm btn-primary login-link" data-toggle="modal" data-target="#login_register_modal">Pagar
                     con EFECTIVO</a>
                 @else
                 <button class="btn btn-block btn-sm btn-primary culqi" onclick="execCulqi()"> Pagar con VISA </button>
@@ -106,7 +106,7 @@
                         <input readonly placeholder="0.0" v-model="payment_cash.amount" type="text"
                             onkeypress="return isNumberKey(event)" maxlength="14" class="form-control"
                             aria-label="Amount">
-                        <button @click="paymentCash" class="btn btn-success">OK!</button>
+                        <button @click="paymentCash" :disabled="payment_cash.processing" class="btn btn-success">OK!</button>
                     </div>
                 </div>
 
@@ -185,7 +185,8 @@
             },
             payment_cash: {
                 amount: '',
-                clicked: false
+                clicked: false,
+                processing: false
             },
             response_search: {},
             text_search: '',
@@ -342,6 +343,12 @@
                 return
               }
 
+                // Guard against double submit while the request is pending.
+                if (this.payment_cash.processing) {
+                    return
+                }
+                this.payment_cash.processing = true
+
                 swal({
                     title: "Estamos generando el Pago.",
                     text: `Por favor no cierre esta ventana hasta que el proceso termine.`,
@@ -351,43 +358,55 @@
                     }
                 });
 
-                let url_finally = '{{ route("tenant_ecommerce_payment_cash")}}';
-                let response = await axios.post(url_finally, await this.getFormPaymentCash(), this.getHeaderConfig()).then(response => {
-                if (response.data.success) {
-                    this.saveContactDataUser()
-                    this.clearShoppingCart()
-                    this.response_order_total = response.data.order.total
-                    swal({
-                        title: "Gracias por su pago!",
-                        text: "En breve le enviaremos un correo electronico con los detalles de su compra.",
-                        type: "success"
-                    }).then((x) => {
-                      app_cart.order_generated = order
-                        //askedDocument(response.data.order);
-                    })
+                try {
+                    let url_finally = '{{ route("tenant_ecommerce_payment_cash")}}';
+                    let response = await axios.post(url_finally, await this.getFormPaymentCash(), this.getHeaderConfig())
+                    if (response.data && response.data.success === true) {
+                        this.saveContactDataUser()
+                        this.clearShoppingCart()
+                        this.response_order_total = response.data.order.total
+                        swal({
+                            title: "Gracias por su pago!",
+                            text: "En breve le enviaremos un correo electronico con los detalles de su compra.",
+                            type: "success"
+                        }).then((x) => {
+                          app_cart.order_generated = order
+                            //askedDocument(response.data.order);
+                        })
+                    } else {
+                        // Business rejection (HTTP 200 with success !== true): replace the loader and keep the cart.
+                        // The server message is shown as plain text only (never as the HTML title).
+                        let message = response.data && typeof response.data.message === 'string' ? response.data.message.trim() : ''
+                        swal({
+                            title: "Pago No realizado",
+                            text: message || 'No se pudo registrar el pedido. Intente nuevamente.',
+                            type: "error"
+                        })
+                    }
+                } catch (error) {
+                    // Transport/HTTP error: replace the loader and keep the cart so the buyer can retry.
+                    swal("Pago No realizado", 'Sucedio algo inesperado.', "error");
+                    if (error && error.response && error.response.status === 422) {
+                        this.errors = error.response.data;
+                    } else {
+                        console.log(error);
+                    }
+                } finally {
+                    this.payment_cash.processing = false
                 }
-              }).catch(error => {
-                swal("Pago No realizado", 'Sucedio algo inesperado.', "error");
-                if (error.response.status === 422) {
-                  this.errors = error.response.data;
-                } else {
-                  console.log(error);
-                }
-              });
 
             },
             redirectHome() {
                 window.location = "{{ route('tenant.ecommerce.index') }}";
             },
             getHeaderConfig() {
-                let token = this.user.api_token
-                let axiosConfig = {
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    }
+                let headers = {
+                    "Content-Type": "application/json"
                 };
-                return axiosConfig;
+                if (this.user && this.user.api_token) {
+                    headers.Authorization = `Bearer ${this.user.api_token}`;
+                }
+                return { headers: headers };
             },
             async getDocument() {
                 this.form_document.items = await this.getItemsDocument()
@@ -504,7 +523,7 @@
             },
             initForm() {
               this.errors = {}
-                this.user = JSON.parse('{!! json_encode( Auth::user() ) !!}')
+                this.user = {!! json_encode(Auth::user() ? Auth::user()->only(['id', 'name', 'email', 'identity_document_type_id', 'number', 'address', 'telephone']) : null) !!}
                 if(!this.user){
                     return false
                 }
@@ -661,128 +680,82 @@
 </script>
 
 <script>
-    Culqi.publicKey = {!! json_encode($configuration->token_public_culqui ) !!};
-    if(!Culqi.publicKey)
+    var culqi_public_key = {!! json_encode($configuration->token_public_culqui ) !!};
+    if(!culqi_public_key)
     {
       $('.culqi').hide()
-/*
-        swal({
-            title: "Culqi configuración",
-            text: "El pago con visa aun no esta disponible. Intente con efectivo.",
-            type: "error",
-            position: 'top-end',
-            icon: 'warning',
-        })
-*/
     }
-    Culqi.options({
-        installments: true
-    });
 
     async function askedDocument(order) {
         app_cart.order_generated = order
         $('#modal_ask_document').modal('show')
     }
 
+    function showPaymentLoading() {
+        swal({
+            title: "Estamos hablando con su banco",
+            text: `Por favor no cierre esta ventana hasta que el proceso termine.`,
+            focusConfirm: false,
+            allowOutsideClick: false,
+            onOpen: () => {
+                Swal.showLoading()
+            }
+        });
+    }
+
     async function execCulqi() {
 
-       console.log( 'errores', app_cart.errors)
-
-       //app_cart.errors = 'demo'
-
-    //   console.log( 'errores22', app_cart.errors)
-
-
+        // The widget amount is display only: the server recomputes the total from database prices.
         let precio = Math.round((Number($("#total_amount").data('total')) * 100).toFixed(2));
         if (precio > 0) {
-            Culqi.settings({
+            CulqiPay.start({
+                publicKey: culqi_public_key,
                 title: "Productos Ecommerce",
-                currency: 'PEN',
-                description: 'Compras Ecommerce Facturador Pro',
-                amount: precio
+                amountCents: precio,
+                email: {!! json_encode(optional(Auth::user())->email) !!},
+                url: "{{route('tenant_ecommerce_culqui')}}",
+                csrf: $('meta[name="csrf-token"]').attr('content'),
+                showLoading: showPaymentLoading,
+                hideLoading: function () { swal.close(); },
+                buildData: async function (base) {
+                    const formpayment = await app_cart.getFormPaymentCash()
+
+                    base.producto = 'Compras Ecommerce Facturador Pro';
+                    base.precio = precio;
+                    base.precio_culqi = Number($("#total_amount").data('total')).toFixed(2);
+                    base.customer = JSON.stringify(formpayment.customer);
+                    base.items = JSON.stringify(getItems());
+                    base.purchase = JSON.stringify(formpayment.purchase);
+
+                    return base;
+                },
+                onSuccess: function (data) {
+                    app_cart.saveContactDataUser();
+                    app_cart.clearShoppingCart();
+                    swal({
+                        title: "Gracias por su pago!",
+                        text: "En breve le enviaremos un correo electronico con los detalles de su compra.",
+                        type: "success"
+                    }).then((x) => {
+                        askedDocument(data.order);
+                    })
+                },
+                onFailure: function (data) {
+                    swal("Pago No realizado", data.message, "error");
+                },
+                onError: function (error_data) {
+                    console.log(error_data)
+                    if (error_data.status === 422) {
+                        app_cart.errors = JSON.parse( error_data.responseText);
+                    }
+                    swal("Pago No realizado", 'Faltan completar campos', "error");
+                }
             });
-            Culqi.open();
         }
     }
 
-
-    async function culqi() {
-        if (Culqi.token) {
-
-            swal({
-                title: "Estamos hablando con su banco",
-                text: `Por favor no cierre esta ventana hasta que el proceso termine.`,
-                focusConfirm: false,
-                onOpen: () => {
-                    Swal.showLoading()
-                }
-            });
-
-            let precio = Math.round((Number($("#total_amount").data('total')).toFixed(2) * 100));
-            let precio_culqi = Number($("#total_amount").data('total')).toFixed(2);
-
-            var url = "/culqi";
-            var token = Culqi.token.id;
-            var email = Culqi.token.email;
-            var installments = Culqi.token.metadata.installments;
-
-            const formpayment = await app_cart.getFormPaymentCash()
-
-            var data = {
-                producto: 'Compras Ecommerce Facturador Pro',
-                precio: precio,
-                precio_culqi: precio_culqi,
-                token: token,
-                email: email,
-                installments: installments,
-                customer: JSON.stringify(formpayment.customer),
-                items: JSON.stringify(getItems()),
-                purchase: JSON.stringify(formpayment.purchase),
-
-            }
-
-            $.ajax({
-              url: "{{route('tenant_ecommerce_culqui')}}",
-              method: 'post',
-              headers: {
-                  'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-              },
-              data: data,
-              dataType: 'JSON',
-              success: function (data) {
-                if (data.success == true) {
-                  app_cart.saveContactDataUser();
-                  app_cart.clearShoppingCart();
-                  swal({
-                    title: "Gracias por su pago!",
-                    text: "En breve le enviaremos un correo electronico con los detalles de su compra.",
-                    type: "success"
-                  }).then((x) => {
-                    askedDocument(data.order);
-                    //window.location = "{{ route('tenant.ecommerce.index') }}";
-                  })
-                } else {
-                  const message = data.message
-                  swal("Pago No realizado", message, "error");
-                }
-              },
-              error: function (error_data) {
-                console.log(error_data)
-                if (error_data.status === 422) {
-                    app_cart.errors = JSON.parse( error_data.responseText);
-                }
-                swal("Pago No realizado", 'Faltan completar campos', "error");
-              }
-            });
-
-        } else {
-            console.log(Culqi.error);
-            swal("Pago No realizado", Culqi.error.user_message, "error");
-        }
-    };
-
     function getCustomer() {
-        let user = JSON.parse('{!! json_encode( Auth::user() ) !!}')
+        let user = {!! json_encode(Auth::user() ? Auth::user()->only(['id', 'name', 'email', 'identity_document_type_id', 'number', 'address', 'telephone']) : null) !!}
         return {
             "codigo_tipo_documento_identidad": "0",
             "numero_documento": "0",

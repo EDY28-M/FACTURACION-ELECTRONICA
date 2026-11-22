@@ -10,12 +10,17 @@ use App\Http\Controllers\Tenant\Api\ServiceController;
 
 class FeaturedProductsViewComposer
 {
+    private static $exchangeRateCache = [];
+
     public function compose($view)
     {
 
         $exchange_rate_sale = $this->getExchangeRateSale();
 
-        $view->items = Item::where([['apply_store', 1], ['internal_id','!=', null]])->get()->transform(function($row, $key) use($exchange_rate_sale){
+        $view->items = Item::with(['currency_type', 'tags'])
+            ->where([['apply_store', 1], ['internal_id','!=', null]])
+            ->get()
+            ->transform(function($row, $key) use($exchange_rate_sale){
 
             $sale_unit_price = ($row->has_igv)? $row->sale_unit_price:$row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
 
@@ -51,11 +56,13 @@ class FeaturedProductsViewComposer
     }
 
     private function getExchangeRateSale(){
+        $date = date('Y-m-d');
+        if (!array_key_exists($date, self::$exchangeRateCache)) {
+            $exchange_rate = app(ServiceController::class)->exchangeRateTest($date);
+            self::$exchangeRateCache[$date] = (is_array($exchange_rate) && array_key_exists('sale', $exchange_rate)) ? $exchange_rate['sale'] : 1;
+        }
 
-        $exchange_rate = app(ServiceController::class)->exchangeRateTest(date('Y-m-d'));
-
-        return (array_key_exists('sale', $exchange_rate)) ? $exchange_rate['sale'] : 1;
-
+        return self::$exchangeRateCache[$date];
     }
 
 }

@@ -55,6 +55,51 @@
 
 	}
 
+	// Cart entries come from localStorage, which any script on this origin can tamper with.
+	// They are rendered only through DOM text/attribute APIs, never as HTML strings.
+	function cartImageUrl(file)
+	{
+		// Fixed same-origin prefix: a value can never switch scheme or host.
+		if (typeof file !== 'string' || file === '') return null;
+		if (/[\u0000-\u001f\\]/.test(file) || /(^|\/)\.\.(\/|$)/.test(file)) return null;
+		try {
+			return '/storage/uploads/items/' + encodeURI(file);
+		} catch (e) {
+			return null;
+		}
+	}
+
+	function buildCartDropdownItem(element)
+	{
+		let $title = $('<a>').attr('href', '$').text(element.description);
+		let $info = $('<span>').addClass('cart-product-info')
+			.append($('<span>').addClass('cart-product-qty').text('1'))
+			.append(document.createTextNode(' x ' + element.sale_unit_price));
+		let $details = $('<div>').addClass('product-details')
+			.append($('<h4>').addClass('product-title').append($title))
+			.append($info);
+
+		let $image = $('<img>').attr('alt', 'product');
+		let imageUrl = cartImageUrl(element.image_small);
+		if (imageUrl) $image.attr('src', imageUrl);
+
+		let $figure = $('<figure>').addClass('product-image-container')
+			.append($('<a>').attr('href', '#').addClass('product-image').append($image));
+
+		let id = Number(element.id);
+		if (Number.isFinite(id)) {
+			let $remove = $('<a>').attr('href', '#').addClass('btn-remove').attr('title', 'Remove Product')
+				.append($('<i>').addClass('icon-cancel'));
+			$remove.on('click', function (event) {
+				event.preventDefault();
+				remove(id);
+			});
+			$figure.append($remove);
+		}
+
+		return $('<div>').addClass('product').append($details).append($figure);
+	}
+
 	function populate()
 	{
 		$(".dropdown-cart-products").empty();
@@ -66,27 +111,7 @@
 			count = array.length;
 				
 			array.forEach(element => {
-				
-				$(".dropdown-cart-products").append( `
-						<div class="product">
-							<div class="product-details">
-							<h4 class="product-title">
-								<a href="$">${element.description}</a>
-							</h4>
-							<span class="cart-product-info">
-								<span class="cart-product-qty">1</span> x ${element.sale_unit_price}
-							</span>
-							</div>
-							<figure class="product-image-container">
-								<a href="#" class="product-image">
-									<img alt="product" src="/storage/uploads/items/${element.image_small}" />
-								</a>
-								<a href="#" onclick="remove(${element.id})" class="btn-remove" title="Remove Product">
-									<i class="icon-cancel"></i>
-								</a>
-							</figure>
-						</div>` 
-					);
+				$(".dropdown-cart-products").append(buildCartDropdownItem(element));
 			});
 			
 			$(".cart-count").append(count);
