@@ -53,6 +53,7 @@ class NumberLetter
 
     public static function convertToLetter($number, $currency = '', $format = false, $decimals = '')
     {
+        $number = number_format((float) $number, 2, '.', '');
         $base_number = $number;
         $decNumberStr = '00';
         $converted = '';

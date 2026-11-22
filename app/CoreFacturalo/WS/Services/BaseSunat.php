@@ -16,8 +16,6 @@ use App\CoreFacturalo\WS\Validator\XmlErrorCodeProvider;
  */
 class BaseSunat
 {
-    const NUMBER_PATTERN = '/[^0-9]+/';
-
     /**
      * @var ZipFly
      */
@@ -90,10 +88,10 @@ class BaseSunat
      */
     protected function getErrorFromFault(\SoapFault $fault)
     {
-        $error = $this->getErrorByCode($fault->faultcode, $fault->faultstring);
+        $error = $this->getErrorByCode($fault->faultcode);
 
         if (empty($error->getMessage())) {
-            $error->setMessage(isset($fault->detail) ? $fault->detail->message : $fault->faultstring);
+            $error->setMessage($fault->detail->message ?? $fault->faultstring);
         }
 
         return $error;
@@ -101,27 +99,17 @@ class BaseSunat
 
     /**
      * @param string $code
-     * @param string $optional Intenta obtener el codigo de este parametro sino $codigo no es válido.
      *
      * @return Error
      */
-    protected function getErrorByCode($code, $optional = '')
+    protected function getErrorByCode($code)
     {
-        $error = new Error();
-        $error->setCode($code);
-        $code = preg_replace(self::NUMBER_PATTERN, '', $code);
-        $message = '';
-
-        if (empty($code) && $optional) {
-            $code = preg_replace(self::NUMBER_PATTERN, '', $optional);
+        // Recognize SOAP fault-code suffixes, never numbers embedded in message text.
+        if (is_string($code) && preg_match('/^(?:[A-Za-z_][A-Za-z0-9_.-]*:)?(?:Client|Server)\.([0-9]+)$/D', $code, $matches)) {
+            $code = $matches[1];
         }
 
-        if ($code) {
-            $message = $this->getMessageError($code);
-            $error->setCode($code);
-        }
-
-        return $error->setMessage($message);
+        return new Error($code, CdrResponse::isValidCode($code) ? $this->getMessageError($code) : '');
     }
 
     /**

@@ -34,42 +34,62 @@ class ValidateDocumentController extends Controller
 
     }
 
-    public function validateDocuments($records){
-
+    public function validateDocuments($records)
+    {
         $records_paginate = $records->paginate(config('tenant.items_per_page'));
-        // $documents = $records_paginate->getCollection();
 
-        // dd($records_paginate->getCollection());
-        
-        foreach ($records_paginate->getCollection() as $document)
-        {
-            reValidate:
-            $validate_cpe = new ValidateCpe2();
-            $response = $validate_cpe->search($document->company->number,
-                                                $document->document_type_id,
-                                                $document->series,
-                                                $document->number,
-                                                $document->date_of_issue,
-                                                $document->total
-                                            );
-
-            if ($response['success']) {
-                
-                $response_code = $response['data']['comprobante_estado_codigo'];
-                $response_description = $response['data']['comprobante_estado_descripcion'];
-
-                $message = $document->number_full.'|Código: '.$response_code.'|Mensaje: '.$response_description;
-
-                $document->message = $message; 
-                $document->state_type_sunat_description = $response_description; 
-                $document->code = $response_code; 
- 
-            } else {
-                goto reValidate;
+        foreach ($records_paginate->getCollection() as $document) {
+            $response = $this->lookupDocumentWithRetries($document);
+            if ($response === null) {
+                $document->message = $document->number_full.'|Mensaje: No se pudo consultar el estado del comprobante.';
+                $document->state_type_sunat_description = 'NO DISPONIBLE';
+                $document->code = null;
+                continue;
             }
+
+            $response_code = $response['data']['comprobante_estado_codigo'];
+            $response_description = $response['data']['comprobante_estado_descripcion'];
+            $document->message = $document->number_full.'|Código: '.$response_code.'|Mensaje: '.$response_description;
+            $document->state_type_sunat_description = $response_description;
+            $document->code = $response_code;
         }
 
         return $records_paginate;
+    }
+
+    private function lookupDocumentWithRetries($document)
+    {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            try {
+                $response = $this->lookupDocument($document);
+            } catch (\Throwable $exception) {
+                continue;
+            }
+
+            if (is_array($response) && ($response['success'] ?? false) === true
+                && isset($response['data']) && is_array($response['data'])
+                && isset($response['data']['comprobante_estado_codigo'], $response['data']['comprobante_estado_descripcion'])
+                && (is_string($response['data']['comprobante_estado_codigo']) || is_int($response['data']['comprobante_estado_codigo']))
+                && (string) $response['data']['comprobante_estado_codigo'] !== ''
+                && is_string($response['data']['comprobante_estado_descripcion'])
+                && trim($response['data']['comprobante_estado_descripcion']) !== '') {
+                return $response;
+            }
+        }
+
+        return null;
+    }
+
+    protected function lookupDocument($document)
+    {
+        return (new ValidateCpe2())->search(
+            $document->company->number,
+            $document->document_type_id,
+            $document->series,
+            $document->number,
+            $document->date_of_issue,
+            $document->total
+        );
     }
 
 
@@ -126,37 +146,44 @@ class ValidateDocumentController extends Controller
 
         $records = $this->getRecords($request)->get();
 
-        DB::connection('tenant')->transaction(function() use($records, $document_state){
-        
-            foreach ($records as $document)
-            {
-                reValidate:
-                $validate_cpe = new ValidateCpe2();
-                $response = $validate_cpe->search($document->company->number,
-                                                    $document->document_type_id,
-                                                    $document->series,
-                                                    $document->number,
-                                                    $document->date_of_issue,
-                                                    $document->total
-                                                );
-
-                if ($response['success']) {
-
-                    $response_description = mb_strtoupper($response['data']['comprobante_estado_descripcion']);
-
-                    $state_type_id = isset($document_state[$response_description]) ? $document_state[$response_description] : null;
-
-                    if($state_type_id){
-                        $document->state_type_id = $state_type_id;
-                        $document->update();
-                    }
-    
-                } else {
-                    goto reValidate;
-                }
+        $updates = [];
+        foreach ($records as $document) {
+            $response = $this->lookupDocumentWithRetries($document);
+            if ($response === null) {
+                return ['success' => false, 'message' => 'No se pudieron regularizar los estados. Intente nuevamente.'];
             }
 
-        });
+            $response_description = mb_strtoupper($response['data']['comprobante_estado_descripcion']);
+            if (isset($document_state[$response_description])) {
+                $updates[] = [
+                    'id' => $document->id,
+                    'original_state' => $document->state_type_id,
+                    'state' => $document_state[$response_description],
+                ];
+            }
+        }
+
+        try {
+            DB::connection('tenant')->transaction(function () use ($updates) {
+                $documents = Document::whereIn('id', array_column($updates, 'id'))
+                    ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+                foreach ($updates as $update) {
+                    $document = $documents->get($update['id']);
+                    if (!$document || (string) $document->state_type_id !== (string) $update['original_state']) {
+                        throw new \RuntimeException('Document state changed during lookup.');
+                    }
+                }
+                foreach ($updates as $update) {
+                    $document = $documents->get($update['id']);
+                    $document->state_type_id = $update['state'];
+                    if (!$document->save()) {
+                        throw new \RuntimeException('Unable to persist document state.');
+                    }
+                }
+            });
+        } catch (\Throwable $exception) {
+            return ['success' => false, 'message' => 'No se pudieron regularizar los estados. Intente nuevamente.'];
+        }
 
         return [
             'success' => true,

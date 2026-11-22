@@ -53,8 +53,10 @@ class QueryAllServerCommand extends Command
             $documents = Document::query()
                 ->where('send_server', 1)
                 ->where('state_type_id', '!=', '05')
-                // ->orWhere('query_status', '!=', '')
-                ->orWhere('success_query_status', false)
+                ->where(function ($query) {
+                    $query->where('success_query_status', false)
+                        ->orWhere('query_status', '!=', '');
+                })
                 ->get();
             
             foreach ($documents as $document) {

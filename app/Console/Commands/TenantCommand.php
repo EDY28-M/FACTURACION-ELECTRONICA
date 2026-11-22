@@ -6,6 +6,9 @@ use Illuminate\Console\Command;
 use App\Models\Tenant\Task;
 use Carbon\Carbon;
 use Artisan;
+use Hyn\Tenancy\Environment;
+use Hyn\Tenancy\Models\Website;
+use Throwable;
 
 class TenantCommand extends Command
 {
@@ -38,17 +41,41 @@ class TenantCommand extends Command
      * @return mixed
      */
     public function handle() {
-        foreach (Task::where('execution_time', Carbon::now()->format('H:i').':00')->get() as $task) {
-            try {
-                Artisan::call($task->class);
-                
-                $task->output = Artisan::output();
+        foreach (Website::query()->with('hostnames')->get() as $website) {
+            app(Environment::class)->tenant($website);
+            $host = optional($website->hostnames->first())->fqdn ?: (string) $website->id;
+            $this->line("Tenant: {$host}");
+
+            $tasks = Task::where('execution_time', Carbon::now()->format('H:i').':00')->get();
+
+            foreach ($tasks as $task) {
+                $class = (string) $task->class;
+
+                if (!class_exists($class)
+                    || !is_subclass_of($class, Command::class)
+                    || $class === self::class
+                    || strpos($class, 'App\\Console\\Commands\\') !== 0) {
+                    $task->output = 'Comando no permitido.';
+                    $task->save();
+                    continue;
+                }
+
+                try {
+                    $name = app($class)->getName();
+                    if (!$name) {
+                        throw new \RuntimeException('El comando no tiene nombre.');
+                    }
+
+                    Artisan::call($name);
+                    $task->output = Artisan::output();
+                } catch (Throwable $e) {
+                    $task->output = $e->getMessage();
+                }
+
                 $task->save();
             }
-            catch (\Exception $e) {
-                $task->output = $e->getMessage();
-                $task->save();
-            }
-        };
+        }
+
+        return 0;
     }
 }

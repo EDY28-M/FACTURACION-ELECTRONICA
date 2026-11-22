@@ -17,7 +17,7 @@ class WsSecurityHeader extends SoapHeader
     public function __construct($username, $password)
     {
 
-        $header_password = sprintf(self::PASSWORD_FORMAT, self::WSS_NAMESPACE, self::PASSWORD_TYPE, $password);
+        $header_password = sprintf(self::PASSWORD_FORMAT, self::WSS_NAMESPACE, self::PASSWORD_TYPE, htmlspecialchars((string) $password, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
 
         $security = new SoapVar(
             [new SoapVar(

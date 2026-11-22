@@ -63,35 +63,46 @@ class DocumentController extends Controller
 
     public function send(Request $request)
     {
-        if ($request->has('external_id')) {
-            $external_id = $request->input('external_id');
-            $document = Document::where('external_id', $external_id)->first();
-            if (!$document) {
-                throw new Exception("El documento con código externo {$external_id}, no se encuentra registrado.");
-            }
-            if ($document->group_id !== '01') {
-                throw new Exception("El tipo de documento {$document->document_type_id} es inválido, no es posible enviar.");
-            }
-            $fact = new Facturalo();
-            $fact->setDocument($document);
-            $fact->loadXmlSigned();
-            $fact->onlySenderXmlSignedBill();
-            $response = $fact->getResponse();
-            return [
-                'success' => true,
-                'data' => [
-                    'number' => $document->number_full,
-                    'filename' => $document->filename,
-                    'external_id' => $document->external_id,
-                    'state_type_id' => $document->state_type_id,
-                    'state_type_description' => $this->getStateTypeDescription($document->state_type_id),
-                ],
-                'links' => [
-                    'cdr' => $document->download_external_cdr,
-                ],
-                'response' => array_except($response, 'sent'),
-            ];
+        if (!$request->filled('external_id')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El campo external_id es obligatorio.',
+            ], 422);
         }
+
+        $external_id = $request->input('external_id');
+        $document = Document::where('external_id', $external_id)->first();
+        if (!$document) {
+            return response()->json([
+                'success' => false,
+                'message' => "El documento con código externo {$external_id}, no se encuentra registrado.",
+            ], 404);
+        }
+        if ($document->group_id !== '01') {
+            return response()->json([
+                'success' => false,
+                'message' => "El tipo de documento {$document->document_type_id} es inválido, no es posible enviar.",
+            ], 422);
+        }
+        $fact = new Facturalo();
+        $fact->setDocument($document);
+        $fact->loadXmlSigned();
+        $fact->onlySenderXmlSignedBill();
+        $response = $fact->getResponse();
+        return [
+            'success' => true,
+            'data' => [
+                'number' => $document->number_full,
+                'filename' => $document->filename,
+                'external_id' => $document->external_id,
+                'state_type_id' => $document->state_type_id,
+                'state_type_description' => $this->getStateTypeDescription($document->state_type_id),
+            ],
+            'links' => [
+                'cdr' => $document->download_external_cdr,
+            ],
+            'response' => array_except($response, 'sent'),
+        ];
     }
 
     public function storeServer(Request $request)
@@ -134,6 +145,12 @@ class DocumentController extends Controller
     public function documentCheckServer($external_id)
     {
         $document = Document::where('external_id', $external_id)->first();
+        if (!$document) {
+            return response()->json([
+                'success' => false,
+                'message' => "El documento con código externo {$external_id}, no se encuentra registrado.",
+            ], 404);
+        }
 
         if ($document->state_type_id === '05' && $document->group_id === '01') {
             $file_cdr = base64_encode($this->getStorage($document->filename, 'cdr'));
@@ -150,7 +167,7 @@ class DocumentController extends Controller
 
     private function getStateTypeDescription($id)
     {
-        return StateType::find($id)->description;
+        return optional(StateType::find($id))->description;
     }
 
     public function lists($startDate = null, $endDate = null)
@@ -170,12 +187,46 @@ class DocumentController extends Controller
 
     public function updatestatus(Request $request)
     {
-        $record = Document::whereExternal_id($request->externail_id)->first();
-        $record->state_type_id = $request->state_type_id;
+        $externalId = $request->input('external_id', $request->input('externail_id'));
+        $stateTypeId = (string) $request->input('state_type_id', '');
+
+        if (!$externalId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El external_id es obligatorio.',
+            ], 422);
+        }
+
+        if (!in_array($stateTypeId, ['03', '05', '07', '09'], true)
+            || !StateType::whereKey($stateTypeId)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Estado de comprobante no válido.',
+            ], 422);
+        }
+
+        $record = Document::where('external_id', $externalId)->first();
+
+        if (!$record) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Comprobante no encontrado.',
+            ], 404);
+        }
+
+        if (!in_array((string) $record->state_type_id, ['01', '03'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El comprobante ya tiene un estado final y no puede actualizarse por esta vía.',
+            ], 422);
+        }
+
+        $record->state_type_id = $stateTypeId;
         $record->save();
 
         return [
             'success' => true,
+            'state_type_id' => $record->state_type_id,
         ];
     }
 

@@ -32,9 +32,17 @@ class CdrResponse
      */
     public function isAccepted()
     {
+        if (!self::isValidCode($this->getCode())) {
+            return false;
+        }
         $code = intval($this->getCode());
 
         return $code === 0 || $code >= 4000;
+    }
+
+    public static function isValidCode($code): bool
+    {
+        return (is_int($code) || is_string($code)) && ctype_digit((string) $code);
     }
 
     /**

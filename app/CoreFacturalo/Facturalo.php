@@ -30,6 +30,7 @@ use App\CoreFacturalo\Helpers\Xml\XmlHash;
 use App\CoreFacturalo\WS\Signed\XmlSigned;
 use App\CoreFacturalo\Helpers\Xml\XmlFormat;
 use App\CoreFacturalo\WS\Services\BillSender;
+use App\CoreFacturalo\WS\Response\CdrResponse;
 use App\CoreFacturalo\WS\Services\ExtService;
 use App\CoreFacturalo\WS\Services\SummarySender;
 use App\CoreFacturalo\WS\Services\SunatEndpoints;
@@ -102,6 +103,16 @@ class Facturalo
 
     public function save($inputs, $skipSendDeadlineCheck = false)
     {
+        // Never trust fiscal/ownership fields from the request payload.
+        $inputs['state_type_id'] = '01';
+        if (auth()->check()) {
+            $inputs['user_id'] = auth()->id();
+        }
+        $company = Company::active();
+        if ($company) {
+            $inputs['soap_type_id'] = $company->soap_type_id;
+        }
+
         $this->actions = array_key_exists('actions', $inputs)?$inputs['actions']:[];
         $this->type = $inputs['type'];
 
@@ -734,18 +745,15 @@ class Facturalo
                 'description' => $message
             ];
 
-            $this->validationCodeResponse($code, $message);
+            $this->validationCodeResponse($code, $message, false);
 
         }
     }
 
-    public function validationCodeResponse($code, $message)
+    public function validationCodeResponse($code, $message, $hasCdr = true)
     {
-        //Errors
-        if($code === 'ERROR_CDR') {
-            return;
-        }
-        if($code === 'HTTP') {
+        // Acceptance requires a successful CDR, not just a numeric SOAP fault code.
+        if (!CdrResponse::isValidCode($code) || (!$hasCdr && ((int) $code === 0 || (int) $code >= 4000))) {
 //            $message = 'La SUNAT no responde a su solicitud, vuelva a intentarlo.';
 
             if(in_array($this->type, ['retention', 'dispatch'])){
@@ -868,7 +876,11 @@ class Facturalo
                 }
 
             } else {
-                $this->updateStateDocuments(self::VOIDED);
+                // A rejected voided communication (e.g. code 99) must not
+                // annul the documents; only an accepted communication does.
+                if ($extService->getCustomStatusCode() === 0) {
+                    $this->updateStateDocuments(self::VOIDED);
+                }
             }
 
         }
@@ -1120,7 +1132,7 @@ class Facturalo
                 $document->fill($inputs);
                 $document->save();
 
-                $document->payments()->delete();
+                $this->deleteAllPayments($document->payments);
                 $this->savePayments($document, $inputs['payments']);
 
                 $warehouse = Warehouse::where('establishment_id', auth()->user()->establishment_id)->first();

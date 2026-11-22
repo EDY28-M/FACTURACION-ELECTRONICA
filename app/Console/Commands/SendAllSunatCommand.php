@@ -80,9 +80,10 @@ class SendAllSunatCommand extends Command
             foreach ($documents as $document) {
                 try {
                     $response = DocumentController::send($document->id);
-                    
+                    $success = is_array($response) && ($response['success'] ?? false) === true;
+
                     $document->sunat_shipping_status = json_encode($response);
-                    $document->success_sunat_shipping_status = true;
+                    $document->success_sunat_shipping_status = $success;
                     $document->save();
                 }
                 catch (\Exception $e) {
@@ -90,9 +91,8 @@ class SendAllSunatCommand extends Command
                     $document->success_sunat_shipping_status = false;
 
                     $document->sunat_shipping_status = json_encode([
-                        'sucess' => false,
+                        'success' => false,
                         'message' => $e->getMessage(),
-                        'payload' => $e
                     ]);
                     
                     $document->save();

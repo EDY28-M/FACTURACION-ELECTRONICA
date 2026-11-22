@@ -72,6 +72,7 @@ class ValidateDocumentsCommand extends Command
         foreach ($documents as $document)
         {
             $count++;
+            $revalidateAttempts = 0;
             reValidate:
             $validate_cpe = new ValidateCpe2();
             $response = $validate_cpe->search($document->company->number,
@@ -110,6 +111,15 @@ class ValidateDocumentsCommand extends Command
 //                    ]);
 //                }
             } else {
+                $revalidateAttempts++;
+                if ($revalidateAttempts >= 3) {
+                    $message = $count.': '.$document->number_full.'|SUNAT no respondió tras 3 intentos.';
+                    $this->error($message);
+                    Log::warning($message);
+                    continue;
+                }
+
+                sleep(1);
                 goto reValidate;
             }
         }
