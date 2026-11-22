@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, bcmath, gd, zip, pdo_mysql, sqlite3, intl
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Lint PHP
+        run: find app modules routes config tests bootstrap -name '*.php' -not -path '*/vendor/*' -print0 | xargs -0 -n 1 php -l
+
+      - name: Unit tests
+        run: php vendor/bin/phpunit --testsuite Unit
