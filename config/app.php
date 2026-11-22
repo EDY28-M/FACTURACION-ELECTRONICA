@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'url_base' => env('APP_URL_BASE', parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
@@ -170,9 +172,6 @@ return [
         App\Providers\KardexServiceProvider::class,
         App\Providers\AnulationServiceProvider::class,
 
-        App\Providers\InventoryKardexServiceProvider::class,
-        App\Providers\InventoryAnulationServiceProvider::class,
-        App\Providers\InventoryServiceProvider::class,
 
         App\Providers\LockedEmissionProvider::class,
         App\Providers\DocumentPaymentProvider::class,
