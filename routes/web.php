@@ -176,6 +176,7 @@ if ($hostname) {
 			Route::get('items/export/barcode/last', 'Tenant\ItemController@itemLast')->name('tenant.items.last');
 
 			//Persons
+			Route::get('persons/generic-customer', 'Tenant\PersonController@genericCustomer');
 			Route::get('persons/columns', 'Tenant\PersonController@columns');
 			Route::get('persons/tables', 'Tenant\PersonController@tables');
 			Route::get('persons/{type}', 'Tenant\PersonController@index')->name('tenant.persons.index');
@@ -565,11 +566,11 @@ if ($hostname) {
 		});
 	});
 } else {
-	$systemDomain = env('APP_URL_BASE');
+	$systemDomain = config('app.url_base');
 	$groupAttributes = ($systemDomain && !in_array($systemDomain, ['localhost', '127.0.0.1', ''])) ? ['domain' => $systemDomain] : [];
 	Route::group($groupAttributes, function () {
-		Route::get('login', 'System\LoginController@showLoginForm')->name('login');
-		Route::post('login', 'System\LoginController@login');
+		Route::get('login', 'System\LoginController@showLoginForm')->name('login')->withoutMiddleware(\App\Http\Middleware\LockedAdmin::class);
+		Route::post('login', 'System\LoginController@login')->withoutMiddleware(\App\Http\Middleware\LockedAdmin::class);
 		Route::post('logout', 'System\LoginController@logout')->name('logout');
 		Route::get('phone', 'System\UserController@getPhone');
 

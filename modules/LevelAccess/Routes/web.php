@@ -11,6 +11,12 @@
 |
 */
 
-Route::prefix('levelaccess')->group(function() {
-    Route::get('/', 'LevelAccessController@index');
-});
+$hostname = app(Hyn\Tenancy\Contracts\CurrentHostname::class);
+
+if ($hostname) {
+    Route::domain($hostname->fqdn)->group(function () {
+        Route::middleware(['web', 'auth', 'locked.tenant'])->prefix('levelaccess')->group(function () {
+            Route::get('/', 'LevelAccessController@index');
+        });
+    });
+}

@@ -15,7 +15,7 @@ class CheckModule
      */
     public function handle($request, Closure $next)
     {
-        $modules = $request->user()->modules()->pluck('value')->toArray();
+        $modules = $request->user()->moduleValues();
         if(count($modules) > 0) {
             $path = explode('/', $request->path());
             if($path[0] !== '' && $path[0] !== 'dashboard') {

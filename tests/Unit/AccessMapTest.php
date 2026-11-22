@@ -20,7 +20,7 @@ class AccessMapTest extends TestCase
             'dashboard'                      => ['dashboard', null],
             'documents/create'               => ['documents', 'new_document'],
             'documents'                      => ['documents', 'list_document'],
-            'documents/records'              => ['documents', null],
+            'documents/records'              => ['documents', 'list_document'],
             'documents/not-sent'             => ['documents', 'document_not_sent'],
             'documents/regularize-shipping'  => ['documents', 'regularize_shipping'],
             'contracts/recurrent'            => ['documents', 'contracts'],
@@ -49,7 +49,7 @@ class AccessMapTest extends TestCase
         ];
 
         foreach ($cases as $path => [$module, $level]) {
-            $rule = $map->resolve($path);
+            $rule = $map->resolve($path, 'GET');
             $this->assertNotNull($rule, $path);
             $this->assertSame($module, $rule['module'], $path);
             $this->assertSame($level, $rule['level'], $path);
@@ -150,6 +150,55 @@ class AccessMapTest extends TestCase
         $this->assertTrue($map->decide('configurations/change-mode', false, ['pos'], [], false)['allowed']);
         $this->assertTrue($map->decide('documents/search/externalId/ext-1', false, ['ecommerce'], [], true)['allowed']);
         $this->assertTrue($map->decide('voided/status_masive', false, ['configuration'], [], true)['allowed']);
+    }
+
+    public function test_ajax_does_not_bypass_module_check()
+    {
+        $map = $this->map();
+
+        $denied = $map->decide('documents/delete_document', false, [], [], true);
+        $this->assertFalse($denied['allowed']);
+        $this->assertSame('module', $denied['reason']);
+
+        $this->assertFalse($map->decide('documents/send/1', false, ['purchases'], [], true)['allowed']);
+        $this->assertTrue($map->decide('documents/delete_document', false, ['documents'], [], true)['allowed']);
+        $this->assertFalse($map->decide('document_payments', false, [], [], true)['allowed']);
+        $this->assertTrue($map->decide('document_payments', false, ['documents'], [], true)['allowed']);
+    }
+
+    public function test_unmapped_mutation_is_denied()
+    {
+        $map = $this->map();
+
+        $denied = $map->decide('some/unknown/route', false, [], [], false, 'POST');
+        $this->assertFalse($denied['allowed']);
+        $this->assertSame('unmapped-mutation', $denied['reason']);
+
+        $this->assertTrue($map->decide('some/unknown/route', false, [], [], false, 'GET')['allowed']);
+    }
+
+    public function test_pos_profile_can_emit_without_listing_all_documents()
+    {
+        $map = $this->map();
+
+        $this->assertTrue($map->decide('documents', false, ['pos'], [], true, 'POST')['allowed']);
+        $this->assertTrue($map->decide('sale-notes', false, ['pos'], [], true, 'POST')['allowed']);
+        $this->assertTrue($map->decide('document_payments', false, ['pos'], [], true, 'POST')['allowed']);
+        $this->assertFalse($map->decide('documents/records', false, ['pos'], [], true, 'GET')['allowed']);
+        $this->assertFalse($map->decide('documents', false, ['purchases'], [], true, 'POST')['allowed']);
+    }
+
+    public function test_document_levels_are_method_specific()
+    {
+        $map = $this->map();
+
+        $this->assertTrue($map->decide('documents', false, ['documents'], ['new_document'], true, 'POST')['allowed']);
+        $this->assertFalse($map->decide('documents', false, ['documents'], ['list_document'], true, 'POST')['allowed']);
+        $this->assertTrue($map->decide('sale-notes', false, ['documents'], ['sale_notes'], true, 'POST')['allowed']);
+        $this->assertFalse($map->decide('sale-notes', false, ['documents'], ['new_document'], true, 'POST')['allowed']);
+        $this->assertTrue($map->decide('sale-notes', false, ['pos'], [], true, 'POST')['allowed']);
+        $this->assertFalse($map->decide('documents/records', false, ['documents'], ['new_document'], true, 'GET')['allowed']);
+        $this->assertTrue($map->decide('documents/records', false, ['documents'], ['list_document'], true, 'GET')['allowed']);
     }
 
     public function test_first_allowed_path_follows_sidebar_order()

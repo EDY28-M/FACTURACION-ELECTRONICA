@@ -20,8 +20,12 @@ class AccessMap
         foreach ($config['rules'] ?? [] as $rule) {
             $rule['segments'] = self::segments($rule['path']);
             $rule['level'] = $rule['level'] ?? null;
+            $rule['module'] = $rule['module'] ?? null;
             $rule['exact'] = (bool) ($rule['exact'] ?? false);
             $rule['ajax'] = (bool) ($rule['ajax'] ?? false);
+            $rule['modules'] = array_values(array_map('strval', $rule['modules'] ?? []));
+            $rule['methods'] = array_values(array_map('strtoupper', $rule['methods'] ?? []));
+            $rule['module_levels'] = (array) ($rule['module_levels'] ?? []);
             $this->rules[] = $rule;
         }
 
@@ -52,11 +56,16 @@ class AccessMap
     /**
      * First rule matching the path, or null when the path is not mapped.
      */
-    public function resolve(string $path): ?array
+    public function resolve(string $path, ?string $method = null): ?array
     {
         $segments = self::segments($path);
+        $method = $method === null ? null : strtoupper($method);
 
         foreach ($this->rules as $rule) {
+            if ($method !== null && $rule['methods'] && !in_array($method, $rule['methods'], true)) {
+                continue;
+            }
+
             $count = count($rule['segments']);
 
             if ($count > count($segments)) {
@@ -79,28 +88,54 @@ class AccessMap
      *
      * @return array{allowed: bool, rule: ?array, reason: string}
      */
-    public function decide(string $path, bool $isOwner, array $modules, array $levels, bool $ajax): array
+    public function decide(string $path, bool $isOwner, array $modules, array $levels, bool $ajax, string $method = 'GET'): array
     {
         if ($isOwner) {
             return ['allowed' => true, 'rule' => null, 'reason' => 'owner'];
         }
 
-        $rule = $this->resolve($path);
+        $rule = $this->resolve($path, $method);
+        $safeMethod = in_array(strtoupper($method), ['GET', 'HEAD'], true);
 
         if ($rule === null) {
+            // Legacy modules may have pages/forms without a rule, but an unknown
+            // mutation must never be allowed just because it is not mapped.
+            if (!$safeMethod) {
+                return ['allowed' => false, 'rule' => null, 'reason' => 'unmapped-mutation'];
+            }
+
             return ['allowed' => true, 'rule' => null, 'reason' => 'unmapped'];
         }
-        if ($rule['module'] === null) {
+        if ($rule['module'] === null && !$rule['modules']) {
             return ['allowed' => true, 'rule' => $rule, 'reason' => 'open'];
         }
-        if ($ajax && !$rule['ajax']) {
-            return ['allowed' => true, 'rule' => $rule, 'reason' => 'ajax-not-enforced'];
-        }
-        if (!in_array($rule['module'], $modules, true)) {
+        $allowedModules = $rule['modules'] ?: [$rule['module']];
+        $matchedModules = array_values(array_intersect($allowedModules, $modules));
+        if (!$matchedModules) {
             return ['allowed' => false, 'rule' => $rule, 'reason' => 'module'];
         }
-        if ($rule['level'] !== null && !in_array($rule['level'], $levels, true)) {
+
+        if ($rule['module_levels']) {
+            $levelSatisfied = false;
+            foreach ($matchedModules as $matchedModule) {
+                $requiredLevel = $rule['module_levels'][$matchedModule] ?? null;
+                if ($requiredLevel === null || in_array($requiredLevel, $levels, true)) {
+                    $levelSatisfied = true;
+                    break;
+                }
+            }
+
+            if (!$levelSatisfied) {
+                return ['allowed' => false, 'rule' => $rule, 'reason' => 'level'];
+            }
+        } elseif ($rule['level'] !== null && !in_array($rule['level'], $levels, true)) {
             return ['allowed' => false, 'rule' => $rule, 'reason' => 'level'];
+        }
+        // AJAX only waives the page-level gate after the module/level check:
+        // an unprivileged user must not reach a module endpoint by adding the
+        // X-Requested-With header.
+        if ($ajax && !$rule['ajax']) {
+            return ['allowed' => true, 'rule' => $rule, 'reason' => 'ajax-not-enforced'];
         }
 
         return ['allowed' => true, 'rule' => $rule, 'reason' => 'granted'];

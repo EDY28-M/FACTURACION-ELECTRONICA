@@ -60,10 +60,10 @@ class ResellerController extends Controller
 
     public function lockedAdmin(Request $request)
     {
-        // dd($request->locked_admin);
+        $validated = $this->validate($request, ['locked_admin' => 'required|boolean']);
         
         $configuration = Configuration::first();
-        $configuration->locked_admin = $request->locked_admin;
+        $configuration->locked_admin = $validated['locked_admin'];
         $configuration->save();
 
         

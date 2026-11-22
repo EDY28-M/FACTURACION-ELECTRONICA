@@ -23,14 +23,15 @@ class EnforceModuleAccess
         }
 
         $map = AccessMap::fromConfig();
-        $isOwner = $user->isOwner();
 
+        // The owner is capped by the tenant plan like everyone else (moduleValues() is already effective).
         $decision = $map->decide(
             $request->path(),
-            $isOwner,
-            $isOwner ? [] : $user->moduleValues(),
-            $isOwner ? [] : $user->levelValues(),
-            $this->wantsJson($request)
+            false,
+            $user->moduleValues(),
+            $user->levelValues(),
+            $this->wantsJson($request),
+            $request->method()
         );
 
         if ($decision['allowed']) {

@@ -16,15 +16,23 @@ class PermissionTree
      *
      * @param int[] $checkedModuleIds modules granted to the user (relevant for modules without levels)
      * @param int[] $checkedLevelIds  levels granted to the user
+     *
+     * The tree only offers what the tenant plan includes (see TenantPlan).
      */
     public static function build(array $checkedModuleIds = [], array $checkedLevelIds = []): array
     {
         $nodes = [];
+        $plan = TenantPlan::current();
 
         foreach (self::catalogue() as $module) {
+            if (!in_array((int) $module->id, $plan->moduleIds(), true)) {
+                continue;
+            }
+
             $visibleLevels = $module->levels
-                ->reject(function ($level) {
-                    return $level->value === 'catalogs';
+                ->reject(function ($level) use ($plan) {
+                    return $level->value === 'catalogs'
+                        || !in_array((int) $level->id, $plan->levelIds(), true);
                 })
                 ->sortBy('id');
             $hasChild = $visibleLevels->isNotEmpty();

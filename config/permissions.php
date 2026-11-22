@@ -19,7 +19,9 @@
 |          stay page-level only.
 |
 | Paths without any rule are allowed (and logged at debug level).
-| The tenant owner (first user) is never restricted.
+| Nobody is exempt: the owner (first user) is capped by the tenant plan (the modules/levels the
+| system admin granted the company) and every other user by their own grants within that plan.
+| See App\Support\Access\TenantPlan.
 |
 */
 
@@ -35,7 +37,17 @@ return [
         ['path' => 'documents/create_tensu', 'module' => 'documents', 'level' => 'new_document'],
         ['path' => 'documents/not-sent', 'module' => 'documents', 'level' => 'document_not_sent', 'ajax' => true],
         ['path' => 'documents/regularize-shipping', 'module' => 'documents', 'level' => 'regularize_shipping', 'ajax' => true],
+        ['path' => 'documents', 'modules' => ['documents', 'pos'], 'module_levels' => ['documents' => 'new_document'], 'methods' => ['POST'], 'exact' => true, 'ajax' => true],
+        ['path' => 'documents/records', 'module' => 'documents', 'level' => 'list_document', 'ajax' => true],
+        ['path' => 'documents/columns', 'module' => 'documents', 'level' => 'list_document', 'ajax' => true],
+        ['path' => 'documents/tables', 'module' => 'documents', 'level' => 'list_document', 'ajax' => true],
+        ['path' => 'sale-notes', 'modules' => ['documents', 'pos'], 'module_levels' => ['documents' => 'sale_notes'], 'methods' => ['POST'], 'exact' => true, 'ajax' => true],
+        ['path' => 'document_payments', 'modules' => ['documents', 'pos'], 'ajax' => true],
+        ['path' => 'sale_note_payments', 'modules' => ['documents', 'pos'], 'ajax' => true],
         ['path' => 'documents', 'module' => 'documents', 'level' => 'list_document', 'exact' => true],
+        ['path' => 'documents/search', 'module' => null],
+        ['path' => 'quotation_payments', 'module' => 'documents', 'ajax' => true],
+        ['path' => 'technical-service-payments', 'module' => 'documents', 'ajax' => true],
         ['path' => 'documents', 'module' => 'documents'],
         ['path' => 'summaries', 'module' => 'documents', 'level' => 'summary_voided', 'ajax' => true],
         ['path' => 'voided', 'module' => 'documents', 'level' => 'summary_voided', 'ajax' => true],
@@ -70,10 +82,13 @@ return [
         ['path' => 'statusOrder', 'module' => 'ecommerce', 'ajax' => true],
 
         // Clientes
+        ['path' => 'persons/import', 'module' => 'persons', 'ajax' => true],
+        ['path' => 'persons', 'module' => null],
         ['path' => 'persons/customers', 'module' => 'persons'],
         ['path' => 'person-types', 'module' => 'persons'],
 
         // Productos y servicios (includes the SUNAT product code catalogue)
+        ['path' => 'items/search', 'module' => null],
         ['path' => 'items', 'module' => 'items'],
         ['path' => 'item-sets', 'module' => 'items'],
         ['path' => 'item-lots', 'module' => 'items'],
@@ -100,6 +115,7 @@ return [
 
         // Inventario
         ['path' => 'warehouses', 'module' => 'inventory'],
+        ['path' => 'api/inventory', 'module' => 'inventory', 'ajax' => true],
         ['path' => 'inventory', 'module' => 'inventory'],
         ['path' => 'moves', 'module' => 'inventory'],
         ['path' => 'transfers', 'module' => 'inventory'],
@@ -129,6 +145,8 @@ return [
         // Reportes (includes reports/sire/*)
         ['path' => 'list-reports', 'module' => 'reports'],
         ['path' => 'reports/data-table', 'module' => null],
+        // Unpaid (accounts receivable) export is also downloaded from Finanzas and the dashboard.
+        ['path' => 'reports/no_paid', 'modules' => ['reports', 'finance', 'dashboard'], 'ajax' => true],
         ['path' => 'reports', 'module' => 'reports', 'ajax' => true],
 
         // Contabilidad
@@ -140,7 +158,38 @@ return [
         ['path' => 'income-types', 'module' => 'finance'],
         ['path' => 'income-reasons', 'module' => 'finance'],
 
+        // Shared catalog reads used by document/purchase forms.
+        ['path' => 'currency_types/records', 'module' => null],
+        ['path' => 'exchange_rates/records', 'module' => null],
+        ['path' => 'unit_types/records', 'module' => null],
+        ['path' => 'detraction_types/records', 'module' => null],
+        ['path' => 'tribute_concept_types/records', 'module' => null],
+        ['path' => 'banks/records', 'module' => null],
+        ['path' => 'bank_accounts/records', 'module' => null],
+        ['path' => 'payment_method/records', 'module' => null],
+        ['path' => 'series/records', 'module' => null],
+        ['path' => 'charge_discounts/tables', 'module' => null],
+        ['path' => 'codes/tables', 'module' => null],
+
         // Configuracion (company credentials included)
+        ['path' => 'padron', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'configurations', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'bank_accounts', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'card_brands', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'banks', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'series', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'codes', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'unit_types', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'detraction_types', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'exchange_rates', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'currency_types', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'tribute_concept_types', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'payment_method', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'payment-method-types/records', 'module' => null],
+        ['path' => 'payment-method-types', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'web-platforms', 'module' => 'items', 'ajax' => true],
+        ['path' => 'charge_discounts', 'module' => 'configuration', 'ajax' => true],
+        ['path' => 'login-page', 'module' => 'configuration', 'ajax' => true],
         ['path' => 'list-settings', 'module' => 'configuration'],
         ['path' => 'list-banks', 'module' => 'configuration'],
         ['path' => 'list-bank-accounts', 'module' => 'configuration'],
@@ -156,10 +205,14 @@ return [
         ['path' => 'list-vouchers-type', 'module' => 'configuration'],
         ['path' => 'companies', 'module' => 'configuration', 'ajax' => true],
         ['path' => 'companies/record', 'module' => null],
-        ['path' => 'companies/uploads', 'module' => null],
+        ['path' => 'companies/uploads', 'module' => 'configuration', 'ajax' => true],
         ['path' => 'catalogs', 'module' => 'configuration'],
         ['path' => 'advanced', 'module' => 'configuration'],
         ['path' => 'tasks', 'module' => 'configuration'],
+        ['path' => 'bussiness_turns/tables', 'module' => null],
+        ['path' => 'bussiness_turns/validate_hotel', 'module' => null],
+        ['path' => 'bussiness_turns/validate_hotel_guest', 'module' => null],
+        ['path' => 'bussiness_turns/validate_transports', 'module' => null],
         ['path' => 'bussiness_turns', 'module' => 'configuration'],
         ['path' => 'offline-configurations', 'module' => 'configuration'],
         ['path' => 'series-configurations', 'module' => 'configuration'],
