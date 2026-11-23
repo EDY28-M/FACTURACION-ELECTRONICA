@@ -8,6 +8,8 @@ use Modules\Treasury\Services\CashTreasuryIntegrationService;
 use Modules\Treasury\Services\ItfCalculator;
 use Modules\Treasury\Services\MovementService;
 use Modules\Treasury\Services\PaymentEvidenceService;
+use Modules\Treasury\Services\PurchaseFeeService;
+use Modules\Treasury\Services\ReceivablePayableService;
 use Modules\Treasury\Services\TaxRateRepository;
 use Modules\Treasury\Services\TransferService;
 use Modules\Treasury\Services\TreasuryBalanceService;
@@ -62,6 +64,17 @@ class TreasuryServiceProvider extends ServiceProvider
             return new CashTreasuryIntegrationService();
         });
 
+        $this->app->singleton(PurchaseFeeService::class, function () {
+            return new PurchaseFeeService();
+        });
+
+        $this->app->singleton(ReceivablePayableService::class, function ($app) {
+            return new ReceivablePayableService(
+                $app->make(TaxRateRepository::class),
+                $app->make(BancarizationChecker::class)
+            );
+        });
+
         $this->app->register(RouteServiceProvider::class);
     }
 
@@ -102,6 +115,8 @@ class TreasuryServiceProvider extends ServiceProvider
             MovementService::class,
             TransferService::class,
             CashTreasuryIntegrationService::class,
+            PurchaseFeeService::class,
+            ReceivablePayableService::class,
         ];
     }
 }

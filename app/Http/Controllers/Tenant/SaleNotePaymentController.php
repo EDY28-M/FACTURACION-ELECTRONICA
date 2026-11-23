@@ -42,7 +42,7 @@ class SaleNotePaymentController extends Controller
 
     public function document($sale_note_id)
     {
-        $sale_note = SaleNote::find($sale_note_id);
+        $sale_note = SaleNote::whereTypeUser()->findOrFail($sale_note_id);
 
         $total_paid = round(collect($sale_note->payments)->sum('payment'), 2);
         $total = $sale_note->total;

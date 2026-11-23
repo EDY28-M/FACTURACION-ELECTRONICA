@@ -43,6 +43,14 @@ if ($hostname) {
                 Route::get('payment-evidences/tables', 'PaymentEvidenceController@tables');
                 Route::get('payment-evidences/{type}/{id}', 'PaymentEvidenceController@show');
                 Route::post('payment-evidences/{type}/{id}', 'PaymentEvidenceController@store');
+
+                // Phase 3: Receivables & payables schedule, aging, and alerts
+                Route::get('receivables-payables', 'ReceivablePayableController@index')
+                    ->name('tenant.treasury.receivables_payables.index');
+                Route::get('receivables-payables/tables', 'ReceivablePayableController@tables');
+                Route::get('receivables-payables/records', 'ReceivablePayableController@records');
+                Route::post('receivables-payables/purchase-fees/{purchase}', 'ReceivablePayableController@storePurchaseFees');
+                Route::delete('receivables-payables/purchase-fees/{purchase}', 'ReceivablePayableController@deletePurchaseFees');
             });
         });
     });

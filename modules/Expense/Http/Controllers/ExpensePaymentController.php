@@ -18,6 +18,7 @@ class ExpensePaymentController extends Controller
 
     public function records($expense_id)
     {
+        Expense::whereTypeUser()->findOrFail($expense_id);
         $records = ExpensePayment::where('expense_id', $expense_id)->get();
 
         return new ExpensePaymentCollection($records);
@@ -33,7 +34,7 @@ class ExpensePaymentController extends Controller
 
     public function Expense($expense_id)
     {
-        $expense = Expense::find($expense_id);
+        $expense = Expense::whereTypeUser()->findOrFail($expense_id);
 
         $total_paid = collect($expense->payments)->sum('payment');
         $total = $expense->total;
@@ -53,12 +54,30 @@ class ExpensePaymentController extends Controller
     {
         $id = $request->input('id');
 
-        DB::connection('tenant')->transaction(function () use ($id, $request) {
+        return DB::connection('tenant')->transaction(function () use ($id, $request) {
 
-            $record = ExpensePayment::firstOrNew(['id' => $id]);
-            $record->fill($request->all());
-            
-            if($request->expense_method_type_id == 1){
+            if ($id) {
+                $record = ExpensePayment::lockForUpdate()->findOrFail($id);
+                $expense = Expense::whereTypeUser()->lockForUpdate()->findOrFail($record->expense_id);
+            } else {
+                $expense = Expense::whereTypeUser()
+                    ->lockForUpdate()
+                    ->findOrFail($request->input('expense_id'));
+                $record = new ExpensePayment();
+                $record->expense_id = $expense->id;
+            }
+
+            if ((string) $expense->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se puede registrar pagos en un gasto anulado.',
+                ], 422);
+            }
+
+            $record->fill($request->except(['id', 'expense_id']));
+            $record->expense_id = $expense->id;
+
+            if ($request->expense_method_type_id == 1) {
                 $request['payment_destination_id'] = 'cash';
             }
 
@@ -66,23 +85,33 @@ class ExpensePaymentController extends Controller
             $this->createGlobalPayment($record, $request->all());
             $this->saveFiles($record, $request, 'expenses');
 
+            return [
+                'success' => true,
+                'message' => ($id) ? 'Pago editado con éxito' : 'Pago registrado con éxito'
+            ];
         });
-
-        return [
-            'success' => true,
-            'message' => ($id)?'Pago editado con éxito':'Pago registrado con éxito'
-        ];
     }
 
     public function destroy($id)
     {
-        $item = ExpensePayment::findOrFail($id);
-        $item->delete();
+        return DB::connection('tenant')->transaction(function () use ($id) {
+            $item = ExpensePayment::lockForUpdate()->findOrFail($id);
+            $expense = Expense::whereTypeUser()->lockForUpdate()->findOrFail($item->expense_id);
 
-        return [
-            'success' => true,
-            'message' => 'Pago eliminado con éxito'
-        ];
+            if ((string) $expense->state_type_id === '11') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pueden eliminar pagos de un gasto anulado.',
+                ], 422);
+            }
+
+            $item->delete();
+
+            return [
+                'success' => true,
+                'message' => 'Pago eliminado con éxito'
+            ];
+        });
     }
  
 

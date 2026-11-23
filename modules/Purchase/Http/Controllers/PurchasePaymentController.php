@@ -33,7 +33,7 @@ class PurchasePaymentController extends Controller
 
     public function purchase($purchase_id)
     {
-        $purchase = Purchase::find($purchase_id);
+        $purchase = Purchase::whereTypeUser()->findOrFail($purchase_id);
 
         $total_paid = collect($purchase->payments)->sum('payment');
         $total = $purchase->total;

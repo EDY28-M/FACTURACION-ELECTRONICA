@@ -134,6 +134,54 @@ class TreasuryAccessTest extends TestCase
         }
     }
 
+    public function test_treasury_module_can_reuse_existing_payment_endpoints_while_unrelated_modules_remain_denied(): void
+    {
+        $map = $this->map();
+        $paymentPaths = [
+            'document_payments/tables',
+            'document_payments/records/1',
+            'sale_note_payments/tables',
+            'purchase-payments/tables',
+            'expense-payments/tables',
+        ];
+
+        foreach ($paymentPaths as $path) {
+            $rule = $map->resolve($path, 'GET');
+            $this->assertNotNull($rule, "Missing rule for {$path}");
+            $this->assertTrue($rule['ajax'], "AJAX must be enforced for {$path}");
+            $this->assertContains('treasury', $rule['modules'], "Treasury must be allowed on {$path}");
+
+            $this->assertTrue($map->decide($path, false, ['treasury'], [], true, 'GET')['allowed'], "Treasury user denied on {$path}");
+            $this->assertFalse($map->decide($path, false, ['inventory'], [], true, 'GET')['allowed'], "Unrelated module allowed on {$path}");
+        }
+
+        // Treasury-only users MUST be denied on admin/export document_payments sub-routes
+        foreach (['document_payments/initialize_balance', 'document_payments/report/2026-01-01/2026-01-31'] as $restricted) {
+            $rule = $map->resolve($restricted, 'GET');
+            $this->assertNotNull($rule, "Missing rule for {$restricted}");
+            $this->assertTrue($rule['ajax']);
+            $this->assertFalse($map->decide($restricted, false, ['treasury'], [], true, 'GET')['allowed'], "Treasury must be denied on {$restricted}");
+            $this->assertTrue($map->decide($restricted, false, ['documents'], [], true, 'GET')['allowed'], "Documents must remain allowed on {$restricted}");
+            $this->assertTrue($map->decide($restricted, false, ['pos'], [], true, 'GET')['allowed'], "POS must remain allowed on {$restricted}");
+        }
+
+        // Verify Phase 3 receivables-payables routes are strictly gated under treasury
+        foreach ([
+            ['treasury/receivables-payables', 'GET'],
+            ['treasury/receivables-payables/tables', 'GET'],
+            ['treasury/receivables-payables/records', 'GET'],
+            ['treasury/receivables-payables/purchase-fees/1', 'POST'],
+            ['treasury/receivables-payables/purchase-fees/1', 'DELETE'],
+        ] as [$path, $method]) {
+            $rule = $map->resolve($path, $method);
+            $this->assertNotNull($rule, "Missing rule for {$method} {$path}");
+            $this->assertSame('treasury', $rule['module']);
+            $this->assertTrue($rule['ajax']);
+            $this->assertFalse($map->decide($path, false, ['documents', 'purchases', 'finance'], [], true, $method)['allowed']);
+            $this->assertTrue($map->decide($path, false, ['treasury'], [], true, $method)['allowed']);
+        }
+    }
+
     public function test_tenant_plan_omitting_treasury_blocks_treasury_even_for_owner(): void
     {
         $prevContainer = Container::getInstance();

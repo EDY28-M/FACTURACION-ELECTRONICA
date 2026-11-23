@@ -7,15 +7,21 @@ use App\Models\Tenant\Establishment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Log;
+use Modules\Treasury\Services\ReceivablePayableService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 
 class DashboardController extends Controller
 {
     private $balanceService;
+    private $receivablePayableService;
 
-    public function __construct(TreasuryBalanceService $balanceService)
-    {
+    public function __construct(
+        TreasuryBalanceService $balanceService,
+        ?ReceivablePayableService $receivablePayableService = null
+    ) {
         $this->balanceService = $balanceService;
+        $this->receivablePayableService = $receivablePayableService;
     }
 
     public function index()
@@ -57,6 +63,38 @@ class DashboardController extends Controller
             'date_start' => $dates['date_start'],
             'date_end' => $dates['date_end'],
         ]);
+
+        $summary['alerts'] = array_merge($summary['alerts'] ?? [], [
+            'overdue_installments_count' => 0,
+            'due_soon_installments_count' => 0,
+            'unbancarized_payments_count' => 0,
+            'unbancarized_obligations_count' => 0,
+        ]);
+
+        if ($this->receivablePayableService !== null) {
+            try {
+                $user = auth()->user();
+                $isAdmin = $user !== null && ($user->type ?? null) === 'admin';
+                $alertFilters = [
+                    'establishment_id' => !$isAdmin
+                        ? ($user && !empty($user->establishment_id) ? (int) $user->establishment_id : 0)
+                        : (!empty($validated['establishment_id']) ? (int) $validated['establishment_id'] : null),
+                    'user_id' => !$isAdmin ? ($user ? (int) $user->id : null) : null,
+                    'is_admin' => $isAdmin,
+                    'currency_type_id' => $validated['currency_type_id'] ?? null,
+                    'date_start' => $dates['date_start'],
+                    'date_end' => $dates['date_end'],
+                ];
+
+                $rpAlerts = $this->receivablePayableService->getAlerts($alertFilters);
+                $summary['alerts']['overdue_installments_count'] = (int) ($rpAlerts['summary']['overdue_count'] ?? 0);
+                $summary['alerts']['due_soon_installments_count'] = (int) ($rpAlerts['summary']['due_soon_count'] ?? 0);
+                $summary['alerts']['unbancarized_payments_count'] = (int) ($rpAlerts['summary']['unbancarized_payments_count'] ?? 0);
+                $summary['alerts']['unbancarized_obligations_count'] = (int) ($rpAlerts['summary']['unbancarized_count'] ?? 0);
+            } catch (\Throwable $e) {
+                Log::warning('Treasury dashboard alerts failed', ['error' => $e->getMessage()]);
+            }
+        }
 
         return response()->json([
             'success' => true,

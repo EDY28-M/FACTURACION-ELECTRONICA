@@ -251,7 +251,14 @@ class SaleNote extends ModelTenant
     public function scopeWhereTypeUser($query)
     {
         $user = auth()->user();
-        return (($user->type ?? null) === 'seller') ? $query->where('user_id', $user->id) : null;
+        if (!$user) {
+            return $query->whereRaw('1 = 0');
+        }
+        if (!isset($user->type) && !isset($user->id)) {
+            return null;
+        }
+
+        return (($user->type ?? null) === 'admin') ? null : $query->where('user_id', $user->id ?? 0);
     }
 
     

@@ -2,25 +2,36 @@
 
 namespace Tests\Unit\Treasury;
 
+use App\Http\Controllers\Tenant\DocumentPaymentController;
 use App\Models\Tenant\BankAccount;
 use App\Models\Tenant\Cash;
 use App\Models\Tenant\Document;
 use App\Models\Tenant\DocumentPayment;
+use App\Models\Tenant\Purchase;
 use Illuminate\Config\Repository;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Database\Capsule\Manager;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Facade;
+use Modules\Expense\Http\Controllers\ExpensePaymentController;
+use Modules\Expense\Http\Requests\ExpensePaymentRequest;
+use Modules\Expense\Models\Expense;
+use Modules\Expense\Models\ExpensePayment;
 use Modules\Pos\Models\CashTransaction;
+use Modules\Treasury\Http\Controllers\DashboardController;
 use Modules\Treasury\Http\Controllers\MovementController;
 use Modules\Treasury\Http\Controllers\PaymentEvidenceController;
+use Modules\Treasury\Http\Controllers\ReceivablePayableController;
 use Modules\Treasury\Http\Controllers\TransferController;
 use Modules\Treasury\Http\Requests\StoreMovementRequest;
 use Modules\Treasury\Http\Requests\StorePaymentEvidenceRequest;
+use Modules\Treasury\Http\Requests\StorePurchaseFeesRequest;
 use Modules\Treasury\Http\Requests\StoreTransferRequest;
 use Modules\Treasury\Http\Requests\VoidMovementRequest;
 use Modules\Treasury\Models\TreasuryMovement;
@@ -28,8 +39,11 @@ use Modules\Treasury\Services\BancarizationChecker;
 use Modules\Treasury\Services\ItfCalculator;
 use Modules\Treasury\Services\MovementService;
 use Modules\Treasury\Services\PaymentEvidenceService;
+use Modules\Treasury\Services\PurchaseFeeService;
+use Modules\Treasury\Services\ReceivablePayableService;
 use Modules\Treasury\Services\TaxRateRepository;
 use Modules\Treasury\Services\TransferService;
+use Modules\Treasury\Services\TreasuryBalanceService;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -111,15 +125,17 @@ class TreasuryControllerSecurityTest extends TestCase
 
         $this->db = $database->connection('tenant');
 
-        foreach ([Document::class, DocumentPayment::class] as $model) {
+        foreach ([Document::class, DocumentPayment::class, Purchase::class, Expense::class, ExpensePayment::class] as $model) {
             $model::addGlobalScope('controller-security-fixture', function ($query) {
                 $query->setEagerLoads([]);
             });
         }
 
         foreach ([
+            'companies (id integer primary key autoincrement, soap_type_id text)',
             'banks (id integer primary key autoincrement, description text)',
             'establishments (id integer primary key autoincrement, description text)',
+            'persons (id integer primary key autoincrement, type text null, name text, number text null)',
             'cat_currency_types (id text primary key, description text, symbol text, active integer)',
             'users (id integer primary key autoincrement, name text, type text, establishment_id integer null)',
             'bank_accounts (id integer primary key autoincrement, bank_id integer, description text, number text, currency_type_id text, cci text null, status integer, initial_balance numeric, show_in_documents integer, account_type text, pcge_account text null, itf_exempt integer, establishment_id integer null)',
@@ -129,8 +145,12 @@ class TreasuryControllerSecurityTest extends TestCase
             'treasury_tax_rates (id integer primary key autoincrement, tax text, code text null, rate numeric null, amount numeric null, min_operation numeric null, valid_from text, valid_to text null, legal_reference text, created_at text null, updated_at text null)',
             'treasury_movements (id integer primary key autoincrement, establishment_id integer, date text, kind text, direction integer, destination_type text, destination_id integer, currency_type_id text, amount numeric, exchange_rate_purchase numeric null, exchange_rate_sale numeric null, exchange_rate_used numeric null, amount_pen numeric, payment_method_type_id text null, sunat_payment_code text null, operation_number text null, counterparty_person_id integer null, counterparty_document text null, counterparty_name text null, treasury_concept_id integer null, description text, transfer_group text null, related_movement_id integer null, source_type text null, source_id integer null, reconciled_at text null, bank_statement_line_id integer null, state text, voided_at text null, voided_by integer null, void_reason text null, user_id integer, created_at text null, updated_at text null)',
             'payment_evidences (id integer primary key autoincrement, payable_type text, payable_id integer, sunat_payment_code text, operation_number text null, bank_id integer null, bank_account_id integer null, operation_date text, payer_or_beneficiary_document text null, payer_or_beneficiary_name text null, third_party_payment integer, third_party_reported_to_sunat integer, bancarization_exception text null, created_at text null, updated_at text null)',
-            'documents (id integer primary key autoincrement, user_id integer, state_type_id text, currency_type_id text, exchange_rate_sale numeric, total numeric, customer text null, created_at text null, updated_at text null)',
+            'documents (id integer primary key autoincrement, user_id integer, customer_id integer null, establishment_id integer null, state_type_id text, document_type_id text null, series text null, number text null, date_of_issue text null, currency_type_id text, exchange_rate_sale numeric, total numeric, customer text null, created_at text null, updated_at text null)',
             'document_payments (id integer primary key autoincrement, document_id integer, date_of_payment text, payment_method_type_id text, has_card integer, card_brand_id text null, reference text null, change numeric null, payment numeric)',
+            'purchases (id integer primary key autoincrement, user_id integer, supplier_id integer, establishment_id integer, state_type_id text, document_type_id text, series text, number text, date_of_issue text, date_of_due text null, total numeric, currency_type_id text, exchange_rate_sale numeric, total_canceled integer default 0)',
+            'purchase_fees (id integer primary key autoincrement, purchase_id integer, date text, currency_type_id text, amount numeric, created_at text null, updated_at text null)',
+            'expenses (id integer primary key autoincrement, user_id integer, supplier_id integer, establishment_id integer, state_type_id text, number text, date_of_issue text, total numeric, currency_type_id text, exchange_rate_sale numeric)',
+            'expense_payments (id integer primary key autoincrement, expense_id integer, date_of_payment text, expense_method_type_id integer, has_card integer default 0, card_brand_id text null, reference text null, payment numeric)',
             'cash_transactions (id integer primary key autoincrement, cash_id integer, payment_method_type_id text null, date text null, description text null, payment numeric)',
             'global_payments (id integer primary key autoincrement, soap_type_id text null, destination_id integer, destination_type text, payment_id integer, payment_type text, user_id integer null, created_at text null, updated_at text null)',
         ] as $table) {
@@ -407,5 +427,172 @@ class TreasuryControllerSecurityTest extends TestCase
         $nonTransferResp = $trfController->void($voidReq, $manual['movement']->id);
         $this->assertSame(422, $nonTransferResp->getStatusCode());
         $this->assertSame('active', TreasuryMovement::find($manual['movement']->id)->state);
+    }
+
+    public function test_receivable_payable_controller_enforces_non_admin_scoping_and_purchase_fee_ownership(): void
+    {
+        $this->db->table('persons')->insert([
+            ['id' => 1, 'type' => 'customers', 'name' => 'Cliente 1', 'number' => '20100000001'],
+            ['id' => 2, 'type' => 'suppliers', 'name' => 'Proveedor 1', 'number' => '20200000002'],
+        ]);
+        $this->db->table('purchases')->insert([
+            ['id' => 100, 'user_id' => 2, 'supplier_id' => 2, 'establishment_id' => 1, 'state_type_id' => '01', 'document_type_id' => '01', 'series' => 'F001', 'number' => '100', 'date_of_issue' => '2026-11-01', 'date_of_due' => '2026-11-30', 'total' => 500.00, 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 3.75],
+            ['id' => 101, 'user_id' => 3, 'supplier_id' => 2, 'establishment_id' => 2, 'state_type_id' => '01', 'document_type_id' => '01', 'series' => 'F002', 'number' => '101', 'date_of_issue' => '2026-11-01', 'date_of_due' => '2026-11-30', 'total' => 800.00, 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 3.75],
+        ]);
+
+        $repo = new TaxRateRepository();
+        $rpService = new ReceivablePayableService($repo, new BancarizationChecker($repo));
+        $feeService = new PurchaseFeeService();
+        $controller = new ReceivablePayableController($rpService, $feeService);
+
+        // Seller #2 (est 1): tables() only returns est 1, and records() ignores establishment_id=2 spoof
+        $this->auth->currentUser = $this->makeUser(2, 'seller', 1, ['treasury']);
+        $tables = $controller->tables()->getData(true);
+        $this->assertSame([1], array_column($tables['establishments'], 'id'));
+
+        $makeValidatedRequest = function (array $params): Request {
+            return new class($params) extends Request {
+                public function __construct(array $params)
+                {
+                    parent::__construct($params);
+                }
+
+                public function validate(array $rules, ...$args)
+                {
+                    return app('validator')->make($this->all(), $rules)->validate();
+                }
+            };
+        };
+
+        $recordsData = $controller->records($makeValidatedRequest([
+            'establishment_id' => 2,
+            'as_of_date' => '2026-11-20',
+        ]))->getData(true);
+        $this->assertTrue($recordsData['success']);
+        $this->assertSame([100], array_column($recordsData['data']['payables']['rows'], 'id'));
+
+        // Seller #2 gets 403 trying to store or delete purchase_fees on Seller #3's purchase #101
+        $feeReq = new class(['fees' => [['date' => '2026-11-25', 'amount' => 500.00]]]) extends StorePurchaseFeesRequest {
+            private $payload;
+            public function __construct(array $payload) { $this->payload = $payload; }
+            public function validated($key = null, $default = null) { return $this->payload; }
+        };
+        $this->assertSame(403, $controller->storePurchaseFees($feeReq, 101)->getStatusCode());
+        $this->assertSame(403, $controller->deletePurchaseFees(101)->getStatusCode());
+
+        // Seller #2 succeeds on own purchase #100
+        $this->assertSame(200, $controller->storePurchaseFees($feeReq, 100)->getStatusCode());
+        $this->assertSame(200, $controller->deletePurchaseFees(100)->getStatusCode());
+
+        // Admin succeeds on Seller #3's purchase #101 and sees both purchases in records()
+        $this->auth->currentUser = $this->makeUser(1, 'admin', 1, ['treasury']);
+        $this->assertSame(200, $controller->storePurchaseFees($feeReq, 101)->getStatusCode());
+        $adminRecords = $controller->records($makeValidatedRequest(['as_of_date' => '2026-11-20']))->getData(true);
+        $this->assertCount(2, $adminRecords['data']['payables']['rows']);
+
+        // Non-admin with null establishment_id MUST receive empty establishments (never fail open)
+        $this->auth->currentUser = $this->makeUser(9, 'seller', 0, ['treasury']);
+        $this->auth->currentUser->establishment_id = null;
+        $nullEstTables = $controller->tables()->getData(true);
+        $this->assertSame([], $nullEstTables['establishments']);
+        $this->assertArrayNotHasKey('customers', $nullEstTables);
+        $this->assertArrayNotHasKey('suppliers', $nullEstTables);
+    }
+
+    public function test_dashboard_controller_isolates_phase3_alerts_for_non_admin_and_admin(): void
+    {
+        $this->db->table('persons')->insert([
+            ['id' => 1, 'type' => 'suppliers', 'name' => 'Proveedor A', 'number' => '20100000001'],
+        ]);
+        // Two overdue purchases above bancarization threshold: #200 owned by seller #2 (est 1), #201 owned by seller #3 (est 2)
+        $pastDate = date('Y-m-d', strtotime('-15 days'));
+        $this->db->table('purchases')->insert([
+            ['id' => 200, 'user_id' => 2, 'supplier_id' => 1, 'establishment_id' => 1, 'state_type_id' => '01', 'document_type_id' => '01', 'series' => 'F001', 'number' => '200', 'date_of_issue' => $pastDate, 'date_of_due' => $pastDate, 'total' => 2500.00, 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 3.75],
+            ['id' => 201, 'user_id' => 3, 'supplier_id' => 1, 'establishment_id' => 2, 'state_type_id' => '01', 'document_type_id' => '01', 'series' => 'F002', 'number' => '201', 'date_of_issue' => $pastDate, 'date_of_due' => $pastDate, 'total' => 2600.00, 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 3.75],
+        ]);
+
+        $repo = new TaxRateRepository();
+        $rpService = new ReceivablePayableService($repo, new BancarizationChecker($repo));
+        $dashboardController = new DashboardController(new TreasuryBalanceService(), $rpService);
+
+        $makeReq = function (array $params): Request {
+            return new class($params) extends Request {
+                public function __construct(array $params)
+                {
+                    parent::__construct($params);
+                }
+
+                public function validate(array $rules, ...$args)
+                {
+                    return app('validator')->make($this->all(), $rules)->validate();
+                }
+            };
+        };
+
+        // Seller #2 (est 1) sees only 1 overdue installment even when requesting establishment_id=2
+        $this->auth->currentUser = $this->makeUser(2, 'seller', 1, ['treasury']);
+        $sellerSummary = $dashboardController->records($makeReq(['establishment_id' => 2]))->getData(true);
+        $this->assertSame(1, $sellerSummary['data']['alerts']['overdue_installments_count']);
+        $this->assertSame(1, $sellerSummary['data']['alerts']['unbancarized_obligations_count']);
+        $this->assertSame(0, $sellerSummary['data']['alerts']['unbancarized_payments_count']);
+
+        // Admin sees both overdue installments unfiltered, and 1 when filtering establishment_id=2
+        $this->auth->currentUser = $this->makeUser(1, 'admin', 1, ['treasury']);
+        $adminAll = $dashboardController->records($makeReq([]))->getData(true);
+        $this->assertSame(2, $adminAll['data']['alerts']['overdue_installments_count']);
+
+        $adminEst2 = $dashboardController->records($makeReq(['establishment_id' => 2]))->getData(true);
+        $this->assertSame(1, $adminEst2['data']['alerts']['overdue_installments_count']);
+    }
+
+    public function test_expense_payment_controller_enforces_ownership_and_voided_guard_and_initialize_balance_requires_admin(): void
+    {
+        $this->db->table('companies')->insert(['id' => 1, 'soap_type_id' => '02']);
+        $this->db->table('expenses')->insert([
+            ['id' => 50, 'user_id' => 3, 'supplier_id' => 1, 'establishment_id' => 2, 'state_type_id' => '05', 'number' => 'G-50', 'date_of_issue' => '2026-11-01', 'total' => 300.00, 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 3.75],
+            ['id' => 51, 'user_id' => 2, 'supplier_id' => 1, 'establishment_id' => 1, 'state_type_id' => '11', 'number' => 'G-51', 'date_of_issue' => '2026-11-01', 'total' => 200.00, 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 3.75],
+        ]);
+        $this->db->table('expense_payments')->insert([
+            ['id' => 50, 'expense_id' => 50, 'date_of_payment' => '2026-11-02', 'expense_method_type_id' => 2, 'payment' => 100.00],
+        ]);
+
+        $expenseController = new ExpensePaymentController();
+        $this->auth->currentUser = $this->makeUser(2, 'seller', 1, ['treasury']);
+
+        // Seller #2 cannot read, inspect, pay, or delete Seller #3's Expense #50
+        foreach ([
+            fn () => $expenseController->records(50),
+            fn () => $expenseController->Expense(50),
+            fn () => $expenseController->destroy(50),
+            fn () => $expenseController->store(ExpensePaymentRequest::create('/expense-payments', 'POST', [
+                'expense_id' => 50,
+                'date_of_payment' => '2026-11-05',
+                'expense_method_type_id' => 2,
+                'payment_destination_id' => 1,
+                'payment' => 50.00,
+            ])),
+        ] as $call) {
+            try {
+                $call();
+                $this->fail('Expected ModelNotFoundException for non-admin accessing another user expense');
+            } catch (ModelNotFoundException $e) {
+                $this->assertNotEmpty($e->getMessage());
+            }
+        }
+
+        // Seller #2 gets 422 when trying to pay own voided Expense #51
+        $voidResp = $expenseController->store(ExpensePaymentRequest::create('/expense-payments', 'POST', [
+            'expense_id' => 51,
+            'date_of_payment' => '2026-11-05',
+            'expense_method_type_id' => 2,
+            'payment_destination_id' => 1,
+            'payment' => 50.00,
+        ]));
+        $this->assertSame(422, $voidResp->getStatusCode());
+
+        // DocumentPaymentController::initialize_balance() denies non-admin with 403
+        $docController = new DocumentPaymentController();
+        $initResp = $docController->initialize_balance();
+        $this->assertSame(403, $initResp->getStatusCode());
     }
 }

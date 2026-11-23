@@ -156,8 +156,9 @@ class PaymentEvidenceService
             ? $evidence->sunat_payment_code
             : ($extracted['defaults']['sunat_payment_code'] ?? null);
 
+        $evaluatedAmount = max($extracted['amount'], $extracted['obligation_total'] ?? 0.0);
         $bancarization = $this->bancarizationChecker->evaluate(
-            $extracted['amount'],
+            $evaluatedAmount,
             $extracted['currency_type_id'],
             $extracted['defaults']['operation_date'],
             $extracted['is_cash'],
@@ -177,6 +178,7 @@ class PaymentEvidenceService
             'defaults' => $extracted['defaults'],
             'context' => [
                 'amount' => Money::round($extracted['amount']),
+                'obligation_total' => $extracted['obligation_total'] !== null ? Money::round($extracted['obligation_total']) : null,
                 'currency_type_id' => $extracted['currency_type_id'],
                 'bancarization' => $bancarization,
             ],
@@ -219,9 +221,10 @@ class PaymentEvidenceService
         }
 
         $extracted = $this->extractPayableContext($payable);
+        $evaluatedAmount = max($extracted['amount'], $extracted['obligation_total'] ?? 0.0);
         $isCash = in_array($sunatCode, ['008', '009'], true);
         $bancarization = $this->bancarizationChecker->evaluate(
-            $extracted['amount'],
+            $evaluatedAmount,
             $extracted['currency_type_id'],
             $operationDate,
             $isCash,
@@ -319,6 +322,7 @@ class PaymentEvidenceService
 
             return [
                 'amount' => (float) $payable->amount,
+                'obligation_total' => null,
                 'currency_type_id' => (string) ($payable->currency_type_id ?: 'PEN'),
                 'exchange_rate_sale' => $payable->exchange_rate_sale ? (float) $payable->exchange_rate_sale : null,
                 'is_cash' => $isCash,
@@ -374,6 +378,7 @@ class PaymentEvidenceService
 
         $currencyTypeId = 'PEN';
         $exchangeRateSale = null;
+        $obligationTotal = null;
         $docNumber = null;
         $docName = null;
 
@@ -387,6 +392,9 @@ class PaymentEvidenceService
                     if (!empty($parent->exchange_rate_sale)) {
                         $exchangeRateSale = (float) $parent->exchange_rate_sale;
                     }
+                    if (isset($parent->total) && is_numeric($parent->total) && (float) $parent->total > 0) {
+                        $obligationTotal = (float) $parent->total;
+                    }
                     [$docNumber, $docName] = $this->extractCounterpartyFromParent($parent);
                 }
             } catch (\Throwable $e) {
@@ -396,6 +404,7 @@ class PaymentEvidenceService
 
         return [
             'amount' => $amount,
+            'obligation_total' => $obligationTotal,
             'currency_type_id' => $currencyTypeId,
             'exchange_rate_sale' => $exchangeRateSale,
             'is_cash' => $isCash,

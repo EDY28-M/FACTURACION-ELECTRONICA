@@ -188,6 +188,7 @@ Vue.component('tenant-treasury-dashboard-index', (resolve, reject) => require.en
 Vue.component('tenant-treasury-accounts-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/accounts/index.vue')), reject, 'tenant-treasury-accounts-index'));
 Vue.component('tenant-treasury-movements-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/movements/index.vue')), reject, 'tenant-treasury-movements'));
 Vue.component('tenant-treasury-transfers-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/transfers/index.vue')), reject, 'tenant-treasury-transfers'));
+Vue.component('tenant-treasury-receivables-payables-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/receivables_payables/index.vue')), reject, 'tenant-treasury-receivables-payables'));
 Vue.component('tenant-treasury-payment-evidence-dialog', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/partials/PaymentEvidenceDialog.vue')), reject, 'tenant-treasury-evidence'));
 
 

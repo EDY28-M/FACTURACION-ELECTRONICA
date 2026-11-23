@@ -646,6 +646,9 @@
                             <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'transfers') ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('tenant.treasury.transfers.index') }}">Transferencias</a>
                             </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'receivables-payables') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.receivables_payables.index') }}">Cobranzas y pagos</a>
+                            </li>
                         </ul>
                     </li>
                     @endif

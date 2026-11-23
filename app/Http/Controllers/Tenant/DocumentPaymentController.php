@@ -38,7 +38,7 @@ class DocumentPaymentController extends Controller
 
     public function document($document_id)
     {
-        $document = Document::find($document_id);
+        $document = Document::whereTypeUser()->findOrFail($document_id);
 
         $total_paid = collect($document->payments)->sum('payment');
         $total = $document->total;
@@ -115,6 +115,12 @@ class DocumentPaymentController extends Controller
 
     public function initialize_balance()
     {
+        if ((auth()->user()->type ?? null) !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tiene permiso para realizar esta acción.',
+            ], 403);
+        }
 
         DB::connection('tenant')->transaction(function (){
 

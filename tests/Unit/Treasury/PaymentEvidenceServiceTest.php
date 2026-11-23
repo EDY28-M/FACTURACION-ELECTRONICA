@@ -259,4 +259,52 @@ class PaymentEvidenceServiceTest extends TestCase
         $this->assertSame(0, PaymentEvidence::where('payable_type', DocumentPayment::class)->where('payable_id', 1)->count());
         $this->assertSame(1, PaymentEvidence::where('payable_type', DocumentPayment::class)->where('payable_id', 2)->count());
     }
+
+    public function test_enforces_bancarization_against_parent_obligation_total_for_partial_cash_payments(): void
+    {
+        $service = $this->makeService();
+
+        // Parent invoice total = 3000 PEN (>= 2000 threshold), partial payment = 500 PEN (< 2000)
+        $this->db->table('documents')->insert([
+            'id' => 50,
+            'state_type_id' => '05',
+            'currency_type_id' => 'PEN',
+            'exchange_rate_sale' => 3.75,
+            'total' => 3000.00,
+        ]);
+        $this->db->table('document_payments')->insert([
+            'id' => 50,
+            'document_id' => 50,
+            'date_of_payment' => '2026-11-21',
+            'payment_method_type_id' => '01',
+            'has_card' => 0,
+            'reference' => null,
+            'payment' => 500.00,
+        ]);
+
+        $defaults = $service->getWithDefaults('document_payment', 50);
+        $this->assertSame(500.0, $defaults['context']['amount']);
+        $this->assertSame(3000.0, $defaults['context']['obligation_total']);
+        $this->assertTrue($defaults['context']['bancarization']['exceeds_threshold']);
+        $this->assertTrue($defaults['context']['bancarization']['requires_exception_or_bank_method']);
+
+        // Rejects cash code 009 without art. 6 exception even though partial payment is 500 < 2000
+        try {
+            $service->upsert('document_payment', 50, [
+                'sunat_payment_code' => '009',
+                'operation_date' => '2026-11-21',
+            ]);
+            $this->fail('Expected ValidationException for partial cash payment on obligation >= bancarization threshold.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('bancarization_exception', $e->errors());
+        }
+
+        // Accepts valid bank transfer code 003
+        $saved = $service->upsert('document_payment', 50, [
+            'sunat_payment_code' => '003',
+            'operation_number' => 'OP-PARTIAL-50',
+            'operation_date' => '2026-11-21',
+        ]);
+        $this->assertSame('003', $saved->sunat_payment_code);
+    }
 }

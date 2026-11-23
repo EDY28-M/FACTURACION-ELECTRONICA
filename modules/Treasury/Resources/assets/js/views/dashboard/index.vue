@@ -195,7 +195,7 @@
                 </div>
 
                 <!-- Negative balance alerts -->
-                <div v-if="alerts.negative_accounts.length > 0" class="alert alert-warning mb-4" role="alert">
+                <div v-if="alerts.negative_accounts.length > 0" class="alert alert-warning mb-3" role="alert">
                     <strong>Alertas de saldo negativo ({{ alerts.negative_accounts.length }}):</strong>
                     <ul class="mb-0 mt-1 pl-3">
                         <li v-for="alert in alerts.negative_accounts" :key="alert.type + '-' + alert.id">
@@ -203,6 +203,32 @@
                             <strong>{{ formatSignedCurrency(alert.balance, alert.currency_type_id) }} (saldo negativo)</strong>
                         </li>
                     </ul>
+                </div>
+
+                <!-- Phase 3 Receivables & Payables Alerts -->
+                <div
+                    v-if="hasReceivablePayableAlerts"
+                    class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap mb-4"
+                    role="alert"
+                >
+                    <div class="mr-3">
+                        <strong>Alertas de cobranzas y pagos:</strong>
+                        <span v-if="alerts.overdue_installments_count > 0" class="badge badge-danger ml-2">
+                            {{ alerts.overdue_installments_count }} cuota(s) vencida(s)
+                        </span>
+                        <span v-if="alerts.due_soon_installments_count > 0" class="badge badge-warning ml-2">
+                            {{ alerts.due_soon_installments_count }} por vencer (7 días)
+                        </span>
+                        <span v-if="alerts.unbancarized_payments_count > 0" class="badge badge-danger ml-2">
+                            {{ alerts.unbancarized_payments_count }} con pago(s) sin evidencia
+                        </span>
+                        <span v-else-if="alerts.unbancarized_obligations_count > 0" class="badge badge-info ml-2">
+                            {{ alerts.unbancarized_obligations_count }} requieren bancarización
+                        </span>
+                    </div>
+                    <a class="btn btn-sm btn-outline-dark mt-2 mt-md-0" href="/treasury/receivables-payables">
+                        Ver cobranzas y pagos
+                    </a>
                 </div>
 
                 <!-- Bank Accounts Table -->
@@ -322,8 +348,22 @@ export default {
                 negative_accounts: [],
                 overdue_detractions: [],
                 missing_exchange_rate: false,
+                overdue_installments_count: 0,
+                due_soon_installments_count: 0,
+                unbancarized_payments_count: 0,
+                unbancarized_obligations_count: 0,
             },
         }
+    },
+    computed: {
+        hasReceivablePayableAlerts() {
+            return (
+                Number(this.alerts.overdue_installments_count || 0) > 0 ||
+                Number(this.alerts.due_soon_installments_count || 0) > 0 ||
+                Number(this.alerts.unbancarized_payments_count || 0) > 0 ||
+                Number(this.alerts.unbancarized_obligations_count || 0) > 0
+            )
+        },
     },
     created() {
         this.loadTables()
@@ -360,7 +400,18 @@ export default {
                     this.bankAccounts = data.bank_accounts || []
                     this.openCashes = data.open_cashes || []
                     this.totals = Object.assign({}, this.totals, data.totals || {})
-                    this.alerts = data.alerts || { negative_accounts: [], overdue_detractions: [], missing_exchange_rate: false }
+                    this.alerts = Object.assign(
+                        {
+                            negative_accounts: [],
+                            overdue_detractions: [],
+                            missing_exchange_rate: false,
+                            overdue_installments_count: 0,
+                            due_soon_installments_count: 0,
+                            unbancarized_payments_count: 0,
+                            unbancarized_obligations_count: 0,
+                        },
+                        data.alerts || {}
+                    )
                 })
                 .catch(() => {
                     if (seq !== this.requestSeq) {
