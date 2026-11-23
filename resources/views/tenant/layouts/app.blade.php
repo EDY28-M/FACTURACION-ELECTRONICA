@@ -102,9 +102,7 @@
 
     </style>
 
-    @if ($vc_company->favicon)
-    <link rel="shortcut icon" type="image/png" href="{{ asset($vc_company->favicon) }}"/>
-    @endif
+    @include('tenant.layouts.partials.favicon')
 
     {{-- Mark server-rendered head styles so tenant-shell.js only diffs these (never Vue/Element-injected styles) --}}
     <script>

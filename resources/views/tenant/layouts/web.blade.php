@@ -73,6 +73,7 @@
             margin: 0;
         }
     </style>
+    @include('tenant.layouts.partials.favicon')
 </head>
 <body class="body-web">
 <div id="main-wrapper">

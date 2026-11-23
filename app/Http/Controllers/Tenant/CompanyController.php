@@ -125,11 +125,12 @@ class CompanyController extends Controller
 
         if ($type === 'favicon') {
             $filename = time() . '.' . $ext;
-            $file->storeAs($spec['dir'], $filename);
+            // Public visibility: the web server (not only the PHP user) must be able to read these files.
+            $file->storeAs($spec['dir'], $filename, ['visibility' => 'public']);
             $name = 'storage/uploads/favicons/' . $filename;
         } else {
             $name = $type . '_' . $company->number . '.' . $ext;
-            $file->storeAs($spec['dir'], $name);
+            $file->storeAs($spec['dir'], $name, ['visibility' => 'public']);
         }
 
         $company->{$type} = $name;

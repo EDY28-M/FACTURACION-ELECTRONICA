@@ -273,6 +273,32 @@
         });
     }
 
+    // Keep the tab icon in sync with the fetched page (e.g. after the favicon is changed).
+    function syncFavicon(doc) {
+        if (!doc || !doc.head || !document.head) return;
+        var incoming = doc.head.querySelector('link[rel~="icon"]');
+        if (!incoming) return;
+        var href = (incoming.getAttribute("href") || "").trim();
+        if (!href) return;
+        window.setTenantFavicon(href);
+    }
+
+    window.setTenantFavicon = function(href) {
+        var current = document.head.querySelectorAll('link[rel~="icon"]');
+        for (var i = 0; i < current.length; i++) {
+            if (current[i].getAttribute("href") === href) return;
+        }
+        for (var j = 0; j < current.length; j++) {
+            if (current[j].parentNode) current[j].parentNode.removeChild(current[j]);
+        }
+        var link = document.createElement("link");
+        link.setAttribute("rel", "icon");
+        link.setAttribute("type", "image/png");
+        link.setAttribute("href", href);
+        link.setAttribute("data-tenant-favicon", "1");
+        document.head.appendChild(link);
+    };
+
     function syncHtmlClasses(doc, pathname) {
         var incomingHtml = doc ? doc.documentElement : null;
         var shouldBeNewInvoice = (incomingHtml && incomingHtml.classList.contains("newinvoice")) || isNewInvoicePath(pathname);
@@ -475,6 +501,7 @@
                 }
 
                 syncHeadStylesheets(doc);
+                syncFavicon(doc);
 
                 if (doc.title) {
                     document.title = doc.title;

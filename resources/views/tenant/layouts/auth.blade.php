@@ -41,6 +41,7 @@
         </style>
     @endif --}}
 
+    @include('tenant.layouts.partials.favicon')
 </head>
 
 <body class="tn-auth">

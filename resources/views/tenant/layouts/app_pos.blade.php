@@ -69,6 +69,7 @@
 
     </style>
 
+    @include('tenant.layouts.partials.favicon')
 </head>
 <body class="pr-0">
     <section class="body">

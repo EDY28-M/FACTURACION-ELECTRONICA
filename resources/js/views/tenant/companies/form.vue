@@ -308,6 +308,10 @@
                     this.form[response.type] = response.name
                     this.brokenImages = Object.assign({}, this.brokenImages, {[response.type]: false})
                     this.uploadStamp = Date.now()
+                    // Show the new favicon in the browser tab right away, without a reload.
+                    if (response.type === 'favicon' && typeof window.setTenantFavicon === 'function') {
+                        window.setTenantFavicon('/' + response.name)
+                    }
                 } else {
                     this.$message({message:'Error al subir el archivo', type: 'error'})
                 }

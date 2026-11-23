@@ -157,6 +157,11 @@ class ViewServiceProvider extends ServiceProvider
             'App\Http\ViewComposers\Tenant\CompanyViewComposer'
         );
 
+        view()->composer(
+            'tenant.layouts.partials.favicon',
+            'App\Http\ViewComposers\Tenant\FaviconViewComposer'
+        );
+
        /*view()->composer(
             'ecommerce',
             'Modules\Ecommerce\Http\ViewComposers\TakeProductoViewComposer'

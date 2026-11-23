@@ -2,7 +2,7 @@
     "/js/vendor.js": "/js/vendor.js?id=a5ab75686c7af2c90494",
     "/js/app.js": "/js/app.js?id=9d935d4b40fddcfcbd18",
     "/css/auth.css": "/css/auth.css?id=348fd93b55ffc4bb2894",
-    "/js/manifest.js": "/js/manifest.js?id=68e4c5542a65391c49da",
+    "/js/manifest.js": "/js/manifest.js?id=50d1f6d8f58205d52999",
     "/js/chunk-tenant-payment-method-index.be5d8334f36b.js": "/js/chunk-tenant-payment-method-index.be5d8334f36b.js?id=85e770ac0dbc57207a87",
     "/js/chunk-tenant-payment-method-index.be5d8334f36b.js.map": "/js/chunk-tenant-payment-method-index.be5d8334f36b.js.map?id=726fcf10ea333a505adf",
     "/js/chunk-tenant-documents-invoice.12e76aca4461.js": "/js/chunk-tenant-documents-invoice.12e76aca4461.js?id=e0a619c68d12d165a18b",
@@ -375,7 +375,7 @@
     "/js/chunk-tenant-account-export.ad2195f0d50f.js.map": "/js/chunk-tenant-account-export.ad2195f0d50f.js.map?id=4cf38a07b3abb57fc860",
     "/js/app.js.map": "/js/app.js.map?id=4cd9a1d57a653c20c591",
     "/js/vendor.js.map": "/js/vendor.js.map?id=d652103537ea9f4f641c",
-    "/js/manifest.js.map": "/js/manifest.js.map?id=ada593939838a5f4e0b3",
+    "/js/manifest.js.map": "/js/manifest.js.map?id=6c5796297bd4de737831",
     "/css/app.css": "/css/app.css?id=6c574b6c32c81119dd6c",
     "/css/pos.css": "/css/pos.css?id=9c105e2f69212bb2c983",
     "/js/chunk-tenant-documentary-files.bac39884fa37.js": "/js/chunk-tenant-documentary-files.bac39884fa37.js?id=93f715f0eec827178173",
@@ -1271,5 +1271,9 @@
     "/js/chunk-system-configuration.b62a248fe05d.js": "/js/chunk-system-configuration.b62a248fe05d.js?id=d6fbf1a72a163f7e77a6",
     "/js/chunk-system-configuration.b62a248fe05d.js.map": "/js/chunk-system-configuration.b62a248fe05d.js.map?id=617bea8616f404585b42",
     "/js/chunk-system-configuration-token.96cfd81d4f25.js": "/js/chunk-system-configuration-token.96cfd81d4f25.js?id=87472fc71190b7a2e4cf",
-    "/js/chunk-system-configuration-token.96cfd81d4f25.js.map": "/js/chunk-system-configuration-token.96cfd81d4f25.js.map?id=b05ae26b11d82036b801"
+    "/js/chunk-system-configuration-token.96cfd81d4f25.js.map": "/js/chunk-system-configuration-token.96cfd81d4f25.js.map?id=b05ae26b11d82036b801",
+    "/js/chunk-tenant-companies-form.5c25838a681f.js": "/js/chunk-tenant-companies-form.5c25838a681f.js?id=c6784e76bfe026dd13d4",
+    "/js/chunk-tenant-companies-form.5c25838a681f.js.map": "/js/chunk-tenant-companies-form.5c25838a681f.js.map?id=0883aa54963825fa3a31",
+    "/js/chunk-tenant-companies-form.98762f70e125.js": "/js/chunk-tenant-companies-form.98762f70e125.js?id=b9181d819f6cb67fdca2",
+    "/js/chunk-tenant-companies-form.98762f70e125.js.map": "/js/chunk-tenant-companies-form.98762f70e125.js.map?id=fb53d19c6f8d01630a24"
 }
