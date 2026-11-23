@@ -27,6 +27,10 @@ use Modules\Treasury\Support\Money;
  * - Formato 1.2: Detalle de los movimientos de la cuenta corriente (BankAccount / account currency)
  *
  * PLE TXT (010100/010200) export is intentionally NOT implemented here (deferred pending RS 286-2009 Anexo 2).
+ *
+ * The `correlative` column is a per-report sequence (000001..N, ordered by date/origin/id) generated each time the
+ * report is built. It is NOT a stable CUO: re-running the report after new movements are recorded can renumber
+ * rows, and it must not be used as a persistent accounting key until the PLE export defines real CUOs.
  * Never calls auth() internally; callers must pass explicit $scope.
  */
 class CashBookReport
@@ -45,6 +49,8 @@ class CashBookReport
         '759' => 'Otros ingresos de gestión',
         '772' => 'Rendimientos ganados',
     ];
+
+    public const MISSING_PAYMENT_CODE_LABEL = 'Sin código';
 
     private $balanceService;
 
@@ -125,6 +131,7 @@ class CashBookReport
         $totalDebit = 0.0;
         $totalCredit = 0.0;
         $seq = 1;
+        $convertedRows = 0;
 
         foreach ($rawEntries as $entry) {
             $debit = $entry['direction'] >= 0 ? Money::round($entry['amount']) : 0.0;
@@ -132,6 +139,9 @@ class CashBookReport
             $running = Money::round($running + $debit - $credit);
             $totalDebit = Money::round($totalDebit + $debit);
             $totalCredit = Money::round($totalCredit + $credit);
+            if (!empty($entry['converted'])) {
+                $convertedRows++;
+            }
 
             $rows[] = [
                 'correlative' => str_pad((string) $seq++, 6, '0', STR_PAD_LEFT),
@@ -154,6 +164,10 @@ class CashBookReport
 
         $periodNet = Money::round($totalDebit - $totalCredit);
         $closingBalance = Money::round($openingBalance + $periodNet);
+        [$roundingDrift, $reconciliationDifference] = $this->splitRoundingDrift(
+            Money::round($closingBalance + $cnAdjustmentsTotal - $systemClosingBalance),
+            $convertedRows
+        );
 
         $company = $this->loadCompanyMeta();
         $establishmentLabel = $this->resolveEstablishmentLabel($effectiveEstId);
@@ -183,7 +197,9 @@ class CashBookReport
                 'closing_balance' => $closingBalance,
                 'credit_note_adjustments' => $cnAdjustmentsTotal,
                 'system_closing_balance' => $systemClosingBalance,
-                'reconciliation_difference' => Money::round($closingBalance + $cnAdjustmentsTotal - $systemClosingBalance),
+                'converted_rows' => $convertedRows,
+                'rounding_drift' => $roundingDrift,
+                'reconciliation_difference' => $reconciliationDifference,
             ],
         ];
     }
@@ -222,12 +238,28 @@ class CashBookReport
         $targetCurrency = strtoupper((string) ($account->currency_type_id ?: 'PEN'));
         $dayBeforeStart = Carbon::parse($dateStart)->subDay()->format('Y-m-d');
 
-        $openingBalance = (float) $this->balanceService->getBankAccountBalanceAsOf($bankAccountId, $dayBeforeStart)['balance'];
-        $systemClosingBalance = (float) $this->balanceService->getBankAccountBalanceAsOf($bankAccountId, $dateEnd)['balance'];
+        // Non-admins reading a SHARED account (establishment_id IS NULL) only see rows that belong to their own
+        // establishment: global payments are matched through the parent document's establishment_id (parents
+        // without an establishment cannot be attributed and stay visible) and treasury movements through their
+        // own establishment_id, the same rule the cash flow uses. Admins and establishment-owned accounts are
+        // unchanged. Balances stay account-level, so payments hidden from the rows are reported separately in
+        // totals.out_of_scope_net to keep the reconciliation honest.
+        $restrictToEstablishment = (!$isAdmin && $account->establishment_id === null) ? $scopeEstId : null;
+
+        $openingBalance = (float) $this->balanceService->getBankAccountBalanceAsOf($bankAccountId, $dayBeforeStart, $restrictToEstablishment)['balance'];
+        $systemClosingBalance = (float) $this->balanceService->getBankAccountBalanceAsOf($bankAccountId, $dateEnd, $restrictToEstablishment)['balance'];
 
         $rawEntries = array_merge(
-            $this->loadGlobalPaymentRowsForBankAccount($bankAccountId, $targetCurrency, $dateStart, $dateEnd),
-            $this->loadTreasuryMovementRows(BankAccount::class, [$bankAccountId], $dateStart, $dateEnd, null, $targetCurrency)
+            $this->loadGlobalPaymentRows(
+                BankAccount::class,
+                [$bankAccountId],
+                $targetCurrency,
+                $dateStart,
+                $dateEnd,
+                false,
+                $restrictToEstablishment !== null ? ['establishment_id' => $restrictToEstablishment, 'invert' => false] : null
+            ),
+            $this->loadTreasuryMovementRows(BankAccount::class, [$bankAccountId], $dateStart, $dateEnd, $restrictToEstablishment, $targetCurrency)
         );
 
         usort($rawEntries, [$this, 'compareEntries']);
@@ -241,6 +273,8 @@ class CashBookReport
         $totalDebit = 0.0;
         $totalCredit = 0.0;
         $seq = 1;
+        $convertedRows = 0;
+        $missingCodeRows = 0;
 
         foreach ($rawEntries as $entry) {
             $evKey = $entry['payable_type'] . ':' . $entry['payable_id'];
@@ -252,7 +286,17 @@ class CashBookReport
                 $entry['payment_method_type_id'] ?? null,
                 $paymentMethodSunatMap
             );
-            $sunatLabel = BancarizationChecker::SUNAT_PAYMENT_CODES[$sunatCode] ?? 'Otros medios de pago';
+            // No silent default: a row without a resolvable SUNAT code is flagged so the accountant completes it.
+            $missingCode = $sunatCode === null;
+            $sunatLabel = $missingCode
+                ? self::MISSING_PAYMENT_CODE_LABEL
+                : (BancarizationChecker::SUNAT_PAYMENT_CODES[$sunatCode] ?? 'Otros medios de pago');
+            if ($missingCode) {
+                $missingCodeRows++;
+            }
+            if (!empty($entry['converted'])) {
+                $convertedRows++;
+            }
 
             $counterparty = $this->firstNonEmpty([
                 $evidence['payer_or_beneficiary_name'] ?? null,
@@ -277,6 +321,7 @@ class CashBookReport
                 'date' => $entry['date'],
                 'sunat_payment_code' => $sunatCode,
                 'sunat_payment_label' => $sunatLabel,
+                'missing_payment_code' => $missingCode,
                 'description' => $entry['description'],
                 'counterparty' => $counterparty,
                 'transaction_number' => $transactionNumber,
@@ -293,10 +338,32 @@ class CashBookReport
         $cnEnd = $this->balanceService->getBankAccountCreditNoteAdjustments($bankAccountId, $dateEnd);
         $cnBefore = $this->balanceService->getBankAccountCreditNoteAdjustments($bankAccountId, $dayBeforeStart);
         $periodCnAdjustments = $this->diffCreditNoteAdjustments($cnEnd, $cnBefore);
+
+        $outOfScopeNet = 0.0;
+        if ($restrictToEstablishment !== null) {
+            [$periodCnAdjustments, $hiddenCnAdjustments] = $this->partitionCreditNotesByEstablishment($periodCnAdjustments, $restrictToEstablishment);
+            $hiddenPayments = $this->loadGlobalPaymentRows(
+                BankAccount::class,
+                [$bankAccountId],
+                $targetCurrency,
+                $dateStart,
+                $dateEnd,
+                false,
+                ['establishment_id' => $restrictToEstablishment, 'invert' => true]
+            );
+            foreach ($hiddenPayments as $hidden) {
+                $outOfScopeNet += $hidden['direction'] * $hidden['amount'];
+            }
+            $outOfScopeNet = Money::round($outOfScopeNet + array_sum(array_column($hiddenCnAdjustments, 'amount')));
+        }
         $cnAdjustmentsTotal = Money::round((float) array_sum(array_column($periodCnAdjustments, 'amount')));
 
         $periodNet = Money::round($totalDebit - $totalCredit);
         $closingBalance = Money::round($openingBalance + $periodNet);
+        [$roundingDrift, $reconciliationDifference] = $this->splitRoundingDrift(
+            Money::round($closingBalance + $cnAdjustmentsTotal + $outOfScopeNet - $systemClosingBalance),
+            $convertedRows
+        );
 
         $company = $this->loadCompanyMeta();
         $bankName = $account->bank ? (string) $account->bank->description : 'Entidad financiera';
@@ -316,6 +383,7 @@ class CashBookReport
                 'period_label' => $this->formatPeriodLabel($dateStart, $dateEnd),
                 'date_start' => $dateStart,
                 'date_end' => $dateEnd,
+                'scoped_to_establishment' => $restrictToEstablishment,
             ],
             'opening_balance' => $openingBalance,
             'rows' => $rows,
@@ -327,7 +395,11 @@ class CashBookReport
                 'closing_balance' => $closingBalance,
                 'credit_note_adjustments' => $cnAdjustmentsTotal,
                 'system_closing_balance' => $systemClosingBalance,
-                'reconciliation_difference' => Money::round($closingBalance + $cnAdjustmentsTotal - $systemClosingBalance),
+                'converted_rows' => $convertedRows,
+                'rounding_drift' => $roundingDrift,
+                'out_of_scope_net' => $outOfScopeNet,
+                'missing_payment_code_count' => $missingCodeRows,
+                'reconciliation_difference' => $reconciliationDifference,
             ],
         ];
     }
@@ -352,7 +424,8 @@ class CashBookReport
         string $targetCurrency,
         string $dateStart,
         string $dateEnd,
-        bool $includeCashTransactions
+        bool $includeCashTransactions,
+        ?array $establishmentScope = null
     ): array {
         if (!$this->hasTable('global_payments')) {
             return [];
@@ -436,6 +509,21 @@ class CashBookReport
             if ($spec['has_changed']) {
                 $q->where('par.changed', false);
             }
+            if ($establishmentScope !== null) {
+                $hasParentEstablishment = $this->hasColumn($spec['parent'], 'establishment_id');
+                if ($establishmentScope['invert']) {
+                    // Out of scope = the parent belongs to ANOTHER establishment; unattributable parents are never hidden.
+                    if (!$hasParentEstablishment) {
+                        continue;
+                    }
+                    $q->whereNotNull('par.establishment_id')->where('par.establishment_id', '!=', $establishmentScope['establishment_id']);
+                } elseif ($hasParentEstablishment) {
+                    $q->where(function ($w) use ($establishmentScope) {
+                        $w->where('par.establishment_id', $establishmentScope['establishment_id'])
+                            ->orWhereNull('par.establishment_id');
+                    });
+                }
+            }
 
             $select = [
                 'gp.id as gp_id',
@@ -511,6 +599,7 @@ class CashBookReport
                     'sort_id' => (int) $row->gp_id,
                     'direction' => $spec['direction'],
                     'amount' => Money::round($converted),
+                    'converted' => $sourceCur !== $targetCurrency,
                     'description' => $description,
                     'pcge_code' => $spec['pcge'],
                     'pcge_name' => self::PCGE_NAMES[$spec['pcge']] ?? $spec['pcge'],
@@ -529,7 +618,7 @@ class CashBookReport
         }
 
         // CashTransaction (Cash POS only)
-        if ($includeCashTransactions && $this->hasTable('cash_transactions')) {
+        if ($includeCashTransactions && $establishmentScope === null && $this->hasTable('cash_transactions')) {
             $txQuery = DB::connection('tenant')
                 ->table('global_payments as gp')
                 ->join('cash_transactions as ct', 'ct.id', '=', 'gp.payment_id')
@@ -706,7 +795,85 @@ class CashBookReport
             ]);
         }
 
+        // Defense in depth: the FormRequest enforces the same limit, but the service can be called directly.
+        $maxDays = self::maxRangeDays();
+        if (Carbon::parse($dateStart)->diffInDays(Carbon::parse($dateEnd)) > $maxDays) {
+            throw ValidationException::withMessages([
+                'date_end' => ['El rango máximo permitido es de ' . $maxDays . ' días.'],
+            ]);
+        }
+
         return [$dateStart, $dateEnd];
+    }
+
+    /**
+     * Max days allowed between date_start and date_end (config treasury.reports.max_range_days, default 366).
+     */
+    public static function maxRangeDays(): int
+    {
+        $configured = (int) config('treasury.reports.max_range_days', 366);
+
+        return $configured > 0 ? $configured : 366;
+    }
+
+    /**
+     * Separates a pure rounding drift from a real reconciliation difference.
+     *
+     * Rows are rounded one by one while the balance service rounds per aggregate, so converted (USD) rows can differ
+     * by a few cents. When the raw difference is within tolerance x converted rows it is reported as rounding_drift
+     * (aggregate - sum of rounded rows) and reconciliation_difference is 0.
+     *
+     * @return array{0: float, 1: float} [rounding_drift, reconciliation_difference]
+     */
+    private function splitRoundingDrift(float $rawDifference, int $convertedRows): array
+    {
+        $rawDifference = Money::round($rawDifference);
+        if ($rawDifference == 0.0 || $convertedRows <= 0) {
+            return [0.0, $rawDifference];
+        }
+
+        $tolerance = (float) config('treasury.reconciliation.rounding_tolerance', 0.01);
+        if (abs($rawDifference) <= $tolerance * $convertedRows + 0.000001) {
+            return [Money::round(-$rawDifference), 0.0];
+        }
+
+        return [0.0, $rawDifference];
+    }
+
+    /**
+     * Splits credit-note adjustment items by the establishment of the affected document. Documents of another
+     * establishment go to the second list; documents without establishment are kept visible.
+     *
+     * @return array{0: array, 1: array} [visible, hidden]
+     */
+    private function partitionCreditNotesByEstablishment(array $items, int $establishmentId): array
+    {
+        if (empty($items) || !$this->hasTable('documents') || !$this->hasColumn('documents', 'establishment_id')) {
+            return [$items, []];
+        }
+
+        $docIds = array_values(array_unique(array_map(function ($item) {
+            return (int) $item['document_id'];
+        }, $items)));
+        $establishmentByDoc = [];
+        foreach (array_chunk($docIds, 500) as $chunk) {
+            foreach (DB::connection('tenant')->table('documents')->whereIn('id', $chunk)->get(['id', 'establishment_id']) as $row) {
+                $establishmentByDoc[(int) $row->id] = $row->establishment_id !== null ? (int) $row->establishment_id : null;
+            }
+        }
+
+        $visible = [];
+        $hidden = [];
+        foreach ($items as $item) {
+            $docEst = $establishmentByDoc[(int) $item['document_id']] ?? null;
+            if ($docEst !== null && $docEst !== $establishmentId) {
+                $hidden[] = $item;
+            } else {
+                $visible[] = $item;
+            }
+        }
+
+        return [$visible, $hidden];
     }
 
     private function resolveScopedCashIds(?int $establishmentId, ?int $cashId, ?int $userId = null): ?array
@@ -792,7 +959,7 @@ class CashBookReport
         ?string $movementCode,
         ?string $paymentMethodTypeId,
         array $paymentMethodSunatMap
-    ): string {
+    ): ?string {
         foreach ([$evidenceCode, $movementCode] as $candidate) {
             $trimmed = $candidate !== null ? trim($candidate) : '';
             if ($trimmed !== '' && isset(BancarizationChecker::SUNAT_PAYMENT_CODES[$trimmed])) {
@@ -807,7 +974,8 @@ class CashBookReport
             }
         }
 
-        return '003';
+        // No fallback: guessing a medio de pago (the old '003') would put a wrong SUNAT code in a legal book.
+        return null;
     }
 
     private function loadEvidenceBatch(array $entries): array

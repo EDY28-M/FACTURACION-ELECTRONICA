@@ -8,6 +8,7 @@ use App\Models\Tenant\Company;
 use App\Models\Tenant\Establishment;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Modules\Treasury\Exports\CashBookFormat11Export;
@@ -17,6 +18,7 @@ use Modules\Treasury\Http\Requests\CashBookReportRequest;
 use Modules\Treasury\Http\Requests\CashFlowReportRequest;
 use Modules\Treasury\Services\CashBookReport;
 use Modules\Treasury\Services\CashFlowService;
+use Modules\Treasury\Support\CashSelector;
 
 /**
  * Treasury Phase 6 Reports controller (Real & Projected Cash Flow, Libro Caja y Bancos 1.1 & 1.2).
@@ -134,7 +136,7 @@ class ReportController extends Controller
         return view('treasury::reports.cash_book');
     }
 
-    public function cashBookTables(): JsonResponse
+    public function cashBookTables(?Request $request = null): JsonResponse
     {
         $scope = $this->scope(auth()->user());
         $isAdmin = $scope['is_admin'];
@@ -143,7 +145,7 @@ class ReportController extends Controller
 
         $establishments = $this->scopedEstablishments($isAdmin, $userEstId);
         $bankAccounts = $this->scopedBankAccounts($isAdmin, $userEstId);
-        $cashes = $this->scopedCashes($isAdmin, $userEstId, $userId);
+        $cashes = $this->scopedCashes($isAdmin, $userEstId, $userId, CashSelector::filtersFrom($request ? $request->all() : null));
 
         return response()->json([
             'establishments' => $establishments,
@@ -255,41 +257,9 @@ class ReportController extends Controller
         })->values()->all();
     }
 
-    private function scopedCashes(bool $isAdmin, int $userEstId, int $userId): array
+    private function scopedCashes(bool $isAdmin, int $userEstId, int $userId, array $filters = []): array
     {
-        if (!$isAdmin && ($userEstId <= 0 || $userId <= 0)) {
-            return [];
-        }
-
-        $query = Cash::with('user')
-            ->orderBy('state', 'desc')
-            ->orderBy('date_opening', 'desc')
-            ->orderBy('id', 'desc');
-
-        if (!$isAdmin) {
-            $query->where('user_id', $userId);
-        }
-
-        return $query->get()->filter(function ($row) use ($isAdmin, $userEstId) {
-            if ($isAdmin) {
-                return true;
-            }
-            $cashEstId = ($row->user && $row->user->establishment_id) ? (int) $row->user->establishment_id : null;
-
-            return $cashEstId === null || $cashEstId === $userEstId;
-        })->map(function ($row) {
-            $owner = $row->user ? $row->user->name : ('Usuario #' . $row->user_id);
-            $ref = $row->reference_number ? " ({$row->reference_number})" : '';
-            $stateLabel = $row->state ? 'Abierta' : 'Cerrada';
-
-            return [
-                'id' => (int) $row->id,
-                'description' => "Caja POS{$ref} - {$owner} [{$stateLabel}]",
-                'state' => (bool) $row->state,
-                'user_id' => (int) $row->user_id,
-                'establishment_id' => ($row->user && $row->user->establishment_id) ? (int) $row->user->establishment_id : null,
-            ];
-        })->values()->all();
+        return CashSelector::options($isAdmin, $userEstId, $userId, $filters);
     }
 
     private function companyMeta(): array

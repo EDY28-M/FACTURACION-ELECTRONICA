@@ -1216,4 +1216,42 @@ class ReconciliationServiceTest extends TestCase
         $accepted = $this->statement([['2026-10-06', 'B', 10.00]], 100.00, '2026-10-01', '2026-10-20', 2, self::ADMIN, ['accept_unbalanced' => true]);
         $this->assertFalse((bool) BankStatement::find($accepted->id)->imported_unbalanced);
     }
+
+    public function test_income_payment_into_a_bank_account_counts_in_the_balance_is_a_candidate_and_closes_with_zero_difference(): void
+    {
+        // Real MariaDB table names: singular `income` + `income_payments` (the old code looked for `incomes`).
+        $this->db->statement('create table income (id integer primary key autoincrement, user_id integer, establishment_id integer, state_type_id text, customer text null, number text null, date_of_issue text, currency_type_id text, exchange_rate_sale numeric, total numeric)');
+        $this->db->statement('create table income_payments (id integer primary key autoincrement, income_id integer, date_of_payment text, payment numeric, reference text null)');
+
+        $incomeId = (int) $this->db->table('income')->insertGetId([
+            'user_id' => 1, 'establishment_id' => 1, 'state_type_id' => '01', 'customer' => 'Ingreso varios',
+            'number' => 'ING-001', 'date_of_issue' => '2026-11-05', 'currency_type_id' => 'PEN', 'exchange_rate_sale' => 1, 'total' => 250.00,
+        ]);
+        $paymentId = (int) $this->db->table('income_payments')->insertGetId([
+            'income_id' => $incomeId, 'date_of_payment' => '2026-11-05', 'payment' => 250.00, 'reference' => 'ING-REF',
+        ]);
+        $this->db->table('global_payments')->insert([
+            'destination_id' => 1, 'destination_type' => BankAccount::class,
+            'payment_id' => $paymentId, 'payment_type' => \Modules\Finance\Models\IncomePayment::class, 'user_id' => 1,
+        ]);
+
+        // (a) In the balance: 5000 initial + 250 income.
+        $this->assertSame(5250.0, (float) $this->makeBalanceService()->getBankAccountBalanceAsOf(1, '2026-11-20')['balance']);
+
+        // (b) As a reconciliation candidate, labelled as an income.
+        $statement = $this->statement([['2026-11-05', 'ABONO INGRESO', 250.00, 'ING-REF']], 5000.00);
+        $candidates = $this->service()->listCandidates((int) $statement->id, ['line_id' => $this->lineId($statement, 1)], self::ADMIN);
+        $this->assertCount(1, $candidates['rows']);
+        $this->assertSame('Ingreso', $candidates['rows'][0]['label']);
+        $this->assertSame(250.0, $candidates['rows'][0]['amount']);
+
+        // (c) Auto-match and close with difference 0.
+        $this->assertSame(1, $this->service()->autoMatch((int) $statement->id, 1, self::ADMIN)['matched']);
+        $live = $this->service()->summary((int) $statement->id, self::ADMIN);
+        $this->assertTrue($live['balanced']);
+        $this->assertEquals(0.0, $live['difference']);
+        $closed = $this->service()->closeStatement((int) $statement->id, 1, self::ADMIN);
+        $this->assertSame('closed', $closed->status);
+        $this->assertEquals(0.0, $closed->snapshot['difference']);
+    }
 }

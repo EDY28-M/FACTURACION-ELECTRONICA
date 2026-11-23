@@ -581,4 +581,119 @@ class CashFlowServiceTest extends TestCase
         ], $this->adminScope());
         $this->assertTrue($noFx['missing_exchange_rate']);
     }
+
+    private function countCashFlowQueries(int $cashRows): int
+    {
+        $this->db->table('cash')->delete();
+        for ($i = 1; $i <= $cashRows; $i++) {
+            $this->db->table('cash')->insert([
+                'user_id' => 1, 'date_opening' => '2026-10-01', 'time_opening' => '08:00:00', 'beginning_balance' => 0,
+                'final_balance' => 0, 'income' => 0, 'state' => 1, 'reference_number' => 'C-' . $i,
+            ]);
+        }
+
+        $service = $this->service();
+        $this->db->flushQueryLog();
+        $this->db->enableQueryLog();
+        $service->getRealCashFlow([
+            'date_start' => '2026-11-01', 'date_end' => '2026-11-30', 'destination_type' => 'cash', 'establishment_id' => 1,
+        ], $this->adminScope());
+        $count = count($this->db->getQueryLog());
+        $this->db->disableQueryLog();
+
+        return $count;
+    }
+
+    public function test_opening_cash_balance_does_not_run_one_query_per_cash_row(): void
+    {
+        $few = $this->countCashFlowQueries(5);
+        $many = $this->countCashFlowQueries(50);
+
+        $this->assertGreaterThan(0, $few);
+        $this->assertSame($few, $many, 'Query count must not grow with the number of cash rows.');
+    }
+
+    public function test_credit_notes_are_an_explicit_adjustment_so_opening_plus_flows_equals_the_closing_balance(): void
+    {
+        // Paid and credit-noted inside the period (bank account 1).
+        $docA = $this->insertDocument(['series' => 'F001', 'number' => '1', 'date_of_issue' => '2026-11-05', 'total' => 1000.00]);
+        $this->bankPayment($docA, 1000.00, '2026-11-05');
+        $this->creditNote($docA, 200.00, '2026-11-12', 'FC01-1');
+
+        // Paid in October, credit-noted in November: the opening balance does not deduct it yet, the closing does.
+        $docB = $this->insertDocument(['series' => 'F001', 'number' => '2', 'date_of_issue' => '2026-10-10', 'total' => 500.00]);
+        $this->bankPayment($docB, 500.00, '2026-10-10');
+        $this->creditNote($docB, 50.00, '2026-11-20', 'FC01-2');
+
+        $report = $this->service()->getRealCashFlow([
+            'date_start' => '2026-11-01', 'date_end' => '2026-11-30', 'destination_type' => 'bank_account',
+        ], $this->adminScope());
+
+        $adjustmentRow = null;
+        foreach ($report['outflow_rows'] as $row) {
+            if ($row['category'] === CashFlowService::CREDIT_NOTE_ADJUSTMENT_LABEL) {
+                $adjustmentRow = $row;
+            }
+        }
+        $this->assertNotNull($adjustmentRow, 'The cash flow must expose an explicit credit-note adjustment line.');
+        $this->assertEqualsWithDelta(250.00, $adjustmentRow['total'], 0.001);
+
+        $systemClosing = 0.0;
+        foreach ([1, 2, 4] as $accountId) {
+            $systemClosing += (float) $this->makeBalanceService()->getBankAccountBalanceAsOf($accountId, '2026-11-30')['balance'];
+        }
+        $this->assertEqualsWithDelta($systemClosing, $report['totals']['closing_balance'], 0.001);
+        $this->assertEqualsWithDelta(
+            $report['totals']['opening_balance'] + $report['totals']['inflows'] - $report['totals']['outflows'],
+            $report['totals']['closing_balance'],
+            0.001
+        );
+    }
+
+    public function test_non_admin_does_not_see_other_establishment_payments_on_a_shared_bank_account(): void
+    {
+        $this->db->table('bank_accounts')->insert([
+            'id' => 7, 'bank_id' => 1, 'description' => 'Compartida', 'number' => '191-007', 'currency_type_id' => 'PEN',
+            'status' => 1, 'initial_balance' => 0, 'show_in_documents' => 1, 'account_type' => 'checking', 'itf_exempt' => 0, 'establishment_id' => null,
+        ]);
+        $mine = $this->insertDocument(['establishment_id' => 1, 'date_of_issue' => '2026-11-05', 'total' => 100.00]);
+        $other = $this->insertDocument(['establishment_id' => 2, 'date_of_issue' => '2026-11-06', 'total' => 300.00]);
+        $this->bankPayment($mine, 100.00, '2026-11-05', 7);
+        $this->bankPayment($other, 300.00, '2026-11-06', 7);
+
+        $filters = ['date_start' => '2026-11-01', 'date_end' => '2026-11-30', 'destination_type' => 'bank_account'];
+        $totalFor = function (array $report): float {
+            foreach ($report['inflow_rows'] as $row) {
+                if ($row['category'] === 'Cobranzas de facturas y boletas') {
+                    return (float) $row['total'];
+                }
+            }
+
+            return 0.0;
+        };
+
+        $seller = $this->service()->getRealCashFlow($filters, ['is_admin' => false, 'user_id' => 2, 'establishment_id' => 1]);
+        $this->assertEqualsWithDelta(100.00, $totalFor($seller), 0.001);
+
+        $admin = $this->service()->getRealCashFlow($filters, $this->adminScope());
+        $this->assertEqualsWithDelta(400.00, $totalFor($admin), 0.001);
+    }
+
+    private function bankPayment(int $documentId, float $amount, string $date, int $accountId = 1): void
+    {
+        $paymentId = (int) $this->db->table('document_payments')->insertGetId([
+            'document_id' => $documentId, 'payment' => $amount, 'date_of_payment' => $date,
+        ]);
+        $this->db->table('global_payments')->insert([
+            'destination_id' => $accountId, 'destination_type' => BankAccount::class,
+            'payment_id' => $paymentId, 'payment_type' => DocumentPayment::class,
+        ]);
+    }
+
+    private function creditNote(int $affectedDocumentId, float $total, string $date, string $number): void
+    {
+        [$series, $num] = explode('-', $number);
+        $cnId = $this->insertDocument(['document_type_id' => '07', 'series' => $series, 'number' => $num, 'date_of_issue' => $date, 'total' => $total]);
+        $this->db->table('notes')->insert(['document_id' => $cnId, 'note_type' => 'credit', 'affected_document_id' => $affectedDocumentId]);
+    }
 }

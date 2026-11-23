@@ -11,6 +11,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Modules\Treasury\Http\Requests\StoreCashCountRequest;
 use Modules\Treasury\Services\CashCountService;
+use Modules\Treasury\Support\CashSelector;
 
 /**
  * Cash Count / Arqueo de caja controller (Phase 6).
@@ -30,7 +31,7 @@ class CashCountController extends Controller
         return view('treasury::cash_counts.index');
     }
 
-    public function tables(): JsonResponse
+    public function tables(?Request $request = null): JsonResponse
     {
         $scope = $this->scope(auth()->user());
         $isAdmin = $scope['is_admin'];
@@ -51,37 +52,7 @@ class CashCountController extends Controller
             })->values()->all();
         }
 
-        $cashes = [];
-        if ($isAdmin || ($userEstId > 0 && $userId > 0)) {
-            $cashQuery = Cash::with('user')
-                ->orderBy('state', 'desc')
-                ->orderBy('date_opening', 'desc')
-                ->orderBy('id', 'desc');
-            if (!$isAdmin) {
-                $cashQuery->where('user_id', $userId);
-            }
-
-            $cashes = $cashQuery->get()->filter(function ($row) use ($isAdmin, $userEstId) {
-                if ($isAdmin) {
-                    return true;
-                }
-                $cashEstId = ($row->user && $row->user->establishment_id) ? (int) $row->user->establishment_id : null;
-
-                return $cashEstId === null || $cashEstId === $userEstId;
-            })->map(function ($row) {
-                $owner = $row->user ? $row->user->name : ('Usuario #' . $row->user_id);
-                $ref = $row->reference_number ? " ({$row->reference_number})" : '';
-                $stateLabel = $row->state ? 'Abierta' : 'Cerrada';
-
-                return [
-                    'id' => (int) $row->id,
-                    'description' => "Caja POS{$ref} - {$owner} [{$stateLabel}]",
-                    'state' => (bool) $row->state,
-                    'user_id' => (int) $row->user_id,
-                    'establishment_id' => ($row->user && $row->user->establishment_id) ? (int) $row->user->establishment_id : null,
-                ];
-            })->values()->all();
-        }
+        $cashes = CashSelector::options($isAdmin, $userEstId, $userId, CashSelector::filtersFrom($request ? $request->all() : null));
 
         return response()->json([
             'establishments' => $establishments,

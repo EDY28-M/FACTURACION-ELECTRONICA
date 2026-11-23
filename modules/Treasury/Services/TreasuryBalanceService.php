@@ -659,13 +659,20 @@ class TreasuryBalanceService
      * Balance of Cash boxes (PEN) as of $dateEnd (inclusive; null = no date bound), optionally filtered by
      * establishment and/or a single cash box id. Uses the exact same formula as getSummary()
      * (entry - egress + net_pen, rounded via Money::round()).
+     *
+     * $asOfDateTime ('Y-m-d H:i:s') tightens the bound of $dateEnd to an instant: payments dated on the same day as
+     * the instant count only when their global_payments row was registered at or before it (payment tables only
+     * store the payment DATE, so global_payments.created_at is the only reliable time). Payments dated on earlier
+     * days are unaffected. Limitation: treasury_movements only store a DATE, so same-day movements are included
+     * whole-day, and rows without created_at are treated as registered before the instant.
      */
     public function getCashBalanceAsOf(
         ?string $dateEnd = null,
         ?int $establishmentId = null,
         ?int $cashId = null,
         bool $boundCreditNotesByIssueDate = true,
-        ?int $userId = null
+        ?int $userId = null,
+        ?string $asOfDateTime = null
     ): float {
         $scopedCashIds = $this->resolveScopedCashIds($establishmentId, $cashId, $userId);
         if ($scopedCashIds !== null && empty($scopedCashIds)) {
@@ -678,7 +685,8 @@ class TreasuryBalanceService
             null,
             $dateEnd,
             [],
-            $boundCreditNotesByIssueDate
+            $boundCreditNotesByIssueDate,
+            $asOfDateTime
         );
 
         $cashTreasuryById = $this->loadTreasuryAggregatesByDestination(
@@ -911,7 +919,8 @@ class TreasuryBalanceService
         ?string $dateStart,
         ?string $dateEnd,
         array $accountCurrencyMap,
-        bool $boundCreditNotesByIssueDate = false
+        bool $boundCreditNotesByIssueDate = false,
+        ?string $asOfDateTime = null
     ): array {
         if (!$this->hasTable('global_payments')) {
             return [];
@@ -919,6 +928,19 @@ class TreasuryBalanceService
         if ($destinationType === BankAccount::class && empty($destinationIds)) {
             return [];
         }
+
+        // Same-day time bound (see getCashBalanceAsOf). No-op when no instant is given or the column is missing.
+        $applyTimeBound = function ($query, string $dateColumn, string $createdColumn = 'gp.created_at') use ($asOfDateTime): void {
+            if ($asOfDateTime === null || !$this->hasColumn('global_payments', 'created_at')) {
+                return;
+            }
+            $day = substr($asOfDateTime, 0, 10);
+            $query->where(function ($w) use ($dateColumn, $createdColumn, $day, $asOfDateTime) {
+                $w->where($dateColumn, '<', $day)
+                    ->orWhereNull($createdColumn)
+                    ->orWhere($createdColumn, '<=', $asOfDateTime);
+            });
+        };
 
         $result = [];
         $ensure = function (int $destId) use (&$result): void {
@@ -954,6 +976,7 @@ class TreasuryBalanceService
             if ($dateEnd) {
                 $docQuery->where('p.date_of_payment', '<=', $dateEnd);
             }
+            $applyTimeBound($docQuery, 'p.date_of_payment');
 
             $docRows = $docQuery->get();
             $affectedDocIds = [];
@@ -994,6 +1017,14 @@ class TreasuryBalanceService
                 // balance keeps its historical behaviour: not date-bounded.
                 if ($boundCreditNotesByIssueDate && $dateEnd) {
                     $creditNoteQuery->whereDate('nd.date_of_issue', '<=', $dateEnd);
+                    if ($asOfDateTime !== null && $this->hasColumn('documents', 'created_at')) {
+                        $day = substr($asOfDateTime, 0, 10);
+                        $creditNoteQuery->where(function ($w) use ($day, $asOfDateTime) {
+                            $w->where('nd.date_of_issue', '<', $day)
+                                ->orWhereNull('nd.created_at')
+                                ->orWhere('nd.created_at', '<=', $asOfDateTime);
+                        });
+                    }
                 }
 
                 $creditNoteRows = $creditNoteQuery->get();
@@ -1071,6 +1102,7 @@ class TreasuryBalanceService
             if ($dateEnd) {
                 $q->where('p.date_of_payment', '<=', $dateEnd);
             }
+            $applyTimeBound($q, 'p.date_of_payment');
 
             if ($spec['has_currency']) {
                 $rows = $q->select(
@@ -1127,6 +1159,7 @@ class TreasuryBalanceService
             if ($dateEnd) {
                 $txQuery->where('ct.date', '<=', $dateEnd);
             }
+            $applyTimeBound($txQuery, 'ct.date');
 
             foreach ($txQuery->get() as $row) {
                 $destId = (int) $row->destination_id;
@@ -1287,6 +1320,27 @@ class TreasuryBalanceService
             return $this->tableExistsCache[$table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
             return $this->tableExistsCache[$table] = false;
+        }
+    }
+
+    /** @var array<string, bool> */
+    private $columnExistsCache = [];
+
+    private function hasColumn(string $table, string $column): bool
+    {
+        if (!$this->hasTable($table)) {
+            return false;
+        }
+
+        $key = $table . '.' . $column;
+        if (array_key_exists($key, $this->columnExistsCache)) {
+            return $this->columnExistsCache[$key];
+        }
+
+        try {
+            return $this->columnExistsCache[$key] = DB::connection('tenant')->getSchemaBuilder()->hasColumn($table, $column);
+        } catch (\Throwable $e) {
+            return $this->columnExistsCache[$key] = false;
         }
     }
 

@@ -2,8 +2,10 @@
 
 namespace Modules\Treasury\Http\Requests;
 
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\Treasury\Services\CashBookReport;
 
 class CashBookReportRequest extends FormRequest
 {
@@ -27,6 +29,25 @@ class CashBookReportRequest extends FormRequest
             'cash_id' => ['nullable', 'integer', 'min:1'],
             'bank_account_id' => ['required_if:format,1.2', 'nullable', 'integer', 'min:1'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($v) {
+            if ($v->errors()->isNotEmpty()) {
+                return;
+            }
+            $start = $this->input('date_start');
+            $end = $this->input('date_end');
+            if (!$start || !$end) {
+                return;
+            }
+
+            $maxDays = CashBookReport::maxRangeDays();
+            if (Carbon::parse($start)->diffInDays(Carbon::parse($end), false) > $maxDays) {
+                $v->errors()->add('date_end', 'El rango máximo permitido es de ' . $maxDays . ' días.');
+            }
+        });
     }
 
     public function messages()

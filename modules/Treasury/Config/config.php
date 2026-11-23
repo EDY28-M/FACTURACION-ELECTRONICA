@@ -78,6 +78,16 @@ return [
     ],
 
     /*
+     * Phase 6 - reports.
+     * max_range_days: widest date range accepted by the Libro Caja y Bancos (enforced by the request and the service).
+     * cash_selector_limit: most recent cash shifts returned by the cash selectors (open shifts are always included).
+     */
+    'reports' => [
+        'max_range_days' => 366,
+        'cash_selector_limit' => 200,
+    ],
+
+    /*
      * Informational text for the SPOT fund release windows (Formulario 1697).
      * Source: docs/plans/tesoreria-investigacion-sunat.md section 2. Never used for calculations.
      */

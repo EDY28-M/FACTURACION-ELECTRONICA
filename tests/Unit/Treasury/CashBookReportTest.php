@@ -423,4 +423,107 @@ class CashBookReportTest extends TestCase
         $this->assertSame(1250.0, $res['totals']['system_closing_balance']);
         $this->assertSame(0.0, $res['totals']['reconciliation_difference']);
     }
+
+    public function test_service_rejects_a_date_range_wider_than_the_configured_maximum(): void
+    {
+        $this->assertSame(366, CashBookReport::maxRangeDays());
+
+        try {
+            $this->report()->buildFormat11(['date_start' => '2025-01-01', 'date_end' => '2026-11-30'], $this->adminScope());
+            $this->fail('Expected ValidationException for a range wider than 366 days.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('date_end', $e->errors());
+        }
+
+        // A configurable limit is honoured by the service.
+        $this->app['config']->set('treasury.reports.max_range_days', 10);
+        $this->expectException(ValidationException::class);
+        $this->report()->buildFormat11(['date_start' => '2026-11-01', 'date_end' => '2026-11-30'], $this->adminScope());
+    }
+
+    private function bankDocumentPayment(int $documentId, float $amount, string $date, ?string $methodType, int $accountId = 1): void
+    {
+        $paymentId = (int) $this->db->table('document_payments')->insertGetId([
+            'document_id' => $documentId, 'payment' => $amount, 'date_of_payment' => $date, 'payment_method_type_id' => $methodType,
+        ]);
+        $this->db->table('global_payments')->insert([
+            'destination_id' => $accountId, 'destination_type' => BankAccount::class,
+            'payment_id' => $paymentId, 'payment_type' => DocumentPayment::class,
+        ]);
+    }
+
+    public function test_format_12_does_not_invent_a_sunat_payment_code_and_flags_the_row(): void
+    {
+        $withCode = $this->insertDocument(['date_of_issue' => '2026-11-05', 'total' => 100.00]);
+        $withoutCode = $this->insertDocument(['date_of_issue' => '2026-11-06', 'total' => 200.00]);
+        $this->bankDocumentPayment($withCode, 100.00, '2026-11-05', '04');
+        $this->bankDocumentPayment($withoutCode, 200.00, '2026-11-06', null);
+
+        $report = $this->report()->buildFormat12(
+            ['date_start' => '2026-11-01', 'date_end' => '2026-11-30', 'bank_account_id' => 1],
+            $this->adminScope()
+        );
+
+        $this->assertCount(2, $report['rows']);
+        $this->assertSame('003', $report['rows'][0]['sunat_payment_code']);
+        $this->assertFalse($report['rows'][0]['missing_payment_code']);
+        $this->assertNull($report['rows'][1]['sunat_payment_code']);
+        $this->assertTrue($report['rows'][1]['missing_payment_code']);
+        $this->assertSame('Sin código', $report['rows'][1]['sunat_payment_label']);
+        $this->assertSame(1, $report['totals']['missing_payment_code_count']);
+    }
+
+    public function test_format_12_hides_other_establishment_payments_on_a_shared_account_from_non_admins(): void
+    {
+        $this->db->table('bank_accounts')->insert([
+            'id' => 7, 'bank_id' => 1, 'description' => 'Compartida', 'number' => '191-007', 'currency_type_id' => 'PEN',
+            'status' => 1, 'initial_balance' => 0, 'show_in_documents' => 1, 'account_type' => 'checking', 'itf_exempt' => 0, 'establishment_id' => null,
+        ]);
+        $mine = $this->insertDocument(['establishment_id' => 1, 'series' => 'F001', 'number' => '11', 'date_of_issue' => '2026-11-05', 'total' => 100.00]);
+        $other = $this->insertDocument(['establishment_id' => 2, 'series' => 'F002', 'number' => '22', 'date_of_issue' => '2026-11-06', 'total' => 300.00]);
+        $this->bankDocumentPayment($mine, 100.00, '2026-11-05', '04', 7);
+        $this->bankDocumentPayment($other, 300.00, '2026-11-06', '04', 7);
+
+        $filters = ['date_start' => '2026-11-01', 'date_end' => '2026-11-30', 'bank_account_id' => 7];
+
+        $seller = $this->report()->buildFormat12($filters, ['is_admin' => false, 'user_id' => 2, 'establishment_id' => 1]);
+        $this->assertCount(1, $seller['rows']);
+        $this->assertStringContainsString('F001-11', $seller['rows'][0]['description']);
+        $this->assertEquals(300.00, $seller['totals']['out_of_scope_net']);
+        $this->assertEquals(0.0, $seller['totals']['reconciliation_difference']);
+
+        $admin = $this->report()->buildFormat12($filters, $this->adminScope());
+        $this->assertCount(2, $admin['rows']);
+        $this->assertEquals(0.0, $admin['totals']['out_of_scope_net']);
+        $this->assertEquals(0.0, $admin['totals']['reconciliation_difference']);
+    }
+
+    public function test_pure_rounding_drift_on_converted_rows_is_reported_apart_and_not_as_a_reconciliation_difference(): void
+    {
+        $cashId = (int) $this->db->table('cash')->insertGetId([
+            'user_id' => 1, 'date_opening' => '2026-11-01', 'time_opening' => '08:00:00', 'beginning_balance' => 0,
+            'final_balance' => 0, 'income' => 0, 'state' => 1, 'reference_number' => 'C-USD',
+        ]);
+
+        // USD invoice collected in three installments at 3.7567: rows round to 37.60 each (112.80) while the
+        // balance rounds the document aggregate (30.03 x 3.7567 = 112.81).
+        $docId = $this->insertDocument(['date_of_issue' => '2026-11-03', 'total' => 30.03, 'currency_type_id' => 'USD', 'exchange_rate_sale' => 3.7567]);
+        foreach (['2026-11-03', '2026-11-04', '2026-11-05'] as $date) {
+            $paymentId = (int) $this->db->table('document_payments')->insertGetId([
+                'document_id' => $docId, 'payment' => 10.01, 'date_of_payment' => $date, 'payment_method_type_id' => '01',
+            ]);
+            $this->db->table('global_payments')->insert([
+                'destination_id' => $cashId, 'destination_type' => Cash::class,
+                'payment_id' => $paymentId, 'payment_type' => DocumentPayment::class,
+            ]);
+        }
+
+        $report = $this->report()->buildFormat11(['date_start' => '2026-11-01', 'date_end' => '2026-11-30'], $this->adminScope());
+
+        $this->assertEquals(112.80, $report['totals']['closing_balance']);
+        $this->assertEquals(112.81, $report['totals']['system_closing_balance']);
+        $this->assertSame(3, $report['totals']['converted_rows']);
+        $this->assertEquals(0.01, $report['totals']['rounding_drift']);
+        $this->assertEquals(0.0, $report['totals']['reconciliation_difference']);
+    }
 }

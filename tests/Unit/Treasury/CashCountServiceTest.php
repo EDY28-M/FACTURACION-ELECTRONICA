@@ -280,4 +280,35 @@ class CashCountServiceTest extends TestCase
             'denominations' => [['value' => 100, 'qty' => 1000001]],
         ], 1, $scope);
     }
+
+    public function test_system_balance_excludes_payments_registered_after_counted_at_on_the_same_day(): void
+    {
+        $cashId = $this->seedCash(1, 500.00);
+
+        $addPayment = function (float $amount, string $registeredAt) use ($cashId): void {
+            $docId = $this->insertDocument(['date_of_issue' => '2026-11-20', 'total' => $amount]);
+            $paymentId = (int) $this->db->table('document_payments')->insertGetId([
+                'document_id' => $docId, 'payment' => $amount, 'date_of_payment' => '2026-11-20',
+            ]);
+            $this->db->table('global_payments')->insert([
+                'destination_id' => $cashId, 'destination_type' => Cash::class,
+                'payment_id' => $paymentId, 'payment_type' => \App\Models\Tenant\DocumentPayment::class, 'created_at' => $registeredAt,
+            ]);
+        };
+        $addPayment(50.00, '2026-11-20 09:00:00');   // before the count
+        $addPayment(100.00, '2026-11-20 15:00:00');  // after the count, same day
+
+        $count = $this->service()->create([
+            'cash_id' => $cashId,
+            'counted_at' => '2026-11-20 10:00:00',
+            'denominations' => [['value' => 100, 'qty' => 5], ['value' => 50, 'qty' => 1]],
+        ], 1, ['is_admin' => true, 'user_id' => 1, 'establishment_id' => 1]);
+
+        // 500 opening + 50 registered before 10:00; the 100 registered at 15:00 is not in the till yet.
+        $this->assertEquals(550.00, (float) $count->system_balance);
+        $this->assertEquals(0.00, (float) $count->difference);
+
+        // Without counted_at the current balance includes everything.
+        $this->assertEquals(650.00, $this->service()->getSystemBalance($cashId, ['is_admin' => true, 'user_id' => 1, 'establishment_id' => 1])['system_balance']);
+    }
 }

@@ -84,6 +84,7 @@ class CashFlowService
     public function getRealCashFlow(array $filters, array $scope): array
     {
         $this->tableExistsCache = [];
+        $this->columnExistsCache = [];
         $dateStart = !empty($filters['date_start'])
             ? (string) $filters['date_start']
             : Carbon::today()->startOfMonth()->format('Y-m-d');
@@ -292,13 +293,29 @@ class CashFlowService
             }
         }
 
-        // 2. Accepted global_payments across all 9 payment tables
+        // 2. Accepted global_payments across all 9 payment tables.
+        // Non-admins reading SHARED bank accounts (establishment_id IS NULL) only see payments whose parent document
+        // belongs to their establishment (parents without an establishment cannot be attributed and stay visible),
+        // the same way treasury movements are filtered above. Admins and establishment-owned accounts are unchanged.
+        // Account-level opening balances still come from the balance service and include every establishment.
+        $sharedBankAccountIds = [];
+        $sharedScopeEstablishmentId = null;
+        if (!$resolvedScope['is_admin'] && $effectiveEstId !== null) {
+            $sharedScopeEstablishmentId = $effectiveEstId;
+            foreach ($bankAccounts as $acc) {
+                if ($acc->establishment_id === null) {
+                    $sharedBankAccountIds[] = (int) $acc->id;
+                }
+            }
+        }
         $globalEntries = $this->loadGlobalPaymentEntries(
             $dateStart,
             $dateEnd,
             $includeBankAccounts ? $bankAccountIds : [],
             $includeCash,
-            $scopedCashIds
+            $scopedCashIds,
+            $sharedBankAccountIds,
+            $sharedScopeEstablishmentId
         );
 
         foreach ($globalEntries as $entry) {
@@ -1103,7 +1120,9 @@ class CashFlowService
         string $dateEnd,
         array $bankAccountIds,
         bool $includeCash,
-        ?array $scopedCashIds
+        ?array $scopedCashIds,
+        array $sharedBankAccountIds = [],
+        ?int $sharedScopeEstablishmentId = null
     ): array {
         if (!$this->hasTable('global_payments')) {
             return [];
@@ -1169,6 +1188,15 @@ class CashFlowService
                 ->where('p.date_of_payment', '<=', $dateEnd);
 
             $applyDestinationScope($q, true);
+
+            if ($sharedScopeEstablishmentId !== null && !empty($sharedBankAccountIds) && $this->hasColumn($spec['parent'], 'establishment_id')) {
+                $q->where(function ($w) use ($sharedBankAccountIds, $sharedScopeEstablishmentId) {
+                    $w->where('gp.destination_type', '!=', BankAccount::class)
+                        ->orWhereNotIn('gp.destination_id', $sharedBankAccountIds)
+                        ->orWhere('par.establishment_id', $sharedScopeEstablishmentId)
+                        ->orWhereNull('par.establishment_id');
+                });
+            }
 
             if ($spec['has_state']) {
                 $q->whereIn('par.state_type_id', TreasuryBalanceService::ACCEPTED_STATE_TYPES);
@@ -1583,6 +1611,26 @@ class CashFlowService
             return $this->tableExistsCache[$table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
             return $this->tableExistsCache[$table] = false;
+        }
+    }
+
+    /** @var array<string, bool> */
+    private $columnExistsCache = [];
+
+    private function hasColumn(string $table, string $column): bool
+    {
+        if (!$this->hasTable($table)) {
+            return false;
+        }
+        $key = $table . '.' . $column;
+        if (array_key_exists($key, $this->columnExistsCache)) {
+            return $this->columnExistsCache[$key];
+        }
+
+        try {
+            return $this->columnExistsCache[$key] = DB::connection('tenant')->getSchemaBuilder()->hasColumn($table, $column);
+        } catch (\Throwable $e) {
+            return $this->columnExistsCache[$key] = false;
         }
     }
 

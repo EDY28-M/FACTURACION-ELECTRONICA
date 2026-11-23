@@ -170,6 +170,15 @@
                     </div>
                 </div>
 
+                <div v-if="activeFormat === '1.2' && report.totals.missing_payment_code_count > 0" class="alert alert-warning small py-2">
+                    <strong>{{ report.totals.missing_payment_code_count }}</strong> operación(es) sin código de medio de pago (Tabla 1).
+                    Complete la evidencia de pago antes de presentar el libro.
+                </div>
+                <div v-if="report.totals.rounding_drift && Number(report.totals.rounding_drift) !== 0" class="alert alert-info small py-2">
+                    Diferencia por redondeo de conversión de moneda: {{ signedMoney(report.totals.rounding_drift, report.meta.currency_type_id) }}.
+                    No se considera diferencia de conciliación.
+                </div>
+
                 <!-- Format 1.1 Table -->
                 <div v-if="activeFormat === '1.1'" class="table-responsive">
                     <table class="table table-sm table-bordered table-hover mb-0">
@@ -291,8 +300,9 @@
                                 <td class="text-center text-nowrap">{{ row.correlative }}</td>
                                 <td class="text-center text-nowrap">{{ row.date }}</td>
                                 <td class="text-nowrap" :title="row.sunat_payment_label">
-                                    <span class="badge badge-light border">{{ row.sunat_payment_code }}</span>
-                                    <span class="small ml-1">{{ row.sunat_payment_label }}</span>
+                                    <span v-if="row.missing_payment_code" class="badge badge-warning">Sin código</span>
+                                    <span v-else class="badge badge-light border">{{ row.sunat_payment_code }}</span>
+                                    <span v-if="!row.missing_payment_code" class="small ml-1">{{ row.sunat_payment_label }}</span>
                                 </td>
                                 <td>{{ row.description }}</td>
                                 <td>{{ row.counterparty }}</td>

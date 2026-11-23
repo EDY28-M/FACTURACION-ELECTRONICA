@@ -124,7 +124,10 @@ class CashCountService
             ]);
         }
 
+        // With an explicit counted_at the system balance is cut at that exact instant (payments registered later the
+        // same day are excluded); without it the current balance is used.
         $systemDateEnd = !empty($payload['counted_at']) ? $countedAt->format('Y-m-d') : null;
+        $systemAsOf = !empty($payload['counted_at']) ? $countedAt->format('Y-m-d H:i:s') : null;
 
         $notes = isset($payload['notes']) && trim((string) $payload['notes']) !== ''
             ? trim((string) $payload['notes'])
@@ -138,6 +141,7 @@ class CashCountService
             $countedBalance,
             $countedAt,
             $systemDateEnd,
+            $systemAsOf,
             $notes
         ) {
             $cash = Cash::with('user')->lockForUpdate()->find($cashId);
@@ -149,7 +153,7 @@ class CashCountService
 
             $this->assertCashAccess($cash, $scope);
 
-            $systemBalance = $this->balanceService->getCashBalanceAsOf($systemDateEnd, null, $cashId, true);
+            $systemBalance = $this->balanceService->getCashBalanceAsOf($systemDateEnd, null, $cashId, true, null, $systemAsOf);
             $difference = Money::round($countedBalance - $systemBalance);
 
             $establishmentId = ($cash->user && $cash->user->establishment_id)

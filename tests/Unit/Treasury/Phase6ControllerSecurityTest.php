@@ -393,4 +393,68 @@ class Phase6ControllerSecurityTest extends TestCase
             'date_end' => '2026-11-30',
         ]);
     }
+
+    public function test_cash_book_request_rejects_ranges_wider_than_the_configured_maximum(): void
+    {
+        $this->assertSame(366, \Modules\Treasury\Services\CashBookReport::maxRangeDays());
+
+        $ok = $this->makeFormRequest(CashBookReportRequest::class, ['format' => '1.1', 'date_start' => '2026-01-01', 'date_end' => '2026-12-31']);
+        $this->assertSame('2026-12-31', $ok->validated()['date_end']);
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->makeFormRequest(CashBookReportRequest::class, ['format' => '1.1', 'date_start' => '2024-01-01', 'date_end' => '2026-11-30']);
+    }
+
+    public function test_cash_selectors_return_open_shifts_plus_the_most_recent_closed_ones_and_accept_a_search_filter(): void
+    {
+        $this->app['config']->set('treasury.reports.cash_selector_limit', 3);
+
+        $openId = (int) $this->db->table('cash')->insertGetId([
+            'user_id' => 2, 'date_opening' => '2020-01-01', 'time_opening' => '08:00:00',
+            'beginning_balance' => 0, 'final_balance' => 0, 'income' => 0, 'state' => 1, 'reference_number' => 'OLD-OPEN',
+        ]);
+        $closedIds = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $closedIds[$i] = (int) $this->db->table('cash')->insertGetId([
+                'user_id' => 2, 'date_opening' => sprintf('2026-10-%02d', $i), 'time_opening' => '08:00:00',
+                'beginning_balance' => 0, 'final_balance' => 0, 'income' => 0, 'state' => 0, 'reference_number' => 'CLOSED-' . $i,
+            ]);
+        }
+
+        $this->auth->currentUser = $this->user(2, 'seller', 1);
+        $tables = $this->cashCountController()->tables()->getData(true);
+        $ids = array_column($tables['cashes'], 'id');
+        $this->assertSame([$openId, $closedIds[10], $closedIds[9], $closedIds[8]], $ids);
+
+        $reportTables = $this->reportController()->cashBookTables()->getData(true);
+        $this->assertSame($ids, array_column($reportTables['cashes'], 'id'));
+
+        // search + date filters narrow the list
+        $request = new Request(['search' => 'CLOSED-2', 'date_start' => '2026-10-01', 'date_end' => '2026-10-05']);
+        $filtered = $this->cashCountController()->tables($request)->getData(true);
+        $this->assertSame([$closedIds[2]], array_column($filtered['cashes'], 'id'));
+
+        // Another cashier's shifts never leak through the selector
+        $this->auth->currentUser = $this->user(1, 'seller', 1);
+        $this->assertSame([], $this->cashCountController()->tables()->getData(true)['cashes']);
+    }
+
+    public function test_cash_count_cash_foreign_key_is_restrict_and_the_repair_migration_is_a_safe_noop_when_already_restrict(): void
+    {
+        $fks = $this->db->select("pragma foreign_key_list('treasury_cash_counts')");
+        $cashFk = null;
+        foreach ($fks as $fk) {
+            if ($fk->from === 'cash_id') {
+                $cashFk = $fk;
+            }
+        }
+        $this->assertNotNull($cashFk);
+        $this->assertSame('RESTRICT', strtoupper((string) $cashFk->on_delete));
+
+        require_once __DIR__ . '/../../../database/migrations/tenant/2026_11_23_000013_tenant_restrict_treasury_cash_counts_cash_fk.php';
+        $migration = new \TenantRestrictTreasuryCashCountsCashFk();
+        $migration->up();
+        $migration->up();
+        $this->assertTrue($this->db->getSchemaBuilder()->hasTable('treasury_cash_counts'));
+    }
 }

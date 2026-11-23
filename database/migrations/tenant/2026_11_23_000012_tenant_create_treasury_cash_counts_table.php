@@ -32,7 +32,9 @@ class TenantCreateTreasuryCashCountsTable extends Migration
                 $table->index('counted_at', 'tcc_counted_at_idx');
                 $table->index('user_id', 'tcc_user_idx');
 
-                $table->foreign('cash_id')->references('id')->on('cash')->onDelete('cascade');
+                // RESTRICT (not CASCADE): a cash count is an audit record and must never disappear because a cash
+                // shift row is deleted.
+                $table->foreign('cash_id')->references('id')->on('cash')->onDelete('restrict');
             });
         }
     }

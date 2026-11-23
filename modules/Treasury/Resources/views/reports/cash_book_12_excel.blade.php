@@ -69,7 +69,7 @@
                 <tr>
                     <td>{{ $row['correlative'] }}</td>
                     <td>{{ $row['date'] }}</td>
-                    <td>{{ $row['sunat_payment_code'] }} - {{ $row['sunat_payment_label'] }}</td>
+                    <td>{{ $row['sunat_payment_code'] !== null ? $row['sunat_payment_code'] . ' - ' : '' }}{{ $row['sunat_payment_label'] }}</td>
                     <td>{{ $row['description'] }}</td>
                     <td>{{ $row['counterparty'] }}</td>
                     <td>{{ $row['transaction_number'] }}</td>
@@ -88,6 +88,17 @@
                 <td colspan="8"><strong>SALDO FINAL SEGÚN LIBRO</strong></td>
                 <td colspan="2"><strong>{{ number_format((float) ($totals['closing_balance'] ?? 0), 2, '.', '') }}</strong></td>
             </tr>
+            @if((int) ($totals['missing_payment_code_count'] ?? 0) > 0)
+                <tr>
+                    <td colspan="10"><strong>ADVERTENCIA: {{ (int) $totals['missing_payment_code_count'] }} operación(es) sin código de medio de pago (Tabla 1). Complete la evidencia de pago antes de presentar el libro.</strong></td>
+                </tr>
+            @endif
+            @if((float) ($totals['rounding_drift'] ?? 0) != 0.0)
+                <tr>
+                    <td colspan="8"><strong>DIFERENCIA POR REDONDEO (conversión de moneda)</strong></td>
+                    <td colspan="2"><strong>{{ number_format((float) $totals['rounding_drift'], 2, '.', '') }}</strong></td>
+                </tr>
+            @endif
             @if(!empty($cnAdjustments))
                 <tr>
                     <td colspan="8"><strong>AJUSTES POR NOTAS DE CRÉDITO ({{ count($cnAdjustments) }})</strong></td>
