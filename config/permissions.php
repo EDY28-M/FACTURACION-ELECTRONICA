@@ -164,6 +164,7 @@ return [
         ['path' => 'treasury/payment-evidences', 'modules' => ['treasury', 'documents', 'purchases', 'pos', 'finance'], 'ajax' => true],
         ['path' => 'treasury/detractions', 'module' => 'treasury', 'ajax' => true],
         ['path' => 'treasury/withholdings', 'module' => 'treasury', 'ajax' => true],
+        ['path' => 'treasury/reconciliation', 'module' => 'treasury', 'ajax' => true],
         ['path' => 'treasury', 'module' => 'treasury', 'ajax' => true],
 
         // Shared catalog reads used by document/purchase forms.

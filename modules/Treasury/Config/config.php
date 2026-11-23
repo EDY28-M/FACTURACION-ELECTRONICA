@@ -46,6 +46,30 @@ return [
     ],
 
     /*
+     * Phase 5 - bank reconciliation.
+     */
+    'reconciliation' => [
+        // Automatic matching: a system item is a candidate when its date is within +/- N days of the line date.
+        'date_window_days' => 3,
+        // When true, a system item that HAS an operation number is only auto-matched if that number appears in the
+        // line reference/description. Default false: banks often reformat or truncate operation numbers.
+        'require_reference_when_available' => false,
+        // Minimum length (letters/digits) of an operation number to be used as a reference hint.
+        'min_reference_length' => 4,
+        // Import limits.
+        'max_file_kb' => 5120,
+        'max_rows' => 5000,
+        // Max columns read from a spreadsheet (guards against a stray far-away cell exhausting memory).
+        'max_columns' => 30,
+        // Per converted (cross-currency) item: rounding drift tolerated between the sum of rounded items and the
+        // aggregate balance when computing the in-transit total.
+        'rounding_tolerance' => 0.01,
+        // Max in-transit items stored inside the closing snapshot (totals always cover all of them).
+        'snapshot_item_limit' => 200,
+        'storage_folder' => 'bank_statements',
+    ],
+
+    /*
      * Informational text for the SPOT fund release windows (Formulario 1697).
      * Source: docs/plans/tesoreria-investigacion-sunat.md section 2. Never used for calculations.
      */

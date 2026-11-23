@@ -652,6 +652,9 @@
                             <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'detractions') ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('tenant.treasury.detractions.index') }}">Detracciones</a>
                             </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'reconciliation') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.reconciliation.index') }}">Conciliación bancaria</a>
+                            </li>
                         </ul>
                     </li>
                     @endif

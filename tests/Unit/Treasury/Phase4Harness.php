@@ -131,16 +131,18 @@ trait Phase4Harness
             'treasury_movements (id integer primary key autoincrement, establishment_id integer, date text, kind text, direction integer, destination_type text, destination_id integer, currency_type_id text, amount numeric, exchange_rate_purchase numeric null, exchange_rate_sale numeric null, exchange_rate_used numeric null, amount_pen numeric, payment_method_type_id text null, sunat_payment_code text null, operation_number text null, counterparty_person_id integer null, counterparty_document text null, counterparty_name text null, treasury_concept_id integer null, description text, transfer_group text null, related_movement_id integer null, source_type text null, source_id integer null, reconciled_at text null, bank_statement_line_id integer null, state text, voided_at text null, voided_by integer null, void_reason text null, user_id integer, created_at text null, updated_at text null)',
             'payment_evidences (id integer primary key autoincrement, payable_type text, payable_id integer, sunat_payment_code text, operation_number text null, bank_id integer null, bank_account_id integer null, operation_date text, payer_or_beneficiary_document text null, payer_or_beneficiary_name text null, third_party_payment integer default 0, third_party_reported_to_sunat integer default 0, bancarization_exception text null, created_at text null, updated_at text null)',
             'documents (id integer primary key autoincrement, user_id integer, customer_id integer, establishment_id integer, state_type_id text, document_type_id text, series text, number text, date_of_issue text, total numeric, currency_type_id text, exchange_rate_sale numeric, detraction text null, discounts text null, total_canceled integer default 0)',
-            'document_payments (id integer primary key autoincrement, document_id integer, payment numeric, date_of_payment text)',
+            'document_payments (id integer primary key autoincrement, document_id integer, payment numeric, date_of_payment text, reference text null)',
             'document_fee (id integer primary key autoincrement, document_id integer, date text, currency_type_id text, amount numeric)',
             'invoices (id integer primary key autoincrement, document_id integer, date_of_due text null)',
             'dispatches (id integer primary key autoincrement, reference_document_id integer, external_id text null, series text null, number text null, date_of_issue text null, date_of_shipping text null)',
             'sale_notes (id integer primary key autoincrement, user_id integer, customer_id integer, establishment_id integer, state_type_id text, series text null, number text null, prefix text null, filename text null, date_of_issue text, total numeric, currency_type_id text, exchange_rate_sale numeric, changed integer default 0, total_canceled integer default 0)',
-            'sale_note_payments (id integer primary key autoincrement, sale_note_id integer, payment numeric, date_of_payment text)',
+            'sale_note_payments (id integer primary key autoincrement, sale_note_id integer, payment numeric, date_of_payment text, reference text null)',
             'purchases (id integer primary key autoincrement, user_id integer, supplier_id integer, establishment_id integer, state_type_id text, document_type_id text, series text, number text, date_of_issue text, date_of_due text null, total numeric, currency_type_id text, exchange_rate_sale numeric, total_canceled integer default 0, detraction text null)',
-            'purchase_payments (id integer primary key autoincrement, purchase_id integer, payment numeric, date_of_payment text)',
+            'purchase_payments (id integer primary key autoincrement, purchase_id integer, payment numeric, date_of_payment text, reference text null)',
             'expenses (id integer primary key autoincrement, user_id integer, supplier_id integer, establishment_id integer, state_type_id text, number text, date_of_issue text, total numeric, currency_type_id text, exchange_rate_sale numeric)',
-            'expense_payments (id integer primary key autoincrement, expense_id integer, payment numeric, date_of_payment text)',
+            'expense_payments (id integer primary key autoincrement, expense_id integer, payment numeric, date_of_payment text, reference text null)',
+            'notes (id integer primary key autoincrement, document_id integer, note_type text, affected_document_id integer null)',
+            'global_payments (id integer primary key autoincrement, soap_type_id text null, destination_id integer, destination_type text, payment_id integer, payment_type text, user_id integer null, created_at text null, updated_at text null)',
             'retentions (id integer primary key autoincrement, series text, number text, state_type_id text, date_of_issue text, total_retention numeric, supplier text null)',
             'perceptions (id integer primary key autoincrement, series text, number text, state_type_id text, date_of_issue text, total_perception numeric, customer text null)',
         ] as $table) {
@@ -153,6 +155,9 @@ trait Phase4Harness
             ['2026_11_23_000006_tenant_create_treasury_withholdings_table.php', '\\TenantCreateTreasuryWithholdingsTable'],
             ['2026_11_23_000007_tenant_add_active_link_key_to_treasury_withholdings.php', '\\TenantAddActiveLinkKeyToTreasuryWithholdings'],
             ['2026_11_23_000008_tenant_seed_detraction_deposit_business_day_rate.php', '\\TenantSeedDetractionDepositBusinessDayRate'],
+            ['2026_11_23_000009_tenant_create_bank_statements_tables.php', '\\TenantCreateBankStatementsTables'],
+            ['2026_11_23_000010_tenant_create_bank_statement_line_matches_table.php', '\\TenantCreateBankStatementLineMatchesTable'],
+            ['2026_11_23_000011_tenant_add_unbalanced_import_flag_to_bank_statements.php', '\\TenantAddUnbalancedImportFlagToBankStatements'],
         ] as [$file, $class]) {
             require_once __DIR__ . '/../../../database/migrations/tenant/' . $file;
             (new $class())->up();
@@ -181,6 +186,10 @@ trait Phase4Harness
 
         $this->db->table('treasury_concepts')->insert([
             ['id' => 1, 'type' => 'expense', 'description' => 'Pago de tributos', 'active' => 1],
+            ['id' => 2, 'type' => 'expense', 'description' => 'Comisión bancaria', 'active' => 1],
+            ['id' => 3, 'type' => 'income', 'description' => 'Intereses ganados', 'active' => 1],
+            ['id' => 4, 'type' => 'income', 'description' => 'Otros ingresos', 'active' => 1],
+            ['id' => 5, 'type' => 'expense', 'description' => 'Otros egresos', 'active' => 1],
         ]);
 
         $this->db->table('exchange_rates')->insert([

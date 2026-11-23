@@ -517,6 +517,140 @@ class TreasuryBalanceService
         ];
     }
 
+    /**
+     * Balance of ONE bank account in its own currency as of $dateEnd (inclusive; null = no date bound).
+     * Same formula as getSummary() (initial_balance + global payments + active treasury movements), used by the
+     * bank reconciliation to compare against the statement closing balance.
+     *
+     * @return array{currency_type_id: string, balance: float}
+     */
+    public function getBankAccountBalanceAsOf(int $accountId, ?string $dateEnd = null): array
+    {
+        $account = BankAccount::query()->whereKey($accountId)->first();
+        if (!$account) {
+            throw new \InvalidArgumentException('Bank account not found: ' . $accountId);
+        }
+
+        $currency = (string) $account->currency_type_id;
+        $agg = $this->aggregateGlobalPaymentsByDestination(
+            BankAccount::class,
+            [$accountId],
+            null,
+            $dateEnd,
+            [$accountId => $currency],
+            true
+        )[$accountId] ?? $this->emptyDestinationAggregate();
+
+        $treasury = $this->loadTreasuryAggregatesByDestination(
+            BankAccount::class,
+            [$accountId],
+            null,
+            $dateEnd,
+            null
+        )[$accountId] ?? ['net_currency' => 0.0, 'net_pen' => 0.0];
+
+        if ($currency === 'PEN') {
+            $entry = $agg['document_payment'] + $agg['sale_note_payment'] + $agg['quotation_payment']
+                + $agg['contract_payment'] + $agg['income_payment'] + $agg['technical_service_payment'];
+            $egress = $agg['expense_payment'] + $agg['purchase_payment'];
+            $balance = (float) $account->initial_balance + $entry - $egress + $treasury['net_pen'];
+        } else {
+            $balance = (float) $account->initial_balance + $agg['native_net'] + $treasury['net_currency'];
+        }
+
+        return ['currency_type_id' => $currency, 'balance' => round($balance, 2)];
+    }
+
+    /**
+     * Credit-note deductions that getBankAccountBalanceAsOf() applies to ONE bank account, itemized.
+     *
+     * Same rules as the aggregate: a credit note is deducted once per document that has accepted payments into the
+     * account up to $dateEnd, only while the credit note document is in an accepted state and (as-of semantics) was
+     * issued on or before $dateEnd. The amount is signed (negative: it reduces the books) and expressed in the
+     * account currency exactly as the balance computes it. These items never appear on a bank statement.
+     *
+     * @return array<int, array{key: string, credit_note_document_id: int, document_id: int, date: string, amount: float, number: string, document_number: string, currency_type_id: string}>
+     */
+    public function getBankAccountCreditNoteAdjustments(int $accountId, ?string $dateEnd = null): array
+    {
+        if (!$this->hasTable('global_payments') || !$this->hasTable('document_payments')
+            || !$this->hasTable('documents') || !$this->hasTable('notes')) {
+            return [];
+        }
+
+        $account = BankAccount::query()->whereKey($accountId)->first();
+        if (!$account) {
+            return [];
+        }
+        $targetCurrency = (string) $account->currency_type_id;
+
+        $docQuery = DB::connection('tenant')
+            ->table('global_payments as gp')
+            ->join('document_payments as p', 'p.id', '=', 'gp.payment_id')
+            ->join('documents as d', 'd.id', '=', 'p.document_id')
+            ->where('gp.destination_type', BankAccount::class)
+            ->where('gp.payment_type', DocumentPayment::class)
+            ->where('gp.destination_id', $accountId)
+            ->whereIn('d.state_type_id', self::ACCEPTED_STATE_TYPES);
+        if ($dateEnd) {
+            $docQuery->where('p.date_of_payment', '<=', $dateEnd);
+        }
+        $docIds = $docQuery->distinct()->pluck('d.id')->map(function ($id) {
+            return (int) $id;
+        })->all();
+        if (empty($docIds)) {
+            return [];
+        }
+
+        $query = DB::connection('tenant')
+            ->table('notes as n')
+            ->join('documents as nd', 'nd.id', '=', 'n.document_id')
+            ->join('documents as d', 'd.id', '=', 'n.affected_document_id')
+            ->where('n.note_type', 'credit')
+            ->whereIn('n.affected_document_id', $docIds)
+            ->whereIn('nd.state_type_id', self::ACCEPTED_STATE_TYPES)
+            ->orderBy('nd.date_of_issue')
+            ->orderBy('nd.id');
+        if ($dateEnd) {
+            $query->whereDate('nd.date_of_issue', '<=', $dateEnd);
+        }
+
+        $rows = $query->get([
+            'n.affected_document_id',
+            'nd.id as nd_id',
+            'nd.series as nd_series',
+            'nd.number as nd_number',
+            'nd.date_of_issue',
+            'nd.total',
+            'nd.currency_type_id',
+            'nd.exchange_rate_sale',
+            'd.series as d_series',
+            'd.number as d_number',
+        ]);
+
+        $items = [];
+        foreach ($rows as $row) {
+            $amount = $this->convertAmountToAccountCurrency(
+                (float) $row->total,
+                (string) ($row->currency_type_id ?? 'PEN'),
+                (float) ($row->exchange_rate_sale ?? 1.0),
+                $targetCurrency
+            );
+            $items[] = [
+                'key' => 'credit_note_adjustment:' . (int) $row->nd_id . ':' . (int) $row->affected_document_id,
+                'credit_note_document_id' => (int) $row->nd_id,
+                'document_id' => (int) $row->affected_document_id,
+                'date' => substr((string) $row->date_of_issue, 0, 10),
+                'amount' => -round($amount, 2),
+                'number' => trim($row->nd_series . '-' . $row->nd_number, '-'),
+                'document_number' => trim($row->d_series . '-' . $row->d_number, '-'),
+                'currency_type_id' => $targetCurrency,
+            ];
+        }
+
+        return $items;
+    }
+
     private function emptyDestinationAggregate(): array
     {
         return [
@@ -543,7 +677,8 @@ class TreasuryBalanceService
         array $destinationIds,
         ?string $dateStart,
         ?string $dateEnd,
-        array $accountCurrencyMap
+        array $accountCurrencyMap,
+        bool $boundCreditNotesByIssueDate = false
     ): array {
         if (!$this->hasTable('global_payments')) {
             return [];
@@ -609,7 +744,7 @@ class TreasuryBalanceService
 
             // Deduct credit notes ONCE per (destination_id, document_id)
             if (!empty($affectedDocIds) && $this->hasTable('notes')) {
-                $creditNoteRows = DB::connection('tenant')
+                $creditNoteQuery = DB::connection('tenant')
                     ->table('notes as n')
                     ->join('documents as nd', 'nd.id', '=', 'n.document_id')
                     ->where('n.note_type', 'credit')
@@ -620,8 +755,15 @@ class TreasuryBalanceService
                         'nd.total',
                         'nd.currency_type_id',
                         'nd.exchange_rate_sale'
-                    )
-                    ->get();
+                    );
+
+                // As-of balances (bank reconciliation only) count a credit note once it has been issued. The current
+                // balance keeps its historical behaviour: not date-bounded.
+                if ($boundCreditNotesByIssueDate && $dateEnd) {
+                    $creditNoteQuery->whereDate('nd.date_of_issue', '<=', $dateEnd);
+                }
+
+                $creditNoteRows = $creditNoteQuery->get();
 
                 $creditNotesByDoc = [];
                 foreach ($creditNoteRows as $cn) {

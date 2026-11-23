@@ -59,7 +59,11 @@ class MovementService
         $this->paymentEvidenceService = $paymentEvidenceService;
     }
 
-    public function createManual(array $payload, int $userId): array
+    /**
+     * @param array<int, string> $extraKinds additional kinds accepted by this call only (the bank reconciliation
+     *                                       creates `itf` lines from statement rows; the public manual form cannot)
+     */
+    public function createManual(array $payload, int $userId, array $extraKinds = []): array
     {
         if ($userId <= 0) {
             throw ValidationException::withMessages([
@@ -68,7 +72,7 @@ class MovementService
         }
 
         $kind = (string) ($payload['kind'] ?? '');
-        if (!in_array($kind, TreasuryMovement::MANUAL_KINDS, true)) {
+        if (!in_array($kind, array_merge(TreasuryMovement::MANUAL_KINDS, $extraKinds), true)) {
             throw ValidationException::withMessages([
                 'kind' => ['El tipo de movimiento manual no es válido.'],
             ]);
@@ -250,7 +254,7 @@ class MovementService
                 }
             }
 
-            $operationNumber = $this->nullableTrim($payload['operation_number'] ?? null);
+            $operationNumber = $this->operationNumber($payload['operation_number'] ?? null);
 
             $movement = TreasuryMovement::create([
                 'establishment_id' => $establishmentId,
@@ -410,6 +414,16 @@ class MovementService
         }
 
         return DB::connection('tenant')->transaction(function () use ($movementId, $cleanReason, $userId, $allowDetractionLinked) {
+            // Global lock order (shared with the bank reconciliation): destination account/cash FIRST (sorted), then
+            // the movement rows. Learn the destinations with an unlocked read, lock them, then lock the movements
+            // and verify the destinations did not change in between.
+            $preDestinations = $this->collectVoidDestinations($movementId);
+            foreach ($preDestinations as [$destClass, $destId]) {
+                if (class_exists($destClass)) {
+                    $destClass::whereKey($destId)->lockForUpdate()->first();
+                }
+            }
+
             $target = TreasuryMovement::whereKey($movementId)->lockForUpdate()->firstOrFail();
 
             if ($target->state === TreasuryMovement::STATE_VOIDED) {
@@ -449,13 +463,20 @@ class MovementService
                 })
                 ->values();
 
-            // Lock involved destinations in deterministic order to avoid deadlocks with concurrent operations.
+            // The destinations were locked up front (sorted). If the set changed between the unlocked read and the
+            // row locks (e.g. a child was created concurrently), fail cleanly instead of locking out of order.
             $destinations = [];
             foreach ($toVoid as $item) {
                 $key = $item->destination_type . ':' . $item->destination_id;
                 $destinations[$key] = [$item->destination_type, (int) $item->destination_id];
             }
             ksort($destinations);
+
+            if (array_keys($destinations) !== array_keys($preDestinations)) {
+                throw ValidationException::withMessages([
+                    'movement' => ['El movimiento cambió mientras se procesaba la anulación. Intente nuevamente.'],
+                ]);
+            }
 
             foreach ($destinations as [$destClass, $destId]) {
                 if (class_exists($destClass)) {
@@ -465,6 +486,21 @@ class MovementService
                             'movement' => ['No se puede anular un movimiento vinculado a una caja POS cerrada.'],
                         ]);
                     }
+                }
+            }
+
+            // Bank reconciliation guard: a movement matched to a statement line cannot disappear from the books.
+            // Reconciled (closed statement) movements require reopening the reconciliation; matched ones, unmatching.
+            foreach ($toVoid as $item) {
+                if ($item->reconciled_at !== null) {
+                    throw ValidationException::withMessages([
+                        'movement' => ['Este movimiento pertenece a una conciliación bancaria cerrada. Reabra la conciliación antes de anularlo.'],
+                    ]);
+                }
+                if ($item->bank_statement_line_id !== null) {
+                    throw ValidationException::withMessages([
+                        'movement' => ['Este movimiento está emparejado con un extracto bancario. Desvincúlelo en Conciliación bancaria antes de anularlo.'],
+                    ]);
                 }
             }
 
@@ -485,6 +521,39 @@ class MovementService
                 'transfer_group' => $target->transfer_group,
             ];
         });
+    }
+
+    /**
+     * Unlocked read of the destinations (sorted by key) touched by voiding a movement: the active movements of its
+     * transfer group plus their active ITF/bank_fee children. Empty when the movement does not exist.
+     *
+     * @return array<string, array{0: string, 1: int}>
+     */
+    protected function collectVoidDestinations(int $movementId): array
+    {
+        $target = TreasuryMovement::whereKey($movementId)->first();
+        if (!$target) {
+            return [];
+        }
+
+        $parents = $target->transfer_group !== null
+            ? TreasuryMovement::where('transfer_group', $target->transfer_group)->get()
+            : collect([$target]);
+
+        $children = TreasuryMovement::whereIn('related_movement_id', $parents->pluck('id')->all())
+            ->where('state', TreasuryMovement::STATE_ACTIVE)
+            ->get();
+
+        $destinations = [];
+        foreach ($parents->merge($children)->unique('id') as $item) {
+            if ($item->state !== TreasuryMovement::STATE_ACTIVE) {
+                continue;
+            }
+            $destinations[$item->destination_type . ':' . $item->destination_id] = [$item->destination_type, (int) $item->destination_id];
+        }
+        ksort($destinations);
+
+        return $destinations;
     }
 
     /**
@@ -606,7 +675,7 @@ class MovementService
                 'exchange_rate_sale' => null,
                 'exchange_rate_used' => 1.0,
                 'amount_pen' => $amount,
-                'operation_number' => $this->nullableTrim($payload['operation_number'] ?? null),
+                'operation_number' => $this->operationNumber($payload['operation_number'] ?? null),
                 'counterparty_document' => $this->nullableTrim($payload['counterparty_document'] ?? null),
                 'counterparty_name' => $this->nullableTrim($payload['counterparty_name'] ?? null),
                 'description' => $description,
@@ -692,7 +761,7 @@ class MovementService
 
             $group = (string) \Illuminate\Support\Str::uuid();
             $description = $this->nullableTrim($payload['description'] ?? null) ?: 'Liberación de fondos de detracciones (Formulario 1697)';
-            $operationNumber = $this->nullableTrim($payload['operation_number'] ?? null);
+            $operationNumber = $this->operationNumber($payload['operation_number'] ?? null);
 
             $base = [
                 'date' => $date,
@@ -977,6 +1046,16 @@ class MovementService
             'sale' => $sale ?? $used,
             'used' => $used,
         ];
+    }
+
+    /**
+     * Operation numbers fit a string(60) column: trim and defensively cut (multibyte-safe) instead of failing the write.
+     */
+    private function operationNumber($value): ?string
+    {
+        $trimmed = $this->nullableTrim($value);
+
+        return $trimmed === null ? null : mb_substr($trimmed, 0, 60);
     }
 
     private function nullableTrim($value): ?string

@@ -10,12 +10,14 @@ use Modules\Treasury\Services\ItfCalculator;
 use Modules\Treasury\Services\MovementService;
 use Modules\Treasury\Services\PaymentEvidenceService;
 use Modules\Treasury\Services\PurchaseFeeService;
+use Modules\Treasury\Services\ReconciliationService;
 use Modules\Treasury\Services\ReceivablePayableService;
 use Modules\Treasury\Services\RetentionPerceptionService;
 use Modules\Treasury\Services\TaxRateRepository;
 use Modules\Treasury\Services\TransferService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 use Modules\Treasury\Support\BusinessDayCalculator;
+use Modules\Treasury\Support\StatementParser;
 
 class TreasuryServiceProvider extends ServiceProvider
 {
@@ -93,6 +95,17 @@ class TreasuryServiceProvider extends ServiceProvider
 
         $this->app->singleton(RetentionPerceptionService::class, function ($app) {
             return new RetentionPerceptionService($app->make(TaxRateRepository::class));
+        });
+
+        $this->app->singleton(StatementParser::class, function () {
+            return new StatementParser();
+        });
+
+        $this->app->singleton(ReconciliationService::class, function ($app) {
+            return new ReconciliationService(
+                $app->make(MovementService::class),
+                $app->make(TreasuryBalanceService::class)
+            );
         });
 
         $this->app->register(RouteServiceProvider::class);

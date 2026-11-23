@@ -71,6 +71,28 @@ if ($hostname) {
                 Route::post('withholdings/issued-perceptions/{payment}', 'WithholdingController@linkPerception');
                 Route::post('withholdings/settle', 'WithholdingController@settle');
                 Route::post('withholdings/{id}/void', 'WithholdingController@void');
+
+                // Phase 5: Bank reconciliation (statement import, matching, closing)
+                Route::get('reconciliation', 'ReconciliationController@index')->name('tenant.treasury.reconciliation.index');
+                Route::get('reconciliation/tables', 'ReconciliationController@tables');
+                Route::get('reconciliation/statements', 'ReconciliationController@statements');
+                Route::get('reconciliation/statements/{id}', 'ReconciliationController@show');
+                Route::get('reconciliation/statements/{id}/lines', 'ReconciliationController@lines');
+                Route::get('reconciliation/statements/{id}/candidates', 'ReconciliationController@candidates');
+                Route::get('reconciliation/statements/{id}/summary', 'ReconciliationController@summary');
+                Route::post('reconciliation/preview', 'ReconciliationController@preview');
+                Route::post('reconciliation/statements', 'ReconciliationController@store');
+                Route::post('reconciliation/statements/{id}/discard', 'ReconciliationController@discard');
+                Route::post('reconciliation/statements/{id}/auto-match', 'ReconciliationController@autoMatch');
+                Route::post('reconciliation/statements/{id}/close', 'ReconciliationController@close');
+                Route::post('reconciliation/statements/{id}/reopen', 'ReconciliationController@reopen');
+                Route::post('reconciliation/lines/{id}/match', 'ReconciliationController@match');
+                Route::post('reconciliation/lines/{id}/unmatch', 'ReconciliationController@unmatch');
+                Route::post('reconciliation/lines/{id}/ignore', 'ReconciliationController@ignore');
+                Route::post('reconciliation/lines/{id}/unignore', 'ReconciliationController@unignore');
+                Route::post('reconciliation/lines/{id}/create-movement', 'ReconciliationController@createMovement');
+                Route::post('reconciliation/mappings', 'ReconciliationController@saveMapping');
+                Route::post('reconciliation/mappings/{id}/delete', 'ReconciliationController@deleteMapping');
             });
         });
     });
