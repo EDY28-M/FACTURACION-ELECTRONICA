@@ -14,6 +14,14 @@ class BankAccount extends ModelTenant
 
     public $timestamps = false;
 
+    public const ACCOUNT_TYPES = [
+        'checking',
+        'savings',
+        'detraction_bn',
+        'card',
+        'other',
+    ];
+
     protected $fillable = [
         'bank_id',
         'description',
@@ -22,12 +30,25 @@ class BankAccount extends ModelTenant
         'cci',
         'status',
         'initial_balance',
-        'show_in_documents'
+        'show_in_documents',
+        'account_type',
+        'pcge_account',
+        'itf_exempt',
+        'establishment_id',
+    ];
+
+    protected $casts = [
+        'itf_exempt' => 'boolean',
     ];
 
     public function bank()
     {
         return $this->belongsTo(Bank::class);
+    }
+
+    public function establishment()
+    {
+        return $this->belongsTo(Establishment::class);
     }
 
     public function currency_type()

@@ -183,6 +183,10 @@ Vue.component('tenant-income-types-index', (resolve, reject) => require.ensure([
 Vue.component('tenant-income-reasons-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleFinance/income_reasons/index.vue')), reject, 'tenant-income-reasons-index'));
 Vue.component('tenant-finance-movements-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleFinance/movements/index.vue')), reject, 'tenant-finance-movements-index'));
 
+//Treasury
+Vue.component('tenant-treasury-dashboard-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/dashboard/index.vue')), reject, 'tenant-treasury-dashboard-index'));
+Vue.component('tenant-treasury-accounts-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/accounts/index.vue')), reject, 'tenant-treasury-accounts-index'));
+
 
 //Sale
 Vue.component('tenant-sale-opportunities-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleSale/sale_opportunities/index.vue')), reject, 'tenant-sale-opportunities-index'));

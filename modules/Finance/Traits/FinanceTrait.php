@@ -17,6 +17,7 @@ use Modules\Sale\Models\ContractPayment;
 use Modules\Finance\Models\IncomePayment;
 use Modules\Pos\Models\CashTransaction;
 use Modules\Sale\Models\TechnicalServicePayment;
+use Modules\Treasury\Services\TreasuryBalanceService;
 
 
 trait FinanceTrait
@@ -202,140 +203,41 @@ trait FinanceTrait
     }
 
     
-    public function getBalanceByCash($cash){
- 
-        $document_payment = $this->getSumPayment($cash, DocumentPayment::class);
-        $expense_payment = $this->getSumPayment($cash, ExpensePayment::class); 
-        $sale_note_payment = $this->getSumPayment($cash, SaleNotePayment::class);
-        $purchase_payment = $this->getSumPayment($cash, PurchasePayment::class); 
-        $quotation_payment = $this->getSumPayment($cash, QuotationPayment::class); 
-        // $contract_payment = 0; //$this->getSumPayment($cash, ContractPayment::class); 
-        $contract_payment = $this->getSumPayment($cash, ContractPayment::class); 
-        $income_payment = $this->getSumPayment($cash, IncomePayment::class); 
-        $cash_pos = $this->getSumPaymentCashPos($cash, CashTransaction::class); 
-        $technical_service_payment = $this->getSumPayment($cash, TechnicalServicePayment::class); 
+    protected function treasuryBalanceService(): TreasuryBalanceService
+    {
+        return new TreasuryBalanceService();
+    }
 
-        $entry = $document_payment + $sale_note_payment + $quotation_payment + $contract_payment + $income_payment + $cash_pos + $technical_service_payment;
-        $egress = $expense_payment + $purchase_payment;
-        
-        $balance = $entry - $egress;
-
-        return [
-
-            'id' => 'cash',
-            'description' => "CAJA GENERAL",
-            'expense_payment' => number_format($expense_payment,2, ".", ""),
-            'sale_note_payment' => number_format($sale_note_payment,2, ".", ""),
-            'quotation_payment' => number_format($quotation_payment,2, ".", ""),
-            'contract_payment' => number_format($contract_payment,2, ".", ""),
-            'income_payment' => number_format($income_payment + $cash_pos,2, ".", ""),
-            'document_payment' => number_format($document_payment,2, ".", ""),
-            'purchase_payment' => number_format($purchase_payment,2, ".", ""),
-            'technical_service_payment' => number_format($technical_service_payment,2, ".", ""),
-            'balance' => number_format($balance,2, ".", "")
-            
-        ];
-
+    public function getBalanceByCash($cash, ?string $dateStart = null, ?string $dateEnd = null){
+        return $this->treasuryBalanceService()->getBalanceByCash($cash, null, $dateStart, $dateEnd);
     }
 
 
     public function getSumPaymentCashPos($record, $model)
     {
-        return $record->where('payment_type', $model)->sum(function($row){
-            return $row->payment->payment;
-        });
+        return $this->treasuryBalanceService()->getSumPaymentCashPos($record, $model);
     }
     
     
-    public function getBalanceByBankAcounts($bank_accounts){
-
-        $records = $bank_accounts->map(function($row){
-
-            $document_payment = $this->getSumPayment($row->global_destination, DocumentPayment::class);
-            $expense_payment = $this->getSumPayment($row->global_destination, ExpensePayment::class); 
-            $sale_note_payment = $this->getSumPayment($row->global_destination, SaleNotePayment::class);
-            $purchase_payment = $this->getSumPayment($row->global_destination, PurchasePayment::class); 
-            $quotation_payment = $this->getSumPayment($row->global_destination, QuotationPayment::class); 
-            // $contract_payment = 0; //$this->getSumPayment($row->global_destination, ContractPayment::class); 
-            $contract_payment = $this->getSumPayment($row->global_destination, ContractPayment::class); 
-            $income_payment = $this->getSumPayment($row->global_destination, IncomePayment::class); 
-            $technical_service_payment = $this->getSumPayment($row->global_destination, TechnicalServicePayment::class); 
-
-            $entry = $document_payment + $sale_note_payment + $quotation_payment + $contract_payment + $income_payment + $technical_service_payment;
-            $egress = $expense_payment + $purchase_payment;
-            $balance = $row->initial_balance + $entry - $egress;
-
-            return [
-
-                'id' => $row->id,
-                'description' => "{$row->bank->description} - {$row->currency_type_id} - {$row->description}", 
-                'expense_payment' => number_format($expense_payment,2, ".", ""),
-                'sale_note_payment' => number_format($sale_note_payment,2, ".", ""),
-                'quotation_payment' => number_format($quotation_payment,2, ".", ""),
-                'contract_payment' => number_format($contract_payment,2, ".", ""),
-                'document_payment' => number_format($document_payment,2, ".", ""),
-                'purchase_payment' => number_format($purchase_payment,2, ".", ""),
-                'income_payment' => number_format($income_payment,2, ".", ""),
-                'technical_service_payment' => number_format($technical_service_payment,2, ".", ""),
-                'balance' => number_format($balance,2, ".", "")
-                
-            ];
-
-        }); 
-
-        return $records;
-        
+    public function getBalanceByBankAcounts($bank_accounts, ?string $dateStart = null, ?string $dateEnd = null){
+        return $this->treasuryBalanceService()->getBalanceByBankAccounts($bank_accounts, null, $dateStart, $dateEnd);
     }
 
     public function getSumPayment($record, $model)
     {
-        $total = 0;
-        $creditNotesByDocument = [];
-
-        foreach ($record->where('payment_type', $model)->get() as $row) {
-            $payment = $row->payment;
-            $associated = $payment ? $payment->associated_record_payment : null;
-
-            if (!$associated) {
-                continue;
-            }
-
-            $total += $this->calculateTotalCurrencyType($associated, $payment->payment);
-
-            if ($row->instance_type === 'document') {
-                $key = $associated->getKey();
-                if (!array_key_exists($key, $creditNotesByDocument)) {
-                    $creditNotesByDocument[$key] = $this->getTotalCreditNotes($associated);
-                }
-            }
-        }
-
-        return $total - array_sum($creditNotesByDocument);
+        return $this->treasuryBalanceService()->getSumPayment($record, $model);
     }
     
 
     public function getTotalCreditNotes($record)
     {
-
-        $credit_notes = $record->affected_documents->where('note_type', 'credit');
-
-        $total_credit_notes = $credit_notes->sum(function($note){
-
-            if(in_array($note->document->state_type_id, ['01','03','05','07','13'])){
-                return $this->calculateTotalCurrencyType($note->document, $note->document->total);
-            }
-
-            return 0;
-        });
-
-        return $total_credit_notes;
-
+        return $this->treasuryBalanceService()->getTotalCreditNotes($record);
     }
     
 
     public function calculateTotalCurrencyType($record, $payment)
     {
-        return ($record->currency_type_id === 'USD') ? $payment * $record->exchange_rate_sale : $payment;
+        return $this->treasuryBalanceService()->calculateTotalCurrencyType($record, $payment);
     }
 
     

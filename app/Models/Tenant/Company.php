@@ -28,6 +28,17 @@ class Company extends ModelTenant
         'mtc_registration_number',
         'sire_client_id',
         'cpe_client_id',
+        'is_retention_agent',
+        'retention_agent_since',
+        'is_perception_agent',
+        'is_good_taxpayer',
+    ];
+
+    protected $casts = [
+        'is_retention_agent' => 'boolean',
+        'retention_agent_since' => 'date',
+        'is_perception_agent' => 'boolean',
+        'is_good_taxpayer' => 'boolean',
     ];
 
     protected $hidden = ['gre_client_secret', 'sire_client_secret', 'cpe_client_secret'];

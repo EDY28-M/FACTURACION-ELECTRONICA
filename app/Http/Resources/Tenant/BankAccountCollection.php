@@ -23,6 +23,10 @@ class BankAccountCollection extends ResourceCollection
 				'cci'                       => $row->cci,
 				'currency_type_description' => $row->currency_type->description,
 				'show_in_documents'         => $row->show_in_documents,
+				'account_type'              => $row->account_type ?: 'checking',
+				'pcge_account'              => $row->pcge_account,
+				'itf_exempt'                => (bool) $row->itf_exempt,
+				'establishment_id'          => $row->establishment_id,
 			];
 		});
 	}

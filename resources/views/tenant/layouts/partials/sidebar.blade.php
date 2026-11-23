@@ -9,7 +9,7 @@
         || (! $tnIsIntegrator && (in_array('purchases', $vc_modules) || in_array('inventory', $vc_modules)))
         || in_array('establishments', $vc_modules)
         || (in_array('advanced', $vc_modules) && $vc_company->soap_type_id != '03');
-    $tnShowAnalyze = in_array('reports', $vc_modules) || in_array('accounting', $vc_modules) || in_array('finance', $vc_modules);
+    $tnShowAnalyze = in_array('reports', $vc_modules) || in_array('accounting', $vc_modules) || in_array('finance', $vc_modules) || in_array('treasury', $vc_modules);
     $tnShowAccount = in_array('configuration', $vc_modules) || in_array('cuenta', $vc_modules);
     $tnBrand = trim((string) ($vc_company->trade_name ?: $vc_company->name)) ?: 'Facturación';
     $tnInitial = mb_strtoupper(mb_substr($tnBrand, 0, 1));
@@ -620,6 +620,25 @@
                             </li>
                             <li class="{{(($path[0] === 'finances') && ($path[1] == 'payment-method-types')) ? 'nav-active' : ''}}">
                                 <a class="nav-link" href="{{route('tenant.finances.payment_method_types.index')}}">Ingresos y Egresos - M. Pago</a>
+                            </li>
+                        </ul>
+                    </li>
+                    @endif
+                    @if(in_array('treasury', $vc_modules))
+                    <li class="nav-parent
+                        {{ $path[0] === 'treasury' ? 'nav-active nav-expanded' : '' }}"
+                    >
+                        <a class="nav-link" data-tip="Tesorería" href="#">
+                            @include('tenant.layouts.partials.icon', ['name' => 'building-2'])
+                            <span class="rail-label">Tesorería</span>
+                            @include('tenant.layouts.partials.icon', ['name' => 'chevron-right', 'class' => 'chev'])
+                        </a>
+                        <ul class="nav-children" data-title="Tesorería">
+                            <li class="{{ ($path[0] === 'treasury' && (($path[1] ?? '') === '' || ($path[1] ?? '') === 'summary')) ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.dashboard.index') }}">Resumen</a>
+                            </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'accounts') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.accounts.index') }}">Cuentas</a>
                             </li>
                         </ul>
                     </li>

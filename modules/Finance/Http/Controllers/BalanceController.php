@@ -66,8 +66,8 @@ class BalanceController extends Controller
                                     ->get();
 
 
-        $balance_by_bank_acounts = $this->getBalanceByBankAcounts($bank_accounts);
-        $balance_by_cash = $this->getBalanceByCash($all_cash);
+        $balance_by_bank_acounts = $this->getBalanceByBankAcounts($bank_accounts, $params->date_start, $params->date_end);
+        $balance_by_cash = $this->getBalanceByCash($all_cash, $params->date_start, $params->date_end);
 
         return $balance_by_bank_acounts->push($balance_by_cash);
         

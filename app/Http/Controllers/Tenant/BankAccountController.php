@@ -8,7 +8,9 @@ use App\Http\Resources\Tenant\BankAccountResource;
 use App\Models\Tenant\Bank;
 use App\Models\Tenant\BankAccount;
 use App\Models\Tenant\Catalogs\CurrencyType;
+use App\Models\Tenant\Establishment;
 use Exception;
+use Modules\Treasury\Services\TreasuryBalanceService;
 
 class BankAccountController extends Controller
 {
@@ -33,8 +35,20 @@ class BankAccountController extends Controller
     {
         $banks = Bank::all();
         $currency_types = CurrencyType::whereActive()->get();
+        $establishments = Establishment::all()->map(function ($row) {
+            return [
+                'id' => $row->id,
+                'description' => $row->description,
+            ];
+        });
+        $account_types = collect(TreasuryBalanceService::ACCOUNT_TYPE_LABELS)->map(function ($label, $value) {
+            return [
+                'id' => $value,
+                'description' => $label,
+            ];
+        })->values();
 
-        return compact('banks', 'currency_types');
+        return compact('banks', 'currency_types', 'establishments', 'account_types');
     }
 
 
@@ -49,7 +63,26 @@ class BankAccountController extends Controller
     {
         $id = $request->input('id');
         $bank_account = BankAccount::firstOrNew(['id' => $id]);
-        $bank_account->fill($request->all());
+        $data = $request->validated();
+
+        if (!array_key_exists('account_type', $data) || $data['account_type'] === null || $data['account_type'] === '') {
+            if (!$bank_account->exists) {
+                $data['account_type'] = 'checking';
+            } else {
+                unset($data['account_type']);
+            }
+        }
+
+        if (!array_key_exists('itf_exempt', $data) || $data['itf_exempt'] === null) {
+            if (!$bank_account->exists) {
+                $effectiveType = $data['account_type'] ?? 'checking';
+                $data['itf_exempt'] = ($effectiveType === 'detraction_bn');
+            } else {
+                unset($data['itf_exempt']);
+            }
+        }
+
+        $bank_account->fill($data);
         $bank_account->save();
 
         return [

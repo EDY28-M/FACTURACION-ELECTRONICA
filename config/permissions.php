@@ -158,6 +158,9 @@ return [
         ['path' => 'income-types', 'module' => 'finance'],
         ['path' => 'income-reasons', 'module' => 'finance'],
 
+        // Tesoreria
+        ['path' => 'treasury', 'module' => 'treasury', 'ajax' => true],
+
         // Shared catalog reads used by document/purchase forms.
         ['path' => 'currency_types/records', 'module' => null],
         ['path' => 'exchange_rates/records', 'module' => null],
@@ -266,6 +269,7 @@ return [
         'list-reports',
         'account/format',
         'finances/movements',
+        'treasury',
         'list-settings',
         'cuenta/configuration',
         'hotels/reception',

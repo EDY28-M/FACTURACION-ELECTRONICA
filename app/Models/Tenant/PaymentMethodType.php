@@ -24,6 +24,12 @@ class PaymentMethodType extends ModelTenant
         'has_card',
         'charge',
         'number_days',
+        'sunat_code',
+        'is_cash',
+    ];
+
+    protected $casts = [
+        'is_cash' => 'boolean',
     ];
 
 
