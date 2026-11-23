@@ -159,6 +159,7 @@ return [
         ['path' => 'income-reasons', 'module' => 'finance'],
 
         // Tesoreria
+        ['path' => 'treasury/payment-evidences', 'modules' => ['treasury', 'documents', 'purchases', 'pos', 'finance'], 'ajax' => true],
         ['path' => 'treasury', 'module' => 'treasury', 'ajax' => true],
 
         // Shared catalog reads used by document/purchase forms.

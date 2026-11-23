@@ -36,7 +36,8 @@
                                         </button>
                                     </td>
                                     <td class="text-right">{{ row.payment }}</td>
-                                    <td class="series-table-actions text-right">
+                                    <td class="series-table-actions text-right text-nowrap">
+                                        <button type="button" class="btn waves-effect waves-light btn-xs btn-secondary mr-1" @click.prevent="clickEvidence(row.id)">Evidencia</button>
                                         <button type="button" class="btn waves-effect waves-light btn-xs btn-danger" @click.prevent="clickDelete(row.id)">Eliminar</button>
                                         <!--<el-button type="danger" icon="el-icon-delete" plain @click.prevent="clickDelete(row.id)"></el-button>-->
                                     </td>
@@ -135,6 +136,11 @@
                 </div>
             </div>
         </div>
+        <tenant-treasury-payment-evidence-dialog
+            :show-dialog.sync="showEvidenceDialog"
+            payable-type="document_payment"
+            :payable-id="evidencePaymentId"
+        />
     </el-dialog>
 
 </template>
@@ -158,6 +164,8 @@
                 showAddButton: true,
                 document: {},
                 index_file: null,
+                showEvidenceDialog: false,
+                evidencePaymentId: null,
             }
         },
         async created() {
@@ -310,6 +318,10 @@
                 this.$emit('update:showDialog', false);
                 // this.initDocumentTypes()
                 // this.initForm()
+            },
+            clickEvidence(id) {
+                this.evidencePaymentId = id;
+                this.showEvidenceDialog = true;
             },
             clickDelete(id) {
                 this.destroy(`/${this.resource}/${id}`).then(() =>{

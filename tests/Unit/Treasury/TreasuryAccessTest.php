@@ -10,13 +10,16 @@ use Illuminate\Database\Capsule\Manager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Support\Facades\Facade;
+use Modules\Treasury\Services\PaymentEvidenceService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Verifies Phase 1 access control requirements for the Treasury module:
+ * Verifies Phase 1 + Phase 2 access control requirements for the Treasury module:
  * - Every route declared in modules/Treasury/Routes/web.php is wrapped in auth/redirect.module/locked.tenant
- *   and resolves to the `treasury` module with AJAX enforcement in config/permissions.php
- * - Users without the treasury module are denied on every route (page and AJAX)
+ *   and has an AJAX-enforced rule in config/permissions.php
+ * - Core `treasury/*` routes require strictly the `treasury` module
+ * - Shared `treasury/payment-evidences/*` routes allow payment-owning modules at the middleware layer
+ *   while enforcing per-alias module restrictions in PaymentEvidenceService::REQUIRED_MODULES_BY_ALIAS
  * - Tenants whose plan omits `treasury` cannot grant `treasury` to any user (including the owner)
  */
 class TreasuryAccessTest extends TestCase
@@ -53,6 +56,11 @@ class TreasuryAccessTest extends TestCase
         return $routes;
     }
 
+    private function isPaymentEvidenceRoute(string $path): bool
+    {
+        return strpos($path, 'treasury/payment-evidences') === 0;
+    }
+
     public function test_every_declared_treasury_route_has_a_permission_rule_with_ajax_enforcement(): void
     {
         $map = $this->map();
@@ -61,26 +69,55 @@ class TreasuryAccessTest extends TestCase
         foreach ($routes as [$path, $method]) {
             $rule = $map->resolve($path, $method);
             $this->assertNotNull($rule, "Missing permission rule for {$method} {$path}");
-            $this->assertSame('treasury', $rule['module'], "Wrong module for {$method} {$path}");
             $this->assertTrue($rule['ajax'], "AJAX must be enforced for {$method} {$path}");
+
+            if ($this->isPaymentEvidenceRoute($path)) {
+                $this->assertContains('treasury', $rule['modules'], "Evidence route must include treasury: {$method} {$path}");
+                $this->assertContains('documents', $rule['modules'], "Evidence route must include documents: {$method} {$path}");
+                $this->assertContains('purchases', $rule['modules'], "Evidence route must include purchases: {$method} {$path}");
+            } else {
+                $this->assertSame('treasury', $rule['module'], "Wrong module for {$method} {$path}");
+            }
         }
     }
 
-    public function test_user_without_treasury_module_is_denied_on_every_declared_route(): void
+    public function test_user_without_treasury_module_is_denied_on_every_core_route_and_unrelated_users_denied_on_evidence(): void
     {
         $map = $this->map();
         $routes = $this->declaredTreasuryRoutes();
 
-        // Even a user with finance and configuration modules cannot access treasury when disabled.
+        // Even a user with finance and configuration modules cannot access core treasury routes when disabled.
         $otherModules = ['dashboard', 'finance', 'configuration'];
+        $nonPaymentModules = ['dashboard', 'configuration', 'items'];
 
         foreach ($routes as [$path, $method]) {
+            if ($this->isPaymentEvidenceRoute($path)) {
+                foreach ([false, true] as $isAjax) {
+                    $decision = $map->decide($path, false, $nonPaymentModules, [], $isAjax, $method);
+                    $this->assertFalse($decision['allowed'], "Expected denial for {$method} {$path} without payment modules");
+                    $this->assertSame('module', $decision['reason']);
+                }
+                continue;
+            }
+
             foreach ([false, true] as $isAjax) {
                 $decision = $map->decide($path, false, $otherModules, [], $isAjax, $method);
                 $this->assertFalse($decision['allowed'], "Expected denial for {$method} {$path} (ajax=" . ($isAjax ? '1' : '0') . ')');
                 $this->assertSame('module', $decision['reason'], "Expected module denial for {$method} {$path}");
             }
         }
+    }
+
+    public function test_payment_evidence_per_alias_module_map_covers_every_supported_payable_type(): void
+    {
+        $expected = array_keys(PaymentEvidenceService::PAYABLE_TYPES);
+        $actual = array_keys(PaymentEvidenceService::REQUIRED_MODULES_BY_ALIAS);
+        sort($expected);
+        sort($actual);
+
+        $this->assertSame($expected, $actual);
+        // treasury_movement evidence remains strictly restricted to the treasury module
+        $this->assertSame(['treasury'], PaymentEvidenceService::REQUIRED_MODULES_BY_ALIAS['treasury_movement']);
     }
 
     public function test_user_with_treasury_module_is_allowed_and_menu_entry_exists(): void
@@ -143,16 +180,20 @@ class TreasuryAccessTest extends TestCase
             $this->assertNotContains('treasury', $plan->moduleValues());
 
             $map = $this->map();
-            $decision = $map->decide('treasury', false, $plan->moduleValues(), $plan->levelValues(), false, 'GET');
-            $this->assertFalse($decision['allowed']);
-            $this->assertSame('module', $decision['reason']);
+            foreach (['treasury', 'treasury/movements', 'treasury/transfers'] as $path) {
+                $decision = $map->decide($path, false, $plan->moduleValues(), $plan->levelValues(), false, 'GET');
+                $this->assertFalse($decision['allowed']);
+                $this->assertSame('module', $decision['reason']);
+            }
 
             // Enabling treasury on the tenant plan unlocks access immediately after flush.
             $db->table('module_user')->insert(['module_id' => 19, 'user_id' => 1]);
             TenantPlan::flush();
             $enabledPlan = TenantPlan::current();
             $this->assertContains('treasury', $enabledPlan->moduleValues());
-            $this->assertTrue($map->decide('treasury', false, $enabledPlan->moduleValues(), $enabledPlan->levelValues(), true, 'GET')['allowed']);
+            foreach (['treasury', 'treasury/movements', 'treasury/transfers'] as $path) {
+                $this->assertTrue($map->decide($path, false, $enabledPlan->moduleValues(), $enabledPlan->levelValues(), true, 'GET')['allowed']);
+            }
         } finally {
             TenantPlan::flush();
             if ($prevResolver) {

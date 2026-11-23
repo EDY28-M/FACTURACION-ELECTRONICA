@@ -12,6 +12,7 @@ use Mpdf\HTMLParserMode;
 use Mpdf\Mpdf;
 use Modules\Pos\Exports\ReportCashExport;
 use Modules\Pos\Mail\CashEmail;
+use Modules\Treasury\Services\CashTreasuryIntegrationService;
 use Illuminate\Support\Facades\Mail;
 
 
@@ -49,11 +50,16 @@ class CashController extends Controller
             ];
         });
 
+        $treasuryService = app()->bound(CashTreasuryIntegrationService::class)
+            ? app(CashTreasuryIntegrationService::class)
+            : new CashTreasuryIntegrationService();
+        $treasury_summary = $treasuryService->summarizeForCash($cash);
+
         set_time_limit(0);
         
-        $quantity_rows = $cash->cash_documents()->count();
+        $quantity_rows = $cash->cash_documents()->count() + $treasury_summary['movements']->count();
 
-        $html = view('pos::cash.report_pdf_ticket', compact("cash", "company", "methods_payment"))->render();
+        $html = view('pos::cash.report_pdf_ticket', compact("cash", "company", "methods_payment", "treasury_summary"))->render();
 
         $width = 78;
 
@@ -98,6 +104,11 @@ class CashController extends Controller
             ];
         });
 
+        $treasuryService = app()->bound(CashTreasuryIntegrationService::class)
+            ? app(CashTreasuryIntegrationService::class)
+            : new CashTreasuryIntegrationService();
+        $treasury_summary = $treasuryService->summarizeForCash($cash);
+
         set_time_limit(0);
         $filename = "Reporte_POS - {$cash->user->name} - {$cash->date_opening} {$cash->time_opening}";
         
@@ -105,6 +116,7 @@ class CashController extends Controller
                 ->cash($cash)
                 ->company($company)
                 ->methods_payment($methods_payment)
+                ->treasury_summary($treasury_summary)
                 ->download($filename.'.xlsx');
 
     }

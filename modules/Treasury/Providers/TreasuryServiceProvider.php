@@ -3,6 +3,13 @@
 namespace Modules\Treasury\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Modules\Treasury\Services\BancarizationChecker;
+use Modules\Treasury\Services\CashTreasuryIntegrationService;
+use Modules\Treasury\Services\ItfCalculator;
+use Modules\Treasury\Services\MovementService;
+use Modules\Treasury\Services\PaymentEvidenceService;
+use Modules\Treasury\Services\TaxRateRepository;
+use Modules\Treasury\Services\TransferService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 
 class TreasuryServiceProvider extends ServiceProvider
@@ -17,6 +24,42 @@ class TreasuryServiceProvider extends ServiceProvider
     {
         $this->app->singleton(TreasuryBalanceService::class, function () {
             return new TreasuryBalanceService();
+        });
+
+        $this->app->singleton(TaxRateRepository::class, function () {
+            return new TaxRateRepository();
+        });
+
+        $this->app->singleton(ItfCalculator::class, function ($app) {
+            return new ItfCalculator($app->make(TaxRateRepository::class));
+        });
+
+        $this->app->singleton(BancarizationChecker::class, function ($app) {
+            return new BancarizationChecker($app->make(TaxRateRepository::class));
+        });
+
+        $this->app->singleton(PaymentEvidenceService::class, function ($app) {
+            return new PaymentEvidenceService($app->make(BancarizationChecker::class));
+        });
+
+        $this->app->singleton(MovementService::class, function ($app) {
+            return new MovementService(
+                $app->make(TaxRateRepository::class),
+                $app->make(ItfCalculator::class),
+                $app->make(BancarizationChecker::class),
+                $app->make(PaymentEvidenceService::class)
+            );
+        });
+
+        $this->app->singleton(TransferService::class, function ($app) {
+            return new TransferService(
+                $app->make(ItfCalculator::class),
+                $app->make(PaymentEvidenceService::class)
+            );
+        });
+
+        $this->app->singleton(CashTreasuryIntegrationService::class, function () {
+            return new CashTreasuryIntegrationService();
         });
 
         $this->app->register(RouteServiceProvider::class);
@@ -50,6 +93,15 @@ class TreasuryServiceProvider extends ServiceProvider
 
     public function provides()
     {
-        return [TreasuryBalanceService::class];
+        return [
+            TreasuryBalanceService::class,
+            TaxRateRepository::class,
+            ItfCalculator::class,
+            BancarizationChecker::class,
+            PaymentEvidenceService::class,
+            MovementService::class,
+            TransferService::class,
+            CashTreasuryIntegrationService::class,
+        ];
     }
 }

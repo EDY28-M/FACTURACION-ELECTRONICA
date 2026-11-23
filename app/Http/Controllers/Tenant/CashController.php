@@ -25,6 +25,7 @@ use App\Models\Tenant\DocumentItem;
 use App\Models\Tenant\PaymentMethodType;
 use Modules\Pos\Models\CashTransaction;
 use Modules\Finance\Traits\FinanceTrait;
+use Modules\Treasury\Services\CashTreasuryIntegrationService;
 use Illuminate\Support\Facades\DB;
 use App\Models\Tenant\SaleNoteItem;
 use App\Exports\CashProductExport;
@@ -233,6 +234,8 @@ class CashController extends Controller
                 }
             }
 
+            $final_balance += $this->sumActiveTreasuryMovementsForCash($cash, $cash->date_closed);
+
             $cash->final_balance = round($final_balance + $cash->beginning_balance, 2);
             $cash->income = round($final_balance, 2);
             $cash->state = false;
@@ -243,6 +246,15 @@ class CashController extends Controller
                 'message' => 'Caja cerrada con éxito',
             ];
         });
+    }
+
+    protected function sumActiveTreasuryMovementsForCash(Cash $cash, string $dateClosed): float
+    {
+        $service = app()->bound(CashTreasuryIntegrationService::class)
+            ? app(CashTreasuryIntegrationService::class)
+            : new CashTreasuryIntegrationService();
+
+        return $service->sumNetForCash($cash, $dateClosed);
     }
 
 
@@ -364,9 +376,14 @@ class CashController extends Controller
             ];
         });
 
+        $treasuryService = app()->bound(CashTreasuryIntegrationService::class)
+            ? app(CashTreasuryIntegrationService::class)
+            : new CashTreasuryIntegrationService();
+        $treasury_summary = $treasuryService->summarizeForCash($cash);
+
         set_time_limit(0);
 
-        $pdf = PDF::loadView('tenant.cash.report_pdf', compact("cash", "company", "methods_payment"));
+        $pdf = PDF::loadView('tenant.cash.report_pdf', compact("cash", "company", "methods_payment", "treasury_summary"));
 
         $filename = "Reporte_POS - {$cash->user->name} - {$cash->date_opening} {$cash->time_opening}";
 

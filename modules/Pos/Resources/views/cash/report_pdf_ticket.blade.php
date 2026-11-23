@@ -117,6 +117,14 @@ foreach ($cash_documents as $cash_document) {
 
 }
 
+$treasury_movements = isset($treasury_summary['movements']) ? $treasury_summary['movements'] : collect();
+$treasury_income = (float) ($treasury_summary['income'] ?? 0);
+$treasury_egress = (float) ($treasury_summary['egress'] ?? 0);
+
+$cash_income += $treasury_income;
+$cash_egress += $treasury_egress;
+$final_balance += ($treasury_income - $treasury_egress);
+
 $cash_final_balance = $final_balance + $cash->beginning_balance;
 //$cash_income = ($final_balance > 0) ? ($cash_final_balance - $cash->beginning_balance) : 0;
 
@@ -337,7 +345,37 @@ $cash_final_balance = $final_balance + $cash->beginning_balance;
                     </table>
                 </div>
             </div>
-        @else
+        @endif
+        @if($treasury_movements->count())
+            <div style="width:100% !important; margin-top:10px;">
+                <p><strong>Movimientos de Tesorería</strong></p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="font-weight: bold;background: #0088cc;color: white;text-align: center;">#</th>
+                            <th style="font-weight: bold;background: #0088cc;color: white;text-align: center;">Tipo</th>
+                            <th style="font-weight: bold;background: #0088cc;color: white;text-align: center;">Descripción</th>
+                            <th style="font-weight: bold;background: #0088cc;color: white;text-align: center;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($treasury_movements as $movement)
+                            @php
+                                $kindLabels = \Modules\Treasury\Services\MovementService::KIND_LABELS;
+                                $signedAmount = ((int) $movement->direction >= 0 ? 1 : -1) * (float) ($movement->amount_pen ?? $movement->amount);
+                            @endphp
+                            <tr>
+                                <td class="celda">{{ $loop->iteration }}</td>
+                                <td class="celda">{{ $kindLabels[$movement->kind] ?? $movement->kind }}</td>
+                                <td class="celda">{{ $movement->description }}</td>
+                                <td class="celda">{{ number_format($signedAmount, 2, ".", "") }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+        @if(!$cash_documents->count() && !$treasury_movements->count())
             <div class="callout callout-info">
                 <p>No se encontraron registros.</p>
             </div>

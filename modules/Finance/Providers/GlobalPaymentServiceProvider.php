@@ -14,7 +14,9 @@ use Modules\Expense\Models\ExpensePayment;
 use Modules\Finance\Models\IncomePayment;
 use Modules\Pos\Models\CashTransaction;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
+use Modules\Treasury\Models\PaymentEvidence;
 
 class GlobalPaymentServiceProvider extends ServiceProvider
 {
@@ -51,6 +53,16 @@ class GlobalPaymentServiceProvider extends ServiceProvider
 
             if($record->payment_file){
                 $record->payment_file()->delete();
+            }
+
+            try {
+                if (DB::connection('tenant')->getSchemaBuilder()->hasTable('payment_evidences')) {
+                    PaymentEvidence::where('payable_type', get_class($record))
+                        ->where('payable_id', $record->getKey())
+                        ->delete();
+                }
+            } catch (\Throwable $e) {
+                // Ignore if payment_evidences table is unavailable in legacy or isolated schemas.
             }
 
         });

@@ -32,6 +32,20 @@ class TreasuryMovement extends ModelTenant
         'tax_payment',
     ];
 
+    public const MANUAL_KINDS = [
+        'income',
+        'expense',
+        'interest',
+        'bank_fee',
+        'tax_payment',
+        'adjustment',
+    ];
+
+    public const TRANSFER_KINDS = [
+        'transfer_out',
+        'transfer_in',
+    ];
+
     public const ALL_KINDS = [
         'income',
         'expense',
@@ -137,5 +151,20 @@ class TreasuryMovement extends ModelTenant
     public function evidence()
     {
         return $this->morphOne(PaymentEvidence::class, 'payable');
+    }
+
+    public function related_movement()
+    {
+        return $this->belongsTo(self::class, 'related_movement_id');
+    }
+
+    public function child_movements()
+    {
+        return $this->hasMany(self::class, 'related_movement_id');
+    }
+
+    public function voided_by_user()
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 }

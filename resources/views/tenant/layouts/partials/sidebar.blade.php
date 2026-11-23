@@ -640,6 +640,12 @@
                             <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'accounts') ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('tenant.treasury.accounts.index') }}">Cuentas</a>
                             </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'movements') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.movements.index') }}">Movimientos</a>
+                            </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'transfers') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.transfers.index') }}">Transferencias</a>
+                            </li>
                         </ul>
                     </li>
                     @endif

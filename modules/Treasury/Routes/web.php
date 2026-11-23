@@ -20,6 +20,29 @@ if ($hostname) {
                 Route::get('accounts/records', 'AccountController@records');
                 Route::get('accounts/record/{id}', 'AccountController@record');
                 Route::post('accounts', 'AccountController@store');
+
+                // Phase 2: Manual movements, ITF & bank fees, voiding
+                Route::get('movements', 'MovementController@index')->name('tenant.treasury.movements.index');
+                Route::get('movements/tables', 'MovementController@tables');
+                Route::get('movements/records', 'MovementController@records');
+                Route::post('movements', 'MovementController@store');
+                Route::post('movements/preview', 'MovementController@preview');
+                Route::post('movements/{id}/void', 'MovementController@void');
+
+                // Phase 2: Transfers (bank<->bank, cash<->bank)
+                Route::get('transfers', 'TransferController@index')->name('tenant.treasury.transfers.index');
+                Route::get('transfers/tables', 'TransferController@tables');
+                Route::get('transfers/records', 'TransferController@records');
+                Route::post('transfers', 'TransferController@store');
+                Route::post('transfers/{id}/void', 'TransferController@void');
+
+                // Phase 2: SBS exchange rate lookup
+                Route::get('exchange-rate/{date}', 'MovementController@exchangeRate');
+
+                // Phase 2: Polymorphic bancarization payment evidence
+                Route::get('payment-evidences/tables', 'PaymentEvidenceController@tables');
+                Route::get('payment-evidences/{type}/{id}', 'PaymentEvidenceController@show');
+                Route::post('payment-evidences/{type}/{id}', 'PaymentEvidenceController@store');
             });
         });
     });
