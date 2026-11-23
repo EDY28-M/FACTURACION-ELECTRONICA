@@ -14,9 +14,14 @@ function sendRating(value, id)
         data: data,
         dataType: 'JSON',
         success: function (data) {
+            if (!data.success) {
+                // Only signed-in buyers can rate: clear the stars and offer the login form.
+                $('.rating__control').prop('checked', false);
+                $('#login_register_modal').modal('show');
+            }
         },
         error: function (error_data) {
-            
+            $('.rating__control').prop('checked', false);
         }
     });
 }

@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\Request;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -65,6 +66,17 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
+        // An expired/missing CSRF token is a client condition (419), never a server error (500).
+        if ($exception instanceof TokenMismatchException) {
+            if ($this->isFrontend($request) && ! $request->ajax() && ! $request->expectsJson()) {
+                return parent::render($request, $exception);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Su sesión expiró. Recargue la página e intente nuevamente.',
+            ], 419);
+        }
         if ($exception instanceof AuthenticationException) {
             if ($this->isFrontend($request)) {
                 return redirect()->guest('login');

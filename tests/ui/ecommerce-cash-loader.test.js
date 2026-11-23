@@ -45,7 +45,15 @@ function makeComponent({ products = [{ id: 1 }] } = {}) {
     const pending = [];    // controllable axios requests
     const posts = [];
     const state = { cleared: 0, contactSaved: 0, logs: [] };
-    const swal = (...args) => { swals.push(args); return { then() { return this; } }; };
+    // The buyer closing a dialog runs its .then callbacks (accept or dismiss).
+    const dialogs = [];
+    const swal = (...args) => {
+        const dialog = { callbacks: [] };
+        dialogs.push(dialog);
+        swals.push(args);
+        return { then(onOk, onDismiss) { dialog.callbacks.push(onOk, onDismiss); return this; } };
+    };
+    const closeLastDialog = () => { const d = dialogs[dialogs.length - 1]; d.callbacks.slice(0, 1).forEach(cb => cb && cb()); };
     swal.close = () => {};
     const ctx = {
         payment_cash: { amount: '10.00', clicked: true, processing: false },
@@ -66,7 +74,7 @@ function makeComponent({ products = [{ id: 1 }] } = {}) {
     });
     ctx.paymentCash = vm.runInContext(methodWrapper, sandbox).bind(ctx);
     const run = () => ctx.paymentCash();
-    return { ctx, swals, pending, posts, state, run };
+    return { ctx, swals, pending, posts, state, run, closeLastDialog };
 }
 
 const SUCCESS_TITLE = 'Gracias por su pago!';
@@ -85,11 +93,15 @@ const typeOf = a => (typeof a[0] === 'string' ? a[2] : a[0].type);
     t.pending[0].resolve({ data: { success: true, order: { total: 50 } } });
     await p;
     assert.strictEqual(t.state.contactSaved, 1);
-    assert.strictEqual(t.state.cleared, 1);
+    // QA-09: the cart (and the page reload it triggers) waits until the buyer has seen the dialog.
+    assert.strictEqual(t.state.cleared, 0, 'cart must not be cleared before the confirmation is closed');
     assert.strictEqual(t.ctx.response_order_total, 50);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(t.ctx.order_generated)), { total: 50 });
     assert.strictEqual(t.swals.length, 2);
     assert.strictEqual(titleOf(t.swals[1]), SUCCESS_TITLE);
     assert.strictEqual(typeOf(t.swals[1]), 'success');
+    t.closeLastDialog();
+    assert.strictEqual(t.state.cleared, 1, 'cart cleared once the dialog is closed');
     assert.strictEqual(t.ctx.payment_cash.processing, false);
 
     // (b) HTTP 200 + success:false + message: loader replaced by error, message as TEXT, cart kept.
@@ -175,6 +187,7 @@ const typeOf = a => (typeof a[0] === 'string' ? a[2] : a[0].type);
     assert.strictEqual(t.posts.length, 2, 'retry must issue a new request');
     t.pending[1].resolve({ data: { success: true, order: { total: 9 } } });
     await p;
+    t.closeLastDialog();
     assert.strictEqual(t.state.cleared, 1);
     assert.strictEqual(titleOf(t.swals[t.swals.length - 1]), SUCCESS_TITLE);
 
@@ -187,6 +200,7 @@ const typeOf = a => (typeof a[0] === 'string' ? a[2] : a[0].type);
     assert.strictEqual(t.swals.length, 1);
     t.pending[0].resolve({ data: { success: true, order: { total: 1 } } });
     await Promise.all([p1, p2]);
+    t.closeLastDialog();
     assert.strictEqual(t.posts.length, 1);
     assert.strictEqual(t.state.cleared, 1, 'cart cleared exactly once');
     assert.strictEqual(t.ctx.payment_cash.processing, false);

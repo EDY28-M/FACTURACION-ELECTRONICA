@@ -13,7 +13,7 @@
                     </div>
                     <div class="col-md-6">
                         <div class="form-group" :class="{'has-danger': errors.description}">
-                            <label class="control-label">Descripcion</label>
+                            <label class="control-label">Descripción (opcional, uso interno)</label>
                             <el-input v-model="form.description"></el-input>
                             <small class="form-control-feedback" v-if="errors.description" v-text="errors.description[0]"></small>
                         </div>
@@ -69,7 +69,7 @@
                 }
             },
             create() {
-                this.titleDialog = (this.recordId)? 'Editar Tag':'Nuevo Tag'
+                this.titleDialog = (this.recordId)? 'Editar categoría':'Nueva categoría'
                 if (this.recordId) {
                     this.$http.get(`/${this.resource}/record/${this.recordId}`)
                         .then(response => {

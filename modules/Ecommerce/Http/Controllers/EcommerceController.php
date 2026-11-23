@@ -5,6 +5,7 @@ namespace Modules\Ecommerce\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Item;
+use App\Models\Tenant\Catalogs\Tag;
 use App\Http\Resources\Tenant\ItemCollection;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Tenant\User;
@@ -19,7 +20,11 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\Tenant\CulqiEmail;
 use App\Http\Controllers\Tenant\Api\ServiceController;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use App\Services\Payments\CartPricing;
+use App\Services\Ecommerce\StoreItemPresenter;
+use App\Services\Ecommerce\CheckoutRules;
+use App\Services\Ecommerce\SafeMail;
 use Exception;
 use Modules\Inventory\Models\InventoryConfiguration;
 
@@ -33,21 +38,52 @@ class EcommerceController extends Controller
         // Route/console commands must not require a tenant database just to
         // instantiate the controller (php artisan route:list, queue workers).
         if (!app()->runningInConsole()) {
-            view()->share('records', Item::where('apply_store', 1)->orderBy('id', 'DESC')->take(2)->get());
+            view()->share('records', $this->storeItems()->orderBy('id', 'DESC')->take(2)->get());
         }
     }
 
-    public function index()
+    /**
+     * Items visible on the storefront: published and active.
+     */
+    private function storeItems()
     {
-      $dataPaginate = Item::where([['apply_store', 1], ['internal_id','!=', null]])->paginate(15);
+        return Item::where('apply_store', 1)->where('active', 1);
+    }
+
+    /**
+     * Narrows a storefront query by a free-text term (name, description or internal code).
+     */
+    private function applySearch($query, ?string $term)
+    {
+        $term = trim(mb_substr((string) $term, 0, 100));
+        if ($term === '') {
+            return $query;
+        }
+        $like = '%'.addcslashes($term, '\\%_').'%';
+
+        return $query->where(function ($q) use ($like) {
+            $q->where('description', 'like', $like)
+              ->orWhere('name', 'like', $like)
+              ->orWhere('internal_id', 'like', $like);
+        });
+    }
+
+    public function index(Request $request)
+    {
+      $dataPaginate = $this->applySearch($this->storeItems()->where('internal_id', '!=', null), $request->query('search'))
+        ->paginate(15)
+        ->appends($request->filled('search') ? ['search' => mb_substr((string) $request->query('search'), 0, 100)] : []);
       $configuration = InventoryConfiguration::first();
       return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => optional($configuration)->stock_control]);
     }
 
     public function category(Request $request)
     {
+      // Unknown or deleted categories do not exist for the buyer (Tag hides status = 0).
+      abort_unless(is_numeric($request->category) && Tag::where('id', $request->category)->exists(), 404);
+
       $dataPaginate = Item::select('i.*')
-        ->where([['i.apply_store', 1], ['i.internal_id','!=', null], ['it.tag_id', $request->category]])
+        ->where([['i.apply_store', 1], ['i.active', 1], ['i.internal_id','!=', null], ['it.tag_id', $request->category]])
         ->from('items as i')
         ->join('item_tags as it', 'it.item_id','i.id')->paginate(15);
         $configuration = InventoryConfiguration::first();
@@ -56,65 +92,69 @@ class EcommerceController extends Controller
 
     public function item($id)
     {
-        $row = Item::findOrFail($id);
-        $exchange_rate_sale = $this->getExchangeRateSale();
-        $sale_unit_price = ($row->has_igv) ? $row->sale_unit_price : $row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
+        $row = $this->storeItems()->findOrFail($id);
+        $price = StoreItemPresenter::price($row);
 
-        $record = (object)[
-            'id' => $row->id,
-            'internal_id' => $row->internal_id,
-            'unit_type_id' => $row->unit_type_id,
-            'description' => $row->description,
+        $record = (object) array_merge(StoreItemPresenter::present($row), [
             'technical_specifications' => $row->technical_specifications,
-            'name' => $row->name,
-            'second_name' => $row->second_name,
-            'sale_unit_price' => ($row->currency_type_id === 'PEN') ? $sale_unit_price : ($sale_unit_price * $exchange_rate_sale),
-            'currency_type_id' => $row->currency_type_id,
-            'has_igv' => (bool) $row->has_igv,
-            'igv_general_rate' => (bool) $row->igv_general_rate,
-            'sale_unit' => $row->sale_unit_price,
-            'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
-            'currency_type_symbol' => $row->currency_type->symbol,
-            'image' =>  $row->image,
-            'image_medium' => $row->image_medium,
-            'image_small' => $row->image_small,
-            'tags' => $row->tags->pluck('tag_id')->toArray(),
             'images' => $row->images,
-            'attributes' => $row->attributes ? $row->attributes : []
-        ];
+            'attributes' => $row->attributes ? $row->attributes : [],
+            'tags' => $row->tags->pluck('tag_id')->toArray(),
+        ]);
+        // Only the whitelisted fields are ever serialized into the page (data-product).
+        $record->cart = StoreItemPresenter::present($row);
+        $record->price_label = $price['currency_type_symbol'].' '.number_format($price['amount'], 2);
 
-        return view('ecommerce::items.record', compact('record'));
+        $rating = $this->ratingSummary($row->id);
+
+        return view('ecommerce::items.record', compact('record', 'rating'));
+    }
+
+    /**
+     * Real average and number of ratings of a product (shown only when someone rated it).
+     */
+    private function ratingSummary($itemId): array
+    {
+        $row = ItemsRating::where('item_id', $itemId)->selectRaw('COUNT(*) as total, AVG(value) as average')->first();
+
+        return [
+            'count' => (int) optional($row)->total,
+            'average' => (float) optional($row)->average,
+        ];
     }
 
     public function items()
     {
-        $records = Item::where('apply_store', 1)->get();
+        $records = $this->storeItems()->get();
         return view('ecommerce::items.index', compact('records'));
     }
 
-    public function itemsBar()
+    public function itemsBar(Request $request)
     {
-        $records = Item::where('apply_store', 1)->get();
-        // return new ItemCollection($records);
+        // Server-side autocomplete: never ship the whole catalogue to every visitor.
+        $term = trim((string) $request->query('q'));
+        $records = mb_strlen($term) < 2
+            ? collect()
+            : $this->applySearch($this->storeItems(), $term)->orderBy('description')->limit(10)->get();
+
         return new ItemBarCollection($records);
 
     }
 
     public function partialItem($id)
     {
-        $record = Item::findOrFail($id);
-        return view('ecommerce::items.partial', compact('record'));
+        $record = $this->storeItems()->findOrFail($id);
+        $public = StoreItemPresenter::present($record);
+
+        $rating = $this->ratingSummary($record->id);
+
+        return view('ecommerce::items.partial', compact('record', 'public', 'rating'));
     }
 
     public function detailCart()
     {
         $configuration = ConfigurationEcommerce::first();
         return view('ecommerce::cart.detail', compact('configuration'));
-    }
-
-    public function pay()
-    {
-        return view('ecommerce::cart.pay');
     }
 
     public function showLogin()
@@ -154,9 +194,43 @@ class EcommerceController extends Controller
 
     public function storeUser(Request $request)
     {
+        $email = strtolower(trim((string) $request->input('email')));
+
+        $validator = Validator::make(
+            array_merge($request->only(['name', 'pswd', 'pswd_rpt']), ['email' => $email]),
+            [
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|max:255',
+                'pswd' => 'required|string|min:8|max:72',
+                'pswd_rpt' => 'required|same:pswd',
+            ],
+            [
+                'name.required' => 'El nombre es obligatorio.',
+                'name.string' => 'El nombre no es válido.',
+                'name.max' => 'El nombre no debe superar 255 caracteres.',
+                'email.required' => 'El correo electrónico es obligatorio.',
+                'email.email' => 'El correo electrónico no es válido.',
+                'email.max' => 'El correo electrónico no debe superar 255 caracteres.',
+                'pswd.required' => 'La contraseña es obligatoria.',
+                'pswd.string' => 'La contraseña no es válida.',
+                'pswd.min' => 'La contraseña debe tener al menos 8 caracteres.',
+                'pswd.max' => 'La contraseña no debe superar 72 caracteres.',
+                'pswd_rpt.required' => 'Repita la contraseña.',
+                'pswd_rpt.same' => 'Las contraseñas no coinciden.',
+            ]
+        );
+
+        if ($validator->fails()) {
+            // HTTP 200 with success=false: the register modal prints `message` for that shape.
+            return [
+                'success' => false,
+                'message' => $validator->errors()->first(),
+            ];
+        }
+
         try{
 
-            $verify = User::where('email', $request->email)->first();
+            $verify = User::where('email', $email)->first();
             if($verify)
             {
                 return [
@@ -166,8 +240,8 @@ class EcommerceController extends Controller
             }
 
             $user = new User();
-            $user->name = $request->name;
-            $user->email = $request->email;
+            $user->name = trim((string) $request->name);
+            $user->email = $email;
             $user->establishment_id = 1;
             $user->type = 'client';
             $user->api_token = null;
@@ -195,46 +269,6 @@ class EcommerceController extends Controller
 
     }
 
-    public function transactionFinally(Request $request)
-    {
-        $user = auth()->user();
-        abort_unless($user, 403);
-
-        try {
-            //1. confirmar dato de compriante en order
-            $order_generated = Order::findOrFail($request->orderId);
-
-            // Only the buyer can attach a document, and only once.
-            $owner = strtolower(trim((string) data_get($order_generated->customer, 'correo_electronico')));
-            abort_unless($owner !== '' && $owner === strtolower(trim((string) $user->email)), 403);
-            abort_if($order_generated->document_external_id, 403);
-            // Card orders must be verified as paid; cash orders are created by the logged-in buyer.
-            abort_unless($order_generated->status_order_id == 2 || $order_generated->reference_payment === 'efectivo', 403);
-
-            $order_generated->document_external_id = $request->document_external_id;
-            $order_generated->number_document = $request->number_document;
-            $order_generated->save();
-
-            $user->update(['identity_document_type_id' => $request->identity_document_type_id, 'number'=>$request->number]);
-            return [
-                'success' => true,
-                'message' => 'Order Actualizada',
-                'order_total' => $order_generated->total
-            ];
-        }
-        catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
-            throw $e;
-        }
-        catch(Exception $e)
-        {
-            return [
-                'success' => false,
-                'message' => 'No se pudo actualizar la orden.'
-            ];
-        }
-
-    }
-
     public function quote(Request $request)
     {
         try {
@@ -248,15 +282,17 @@ class EcommerceController extends Controller
 
     public function paymentCash(Request $request)
     {
-        $customer = is_array($request->customer) ? $request->customer : [];
-        $validator = Validator::make($customer, [
-            'telefono' => 'required|numeric',
-            'direccion' => 'required',
-            'codigo_tipo_documento_identidad' => 'required|numeric',
-            'numero_documento' => 'required|numeric',
-            'identity_document_type_id' => 'required|numeric'
-        ]);
+        $user = auth()->user();
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Inicie sesión para registrar su pedido.'], 401);
+        }
 
+        $customer = CheckoutRules::sanitize(is_array($request->customer) ? $request->customer : [], $user->email);
+        if (($customer['apellidos_y_nombres_o_razon_social'] ?? '') === '') {
+            $customer['apellidos_y_nombres_o_razon_social'] = trim((string) $user->name);
+        }
+
+        $validator = CheckoutRules::validate($customer);
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
@@ -265,11 +301,12 @@ class EcommerceController extends Controller
             // The total is always recomputed from database prices; client amounts are ignored.
             $cart = CartPricing::forStore((array) $request->items);
 
-            $user = auth()->user();
-            if ($user) {
-                $customer['correo_electronico'] = $user->email;
+            if ($identityError = CheckoutRules::identityErrorForTotal($customer, $cart['total'])) {
+                return response()->json($identityError, 422);
             }
 
+            // The comprobante is rebuilt server-side from these stored lines when the back office
+            // issues it; the browser-built `purchase` payload is never stored.
             $order = Order::create([
                 'external_id' => Str::uuid()->toString(),
                 'customer' => $customer,
@@ -278,46 +315,64 @@ class EcommerceController extends Controller
                 'total' => $cart['total'],
                 'reference_payment' => 'efectivo',
                 'status_order_id' => 1,
-                'purchase' => $request->purchase
+                'purchase' => null,
             ]);
 
-            $customer_email = $customer['correo_electronico'] ?? null;
-            if ($customer_email) {
-                $document = new stdClass;
-                $document->client = $customer['apellidos_y_nombres_o_razon_social'] ?? $customer_email;
-                $document->product = 'Compras Ecommerce Facturador Pro';
-                $document->total = number_format($cart['total'], 2, '.', '');
-                $document->items = $cart['lines'];
+            $document = new stdClass;
+            $document->client = $customer['apellidos_y_nombres_o_razon_social'];
+            $document->product = 'Compras Ecommerce Facturador Pro';
+            $document->total = number_format($cart['total'], 2, '.', '');
+            $document->items = $cart['lines'];
+            $document->mail_type = 'cash';
+            $document->order_number = '#'.str_pad($order->id, 6, '0', STR_PAD_LEFT);
 
-                $this->paymentCashEmail($customer_email, $document);
-            }
+            $this->paymentCashEmail($customer['correo_electronico'], $document);
+            $this->notifyStoreOwner($document);
 
             return [
                 'success' => true,
-                'order' => $order
+                'order' => [
+                    'id' => $order->id,
+                    'order_id' => str_pad($order->id, 6, '0', STR_PAD_LEFT),
+                    'external_id' => $order->external_id,
+                    'total' => $order->total,
+                ],
             ];
         } catch (\InvalidArgumentException $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         } catch (Exception $e) {
+            report($e);
+
             return ['success' => false, 'message' => 'No se pudo registrar el pedido.'];
         }
     }
 
     public function paymentCashEmail($customer_email, $document)
     {
-        try {
-            Mail::to($customer_email)->send(new CulqiEmail($document));
-        }catch(\Exception $e)
-        {
-            return true;
+        // The order is already saved: a mail failure must not fail the purchase (it is logged).
+        return SafeMail::send($customer_email, new CulqiEmail($document));
+    }
+
+    /**
+     * Tells the store's contact address about a new order (skipped while the default placeholder is in place).
+     */
+    private function notifyStoreOwner($document): void
+    {
+        $email = optional(ConfigurationEcommerce::first())->information_contact_email;
+        if (! $email || $email === 'admin@mail.com') {
+            return;
         }
+
+        $owner = clone $document;
+        $owner->mail_type = 'owner';
+        SafeMail::send($email, new CulqiEmail($owner));
     }
 
     public function ratingItem(Request $request)
     {
         if (auth()->user()) {
             $request->validate([
-                'item_id' => 'required|integer|exists:tenant.items,id',
+                'item_id' => ['required', 'integer', Rule::exists('tenant.items', 'id')->where('apply_store', 1)->where('active', 1)],
                 'value'   => 'required|numeric|min:1|max:5',
             ]);
 
@@ -358,15 +413,6 @@ class EcommerceController extends Controller
 
     }
 
-    private function getExchangeRateSale(){
-
-        $exchange_rate = app(ServiceController::class)->exchangeRateTest(date('Y-m-d'));
-
-        return (array_key_exists('sale', $exchange_rate)) ? $exchange_rate['sale'] : 1;
-
-
-    }
-
     public function saveDataUser(Request $request)
     {
         $user = auth()->user();
@@ -375,6 +421,19 @@ class EcommerceController extends Controller
                 'success' => false,
                 'message' => 'No autenticado',
             ], 401);
+        }
+
+        $validator = Validator::make($request->only(['address', 'telephone']), [
+            'address' => 'nullable|string|max:255',
+            'telephone' => 'nullable|string|max:20',
+        ], [
+            'address.max' => 'La dirección no debe superar 255 caracteres.',
+            'address.string' => 'La dirección no es válida.',
+            'telephone.max' => 'El teléfono no debe superar 20 caracteres.',
+            'telephone.string' => 'El teléfono no es válido.',
+        ]);
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
         }
 
         if ($request->filled('address')) {

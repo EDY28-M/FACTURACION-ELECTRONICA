@@ -81,7 +81,7 @@ class ItemCollection extends ResourceCollection
                 'image_url_medium' => ($row->image_medium !== 'imagen-no-disponible.jpg') ? asset('storage'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'items'.DIRECTORY_SEPARATOR.$row->image_medium) : asset("/logo/{$row->image_medium}"),
                 'image_url_small' => ($row->image_small !== 'imagen-no-disponible.jpg') ? asset('storage'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'items'.DIRECTORY_SEPARATOR.$row->image_small) : asset("/logo/{$row->image_small}"),
                 'tags' => $row->tags,
-                'tags_id' => $row->tags->pluck('tag_id'),
+                'tags_id' => $row->tags->filter(function ($itemTag) { return $itemTag->tag; })->pluck('tag_id')->values(),
                 'item_unit_types' => collect($row->item_unit_types)->transform(function($row) use($configuration){
                     return [
                         'id' => $row->id,

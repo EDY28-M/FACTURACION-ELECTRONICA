@@ -69,6 +69,7 @@ class Kernel extends HttpKernel
         'redirect.module' => \App\Http\Middleware\RedirectModule::class,
         'redirect.level' => \App\Http\Middleware\RedirectModuleLevel::class,
         'plan.module' => \App\Http\Middleware\RequirePlanModule::class,
+        'plan.storefront' => \App\Http\Middleware\RequireStorefrontModule::class,
         'locked.tenant' => \App\Http\Middleware\LockedTenant::class,
         //'locked.admin' => \App\Http\Middleware\LockedAdmin::class,
         'tenant.internal.mode' => \App\Http\Middleware\InternalModeTenant::class,

@@ -60,6 +60,7 @@ class CustomerAccessBoundaryTest extends TestCase
         $this->app->instance('events', new Dispatcher($this->app));
         $this->app->instance('cookie', new CookieJar());
         $this->app->instance('hash', new HashManager($this->app));
+        $this->app->instance('validator', new \Illuminate\Validation\Factory(new \Illuminate\Translation\Translator(new \Illuminate\Translation\ArrayLoader(), 'es')));
         $this->session = new Store('customer-boundary', new ArraySessionHandler(120));
         $this->session->start();
         $this->session->put('cart', [['item_id' => 123, 'quantity' => 2]]);
@@ -70,7 +71,7 @@ class CustomerAccessBoundaryTest extends TestCase
         $request = $this->request('/login');
         $this->router = new Router($this->app['events'], $this->app);
         $this->router->aliasMiddleware('auth', Authenticate::class);
-        foreach (['locked.tenant', 'redirect.module', 'throttle'] as $middleware) {
+        foreach (['locked.tenant', 'plan.storefront', 'redirect.module', 'throttle'] as $middleware) {
             $this->router->aliasMiddleware($middleware, CustomerBoundaryPassThrough::class);
         }
         $this->app->instance('router', $this->router);
@@ -214,7 +215,7 @@ class CustomerAccessBoundaryTest extends TestCase
     public function test_new_customer_registration_keeps_payload_session_and_modules_without_api_credentials(): void
     {
         foreach (['first', 'second'] as $name) {
-            $request = $this->request('/ecommerce/storeUser', ['name' => $name, 'email' => $name . '@example.test', 'pswd' => 'fixture-password']);
+            $request = $this->request('/ecommerce/storeUser', ['name' => $name, 'email' => $name . '@example.test', 'pswd' => 'fixture-password', 'pswd_rpt' => 'fixture-password']);
             $oldToken = $this->session->token();
             $this->assertSame(['success' => true, 'message' => 'Usuario registrado'], $this->ecommerce()->storeUser($request));
             $user = User::where('email', $name . '@example.test')->firstOrFail();
@@ -234,7 +235,7 @@ class CustomerAccessBoundaryTest extends TestCase
         $routes->refreshNameLookups();
         $this->assertNotContains('auth', $routes->getByName('tenant_ecommerce_login_post')->middleware());
         $this->assertNotContains('auth', $routes->getByName('tenant_ecommerce_store_user')->middleware());
-        foreach (['tenant_detail_cart', 'tenant_ecommerce_cart_quote', 'tenant_ecommerce_payment_cash', 'tenant_ecommerce_culqui', 'tenant_ecommerce_transaction_finally'] as $name) {
+        foreach (['tenant_detail_cart', 'tenant_ecommerce_cart_quote', 'tenant_ecommerce_payment_cash', 'tenant_ecommerce_culqui'] as $name) {
             $this->assertNotContains('auth', $routes->getByName($name)->middleware());
         }
         $this->assertContains('auth', $routes->getByName('tenant_ecommerce_configuration')->middleware());

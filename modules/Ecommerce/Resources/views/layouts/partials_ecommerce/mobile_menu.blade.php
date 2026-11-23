@@ -1,19 +1,21 @@
 @php
-    $tagid = request()->query('tagid');
+    $tagid = request()->segment(3);
 @endphp
   <div class="mobile-menu-wrapper">
       <span class="mobile-menu-close"><i class="icon-cancel"></i></span>
       <nav class="mobile-nav">
           <ul class="mobile-menu">
-              <li class="{{ (!$tagid) ? 'active':'' }}"><a href="{{ route("tenant.ecommerce.index") }}">Home</a></li>
+              <li class="{{ (!$tagid) ? 'active':'' }}"><a href="{{ route("tenant.ecommerce.index") }}">Inicio</a></li>
+              @if($items->isNotEmpty())
               <li>
                   <a href="#">Categorias</a>
                   <ul>
                       @foreach ($items as $item)
-                        <li class="{{ ($tagid == $item->id) ? 'active':'' }}"><a href="{{ route("tenant.ecommerce.index", ['tagid' => $item->id]) }}">{{ $item->name }}</a></li>
+                        <li class="{{ ($tagid == $item->id) ? 'active':'' }}"><a href="{{ route("tenant.ecommerce.category", ['category' => $item->id]) }}">{{ $item->name }}</a></li>
                       @endforeach
                   </ul>
               </li>
+              @endif
               {{-- <li>
                   <a href="product.html">Products</a>
                   <ul>
@@ -53,7 +55,7 @@
               {{-- <li>
                   <a href="#">Pages<span class="tip tip-hot">Hot!</span></a>
                   <ul>
-                      <li><a href="cart.html">Shopping Cart</a></li>
+                      <li><a href="{{ route('tenant_detail_cart') }}">Carrito de compras</a></li>
                       <li>
                           <a href="#">Checkout</a>
                           <ul>
@@ -78,17 +80,19 @@
           </ul>
       </nav><!-- End .mobile-nav -->
 
+      @if($information->link_facebook || $information->link_twitter || $information->link_youtube)
       <div class="social-icons">
         @if($information->link_facebook)
-            <a href="{{$information->link_facebook}}" class="social-icon" target="_blank"><i class="icon-facebook"></i></a>
+            <a href="{{$information->link_facebook}}" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="icon-facebook"></i></a>
         @endif
 
         @if($information->link_twitter)
-            <a href="{{$information->link_twitter}}" class="social-icon" target="_blank"><i class="icon-twitter"></i></a>
+            <a href="{{$information->link_twitter}}" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="icon-twitter"></i></a>
         @endif
 
         @if($information->link_youtube)
-            <a href="{{$information->link_youtube}}" class="social-icon" target="_blank"><i class="fab fa-youtube"></i></a>
+            <a href="{{$information->link_youtube}}" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-youtube"></i></a>
         @endif
       </div><!-- End .social-icons -->
+      @endif
   </div><!-- End .mobile-menu-wrapper -->

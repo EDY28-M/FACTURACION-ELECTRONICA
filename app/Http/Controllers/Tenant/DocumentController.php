@@ -534,7 +534,13 @@ class DocumentController extends Controller
         $document = Document::whereTypeUser()->findOrFail($request->input('id'));
         $customer_email = $request->input('customer_email');
 
-        Mail::to($customer_email)->send(new DocumentEmail($company, $document));
+        // Explicit "send email" action: tell the user clearly when the SMTP setup is broken.
+        if (! \App\Services\Ecommerce\SafeMail::send($customer_email, new DocumentEmail($company, $document))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pudo enviar el correo. Revise la configuración de correo (SMTP).',
+            ], 422);
+        }
 
         return [
             'success' => true

@@ -1,18 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
-
-<!-- Mirrored from portotheme.com/html/porto_ecommerce/demo-6/product.html by HTTrack Website Copier/3.x [XR&CO'2014], Sat, 07 Sep 2019 03:39:58 GMT -->
+<html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-    <title>Porto - Bootstrap eCommerce Template</title>
+    <title>{{ $storeName ?? 'Tienda virtual' }}</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="keywords" content="HTML5 Template" />
-    <meta name="description" content="Porto - Bootstrap eCommerce Template">
-    <meta name="author" content="SW-THEMES">
+    <meta name="description" content="{{ ($storeName ?? 'Tienda virtual').' - tienda virtual' }}">
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ asset('porto-ecommerce/assets/images/icons/favicon.ico') }}">
@@ -101,7 +97,5 @@
     <!-- www.addthis.com share plugin -->
     <!--<script src="../../../../s7.addthis.com/js/300/addthis_widget.js#pubid=ra-5b927288a03dbde6"></script> -->
 </body>
-
-<!-- Mirrored from portotheme.com/html/porto_ecommerce/demo-6/product.html by HTTrack Website Copier/3.x [XR&CO'2014], Sat, 07 Sep 2019 03:40:02 GMT -->
 
 </html>

@@ -30,6 +30,7 @@
         <h3 class="my-0">Listado de Promociones</h3>
       </div>
       <div class="card-body">
+        <p class="text-muted mb-3">El carrusel de la tienda muestra como máximo 3 promociones activas. Elimine una para crear otra.</p>
         <data-table :apply-filter="false" :resource="resource">
           <tr slot="heading" width="100%">
             <th>#</th>

@@ -1,18 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
-<!-- Mirrored from portotheme.com/html/porto_ecommerce/demo-6/cart.html by HTTrack Website Copier/3.x [XR&CO'2014], Sat, 07 Sep 2019 03:40:04 GMT -->
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>eCommerce</title>
+    <title>{{ $storeName ?? 'Tienda virtual' }}</title>
 
-    <meta name="keywords" content="HTML5 Template" />
-    <meta name="description" content="Porto - Bootstrap eCommerce Template">
-    <meta name="author" content="SW-THEMES">
+    <meta name="description" content="{{ ($storeName ?? 'Tienda virtual').' - tienda virtual' }}">
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ asset('porto-ecommerce/assets/images/icons/favicon.ico') }}">
@@ -40,7 +37,7 @@
                 <div class="container">
                     <ol class="breadcrumb">
                         <li class="breadcrumb-item"><a href="{{url('ecommerce')}}"><i class="icon-home"></i></a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Shopping Cart</li>
+                        <li class="breadcrumb-item active" aria-current="page">Carrito de compras</li>
                     </ol>
                 </div><!-- End .container -->
             </nav>
@@ -71,9 +68,11 @@
     <script src="{{ asset('porto-ecommerce/assets/js/jquery.min.js') }}"></script>
     <script src="{{ asset('porto-ecommerce/assets/js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('porto-ecommerce/assets/js/plugins.min.js') }}"></script>
+    @if(!empty($cardEnabled))
     <script src="https://js.culqi.com/checkout-js"></script>
     <script src="https://3ds.culqi.com" defer></script>
     <script src="{{ asset('payments/culqi-checkout.js') }}"></script>
+    @endif
     <script src="{{ asset('porto-ecommerce/assets/js/sweetalert2.all.min.js') }}"></script>
     <script src="{{ asset('porto-ecommerce/assets/js/moment.min.js') }}"></script>
 
@@ -85,5 +84,4 @@
     @stack('scripts')
 </body>
 
-<!-- Mirrored from portotheme.com/html/porto_ecommerce/demo-6/cart.html by HTTrack Website Copier/3.x [XR&CO'2014], Sat, 07 Sep 2019 03:40:04 GMT -->
 </html>

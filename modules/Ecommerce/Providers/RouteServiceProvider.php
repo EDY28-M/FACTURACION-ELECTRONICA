@@ -2,6 +2,9 @@
 
 namespace Modules\Ecommerce\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 
@@ -23,7 +26,27 @@ class RouteServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        $this->configureRateLimiting();
+
         parent::boot();
+    }
+
+    /**
+     * Independent counters per action: login attempts must not consume the registration or
+     * checkout budget (and vice versa). Login is keyed by IP + email so one noisy address does
+     * not lock a different account.
+     */
+    protected function configureRateLimiting()
+    {
+        RateLimiter::for('ecommerce-login', function (Request $request) {
+            return Limit::perMinute(5)->by('ecommerce-login|'.$request->ip().'|'.strtolower((string) $request->input('email')));
+        });
+        RateLimiter::for('ecommerce-register', function (Request $request) {
+            return Limit::perMinute(5)->by('ecommerce-register|'.$request->ip());
+        });
+        RateLimiter::for('ecommerce-checkout', function (Request $request) {
+            return Limit::perMinute(10)->by('ecommerce-checkout|'.($request->user() ? 'u'.$request->user()->id : $request->ip()));
+        });
     }
 
     /**

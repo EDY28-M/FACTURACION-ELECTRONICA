@@ -34,7 +34,10 @@
 		let array = localStorage.getItem('products_cart');
 		array = JSON.parse(array);
 		let indexFound = array.findIndex( x=> x.id == id)
-		array.splice(indexFound, 1);
+		// findIndex returns -1 for an unknown id: splice(-1, 1) would drop the last product.
+		if (indexFound !== -1) {
+			array.splice(indexFound, 1);
+		}
 		localStorage.setItem('products_cart', JSON.stringify( array ) );
 		populate();
 		calculatetotal();
@@ -47,7 +50,8 @@
 		array = JSON.parse(array);
 		let total = 0;
 		array.forEach(element => {
-			total += parseFloat(element.sale_unit_price)
+			let qty = Number(element.cantidad);
+			total += parseFloat(element.sale_unit_price) * (Number.isFinite(qty) && qty > 0 ? qty : 1)
 		});
 
 		$(".cart-total-price").empty();
@@ -71,9 +75,12 @@
 
 	function buildCartDropdownItem(element)
 	{
+		// Quantity stored by the cart page; entries added from the catalogue have none (1 unit).
+		let qty = Number(element && element.cantidad);
+		qty = Number.isFinite(qty) && qty > 0 ? qty : 1;
 		let $title = $('<a>').attr('href', '$').text(element.description);
 		let $info = $('<span>').addClass('cart-product-info')
-			.append($('<span>').addClass('cart-product-qty').text('1'))
+			.append($('<span>').addClass('cart-product-qty').text(String(qty)))
 			.append(document.createTextNode(' x ' + element.sale_unit_price));
 		let $details = $('<div>').addClass('product-details')
 			.append($('<h4>').addClass('product-title').append($title))

@@ -56,17 +56,17 @@
             <div class="product-single-details">
                 <h1 class="product-title">{{$record->description}}</h1>
 
+                @if(!empty($rating['count']))
                 <div class="ratings-container">
-                    <div class="product-ratings">
-                        <span class="ratings" style="width:60%"></span><!-- End .ratings -->
-                    </div><!-- End .product-ratings -->
-
-                    <a href="#" class="rating-link">( 6 Reviews )</a>
-                </div><!-- End .product-container -->
+                    <div class="product-ratings" title="Valoración promedio: {{ number_format($rating['average'], 1) }} de 5">
+                        <span class="ratings" style="width:{{ round($rating['average'] / 5 * 100) }}%"></span>
+                    </div>
+                    <span class="rating-link">({{ $rating['count'] }} {{ $rating['count'] == 1 ? 'valoración' : 'valoraciones' }})</span>
+                </div>
+                @endif
 
                 <div class="price-box">
-                    <span class="old-price">{{ $record->currency_type['symbol'] }} {{ number_format( ($record->sale_unit_price * 1.2 ) , 2 ) }}</span>
-                    <span class="product-price">{{ $record->currency_type['symbol'] }} {{ number_format($record->sale_unit_price, 2) }}</span>
+                    <span class="product-price">{{ $public['currency_type_symbol'] }} {{ number_format($public['sale_unit_price'], 2) }}</span>
                 </div><!-- End .price-box -->
 
                 <div class="product-desc">
@@ -80,7 +80,7 @@
                         <input class="horizontal-quantity form-control" type="text">
                     </div><!-- End .product-single-qty -->
 
-                    <a href="#" data-product="{{ json_encode( $record ) }}" class="paction add-cart"
+                    <a href="#" data-product="{{ json_encode( $public ) }}" class="paction add-cart"
                         title="Add to Cart">
                         <span>Agregar a Carrito</span>
                     </a>

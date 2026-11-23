@@ -14,19 +14,13 @@ class PromotionRequest extends FormRequest
 
     public function rules()
     {
-        $id = $this->input('id');
-     
         return [
-            'name' => [
-                'required'
-            ],
-            'description' => [
-                'required'
-            ],
-            'item_id' => [
-                'required'
-            ],
-            'image' => ['required']
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:255'],
+            // A promotion links to a published product: its "Comprar ahora" button leads to the product page.
+            'item_id' => ['required', 'integer', Rule::exists('tenant.items', 'id')->where('apply_store', 1)->where('active', 1)],
+            'image' => ['nullable', 'string', 'max:255'],
+            'temp_path' => ['nullable', 'string', 'max:1024'],
         ];
     }
 
@@ -34,6 +28,12 @@ class PromotionRequest extends FormRequest
     {
         return [
             'item_id.required' => 'El campo Producto es obligatorio.',
+            'item_id.integer' => 'El campo Producto no es válido.',
+            'item_id.exists' => 'El producto seleccionado no existe o no está publicado en la tienda.',
+            'name.max' => 'El campo nombre no debe superar 255 caracteres.',
+            'description.max' => 'El campo descripción no debe superar 255 caracteres.',
+            'image.max' => 'El nombre de la imagen no debe superar 255 caracteres.',
+            '*.string' => 'El valor ingresado no es válido.',
         ];
     }
 }

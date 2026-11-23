@@ -76,7 +76,10 @@ export default {
             all_series:[],
             establishments:[],
             establishment_id:[],
-            document_types: []
+            document_types: [],
+            // order id -> {external_id, number} of comprobantes already issued whose link to the
+            // order failed; a retry must only link them, never issue a second one.
+            issued: {}
         };
     },
     async created() {
@@ -102,12 +105,25 @@ export default {
         }
     },
     methods: {
+        errorMessage(error, fallback) {
+            const data = error && error.response && error.response.data
+            if (data && typeof data.message === 'string' && data.message) return data.message
+            if (data && data.errors) {
+                const first = Object.values(data.errors)[0]
+                if (first && first[0]) return first[0]
+            }
+            return fallback
+        },
         async submit() {
+            if (this.loader) return
 
+            const orderId = this.order_id
+            const pending = this.issued[orderId]
+
+            if (!pending) {
                 let validate_items = await this.validateQuantityandSeries()
                 if(!validate_items.success)
                     return this.$message.error(validate_items.message);
-
 
                 const {codigo_tipo_documento} = this.form
                 const series_id = await this.filterSeries(codigo_tipo_documento)
@@ -116,50 +132,67 @@ export default {
                     return this.$message.error("Serie de documento no disponibles")
 
                 this.form.serie_documento = series_id
-
+            }
 
             try{
 
                 this.loader = true
 
-                const { data  } = await this.$http.post(`/api/documents`, this.form, this.headerConfig )
+                let issued = pending
 
-                const { datos_del_cliente_o_receptor, totales } = this.form
+                if (!issued) {
+                    // Never issue a second comprobante: the server refuses the draft once the order is linked.
+                    await this.$http.get(`/${this.resource}/${orderId}/document-draft`)
 
-                const payloadFinally = {
-                    document_external_id: data.data.external_id,
-                    number_document: data.data.number,
-                    orderId: this.order_id,
-                    product: 'Compras Ecommerce Facturador Pro',
-                    precio_culqi: Number(totales.total_venta),
-                    identity_document_type_id: datos_del_cliente_o_receptor.codigo_tipo_documento_identidad ,
-                    number: datos_del_cliente_o_receptor.numero_documento
+                    const { data  } = await this.$http.post(`/api/documents`, this.form, this.headerConfig )
+                    issued = { external_id: data.data.external_id, number: data.data.number }
+                    this.$set(this.issued, orderId, issued)
                 }
 
-                await this.finallyProcess(payloadFinally)
-                await this.saveUpdateStatus()
+                try {
+                    await this.finallyProcess(orderId, issued)
+                } catch (error) {
+                    return this.$message({
+                        type: 'error',
+                        duration: 0,
+                        showClose: true,
+                        message: `El comprobante ${issued.number} ya fue emitido, pero no se pudo asociar al pedido: ${this.errorMessage(error, 'error desconocido')}. No lo emita de nuevo; pulse Generar para reintentar la asociación.`
+                    })
+                }
 
+                this.$delete(this.issued, orderId)
                 this.$message.success('Transaccion finalizada correctamente')
 
                 this.closeDialog()
 
             }catch(error)
             {
-                this.$message.error(error.response.data.message)
+                this.$message.error(this.errorMessage(error, 'No se pudo generar el comprobante'))
             }
             finally{
                 this.loader = false
 
             }
         },
-        async finallyProcess(form) {
-            await this.$http.post(`/ecommerce/transaction_finally`, form )
-
+        async finallyProcess(orderId, issued) {
+            // Back office endpoint: links the document to the order and marks the payment as verified.
+            await this.$http.post(`/${this.resource}/${orderId}/attach-document`, { document_external_id: issued.external_id })
         },
-        saveUpdateStatus(){
-
-            this.$http.post(`/statusOrder/update`, { record: { id: this.order_id, status_order_id: 2} })
-
+        // Loads the server-built comprobante for the order. Resolves false when it cannot be issued.
+        async openOrder(orderId)
+        {
+            this.loader = true
+            try {
+                const { data } = await this.$http.get(`/${this.resource}/${orderId}/document-draft`)
+                await this.sendPreview(data.document)
+                return true
+            } catch (error) {
+                this.$message.error(this.errorMessage(error, 'No se pudo preparar el comprobante del pedido'))
+                this.$eventHub.$emit('reloadData')
+                return false
+            } finally {
+                this.loader = false
+            }
         },
         async sendPreview(purchase)
         {
@@ -167,8 +200,8 @@ export default {
             this.loader = true
 
             this.form = purchase
-            const type = await _.find(this.document_types, {'id': this.form.codigo_tipo_documento});
-            this.title = `Generar ${type.description}`
+            const type = _.find(this.document_types, {'id': this.form.codigo_tipo_documento});
+            this.title = `Generar ${type ? type.description : 'comprobante'}`
             await this.setLotsItem()
 
             this.loader = false
@@ -181,9 +214,15 @@ export default {
         {
             for (const element of this.form.items) {
 
-                const item = await this.getItem(element.codigo_interno)
-                element['lots'] = item.lots
-                element['series_enabled'] = item.series_enabled
+                try {
+                    const item = await this.getItem(element.codigo_interno)
+                    element['lots'] = item.lots
+                    element['series_enabled'] = item.series_enabled
+                } catch (error) {
+                    // The product has no series/lots to pick (or no internal code anymore).
+                    element['lots'] = []
+                    element['series_enabled'] = false
+                }
             }
 
         },
@@ -194,7 +233,7 @@ export default {
         },
         async getItem(id)
         {
-           const record = await this.$http.get(`${this.resource}/tables/item/${id}`)
+           const record = await this.$http.get(`${this.resource}/tables/item/${encodeURIComponent(id)}`)
            return record.data
         },
         openDialog()

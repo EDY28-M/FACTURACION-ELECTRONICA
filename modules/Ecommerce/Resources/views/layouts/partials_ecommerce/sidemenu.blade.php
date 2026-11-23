@@ -4,7 +4,7 @@
 @endphp
   <nav class="side-nav">
       <ul class="menu menu-vertical sf-arrows">
-          <li class="{{ (!$tagid) ? 'active':'' }}"><a href="{{ route("tenant.ecommerce.index") }}"><i class="icon-home"></i>Home</a></li>
+          <li class="{{ (!$tagid) ? 'active':'' }}"><a href="{{ route("tenant.ecommerce.index") }}"><i class="icon-home"></i>Inicio</a></li>
           {{--<li>
               <a href="#" class="sf-with-ul"><i class="icon-briefcase"></i>
                   Categories</a>
@@ -101,7 +101,7 @@
               <a href="#" class="sf-with-ul"><i class="icon-docs-inv"></i>Pages</a>
 
               <ul>
-                  <li><a href="cart.html">Shopping Cart</a></li>
+                  <li><a href="{{ route('tenant_detail_cart') }}">Carrito de compras</a></li>
                   <li><a href="#">Checkout</a>
                       <ul>
                           <li><a href="checkout-shipping.html">Checkout Shipping</a></li>
@@ -136,11 +136,9 @@
 
           @foreach ($items as $item)
             <li class="{{ ($tagid == $item->id) ? 'active':'' }}">
-              <a href="{{ route("tenant.ecommerce.category", ['tagid' => $item->id]) }}">
+              <a href="{{ route("tenant.ecommerce.category", ['category' => $item->id]) }}">
                 <i class="icon-cat-gift"></i>
-                @php
-                  echo wordwrap($item->name, 27, "<br />\n")
-                @endphp
+                {!! str_replace("\n", "<br />\n", e(wordwrap($item->name, 27, "\n"))) !!}
               </a>
             </li>
           @endforeach

@@ -26,14 +26,15 @@ class TagController extends Controller
     public function columns()
     {
         return [
-            'description' => 'Nombre'
-            // 'description' => 'Descripción'
+            'name' => 'Nombre',
+            'description' => 'Descripción',
         ];
     }
 
     public function records(Request $request)
     {
-        $records = Tag::where($request->column, 'like', "%{$request->value}%")->orderBy('description');
+        $column = array_key_exists((string) $request->column, $this->columns()) ? $request->column : 'name';
+        $records = Tag::where($column, 'like', "%{$request->value}%")->orderBy('name');
         
         return new TagCollection($records->paginate(config('tenant.items_per_page')));
     }
@@ -53,8 +54,10 @@ class TagController extends Controller
 
     public function store(TagRequest $request) {
         $id = $request->input('id');
-        $person = Tag::firstOrNew(['id' => $id]);
-        $person->fill($request->all());
+        // Editing an unknown (or already removed) id must fail instead of creating another category.
+        $person = $id ? Tag::findOrFail($id) : new Tag();
+        // `status` is never taken from the request: only destroy() deactivates a category.
+        $person->fill($request->only(['name', 'description']));
         $person->save();
 
         return [
@@ -68,6 +71,15 @@ class TagController extends Controller
     {
         //return 'sd';
         $item = Tag::findOrFail($id);
+
+        // A tag still assigned to products cannot be removed: the products would keep a dangling reference.
+        $inUse = ItemTag::where('tag_id', $item->id)->count();
+        if ($inUse > 0) {
+            return [
+                'success' => false,
+                'message' => "No se puede eliminar la categoría porque está asignada a {$inUse} producto(s). Quítela de los productos primero.",
+            ];
+        }
        // $this->deleteRecordInitialKardex($item);
         $item->status = 0;
         $item->save();

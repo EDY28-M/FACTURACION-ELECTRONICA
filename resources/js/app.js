@@ -150,11 +150,7 @@ Vue.component('tenant-brands-index', (resolve, reject) => require.ensure([], req
 Vue.component('tenant-incentives-index', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Item/Resources/assets/js/views/incentives/index.vue')), reject, 'tenant-incentives-index'));
 Vue.component('tenant-item-lots-index', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Item/Resources/assets/js/views/item-lots/index.vue')), reject, 'tenant-item-lots-index'));
 
-Vue.component('tenant-ecommerce-configuration-info', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Ecommerce/Resources/assets/js/views/configuration/index.vue')), reject, 'tenant-ecommerce-configuration-info'));
-Vue.component('tenant-ecommerce-configuration-culqi', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Ecommerce/Resources/assets/js/views/configuration_culqi/index.vue')), reject, 'tenant-ecommerce-configuration-culqi'));
-Vue.component('tenant-ecommerce-configuration-logo', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Ecommerce/Resources/assets/js/views/configuration_logo/index.vue')), reject, 'tenant-ecommerce-configuration-logo'));
-Vue.component('tenant-ecommerce-configuration-social', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Ecommerce/Resources/assets/js/views/configuration_social/index.vue')), reject, 'tenant-ecommerce-configuration-social'));
-Vue.component('tenant-ecommerce-configuration-tag', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Ecommerce/Resources/assets/js/views/configuration_tags/index.vue')), reject, 'tenant-ecommerce-configuration-tag'));
+Vue.component('tenant-ecommerce-configuration', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Ecommerce/Resources/assets/js/views/configuration/index.vue')), reject, 'tenant-ecommerce-configuration'));
 
 Vue.component('tenant-purchase-quotations-index', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Purchase/Resources/assets/js/views/purchase-quotations/index.vue')), reject, 'tenant-purchase-quotations-index'));
 Vue.component('tenant-purchase-quotations-form', (resolve, reject) => require.ensure([], require => resolve(require('../../modules/Purchase/Resources/assets/js/views/purchase-quotations/form.vue')), reject, 'tenant-purchase-quotations-form'));

@@ -264,7 +264,7 @@
                         </a>
                         <ul class="nav-children" data-title="Tienda virtual">
                             <li class="">
-                                <a class="nav-link" onclick="window.open( '{{ route("tenant.ecommerce.index") }} ')">Ir a Tienda</a>
+                                <a class="nav-link" onclick="window.open('{{ route("tenant.ecommerce.index") }}', '_blank')">Ir a Tienda</a>
                             </li>
                             <li class="{{ ($path[0] === 'orders')?'nav-active':'' }}">
                                 <a class="nav-link" href="{{route('tenant_orders_index')}}">Pedidos</a>
@@ -273,12 +273,12 @@
                                 <a class="nav-link" href="{{route('tenant.items_ecommerce.index')}}">Productos Tienda Virtual</a>
                             </li>
                             <li class="{{ ($path[0] === 'tags')?'nav-active':'' }}">
-                                <a class="nav-link" href="{{route('tenant.tags.index')}}">Tags - Categorias(Etiquetas)</a>
+                                <a class="nav-link" href="{{route('tenant.tags.index')}}">Categorías</a>
                             </li>
                             <li class="{{ ($path[0] === 'promotions')?'nav-active':'' }}">
-                                <a class="nav-link" href="{{route('tenant.promotion.index')}}">Promociones(Banners)</a>
+                                <a class="nav-link" href="{{route('tenant.promotion.index')}}">Promociones y banners</a>
                             </li>
-                            <li class="{{ ($path[1] === 'configuration')?'nav-active':'' }}">
+                            <li class="{{ (($path[1] ?? null) === 'configuration')?'nav-active':'' }}">
                                 <a class="nav-link" href="{{route('tenant_ecommerce_configuration')}}">Configuración</a>
                             </li>
                         </ul>

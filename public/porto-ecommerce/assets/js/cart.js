@@ -15,9 +15,12 @@ function cartItemImageUrl(file)
 
 function buildCartProductNode(element)
 {
+    // Quantity stored by the cart page; entries added from the catalogue have none (1 unit).
+    let qty = Number(element && element.cantidad);
+    qty = Number.isFinite(qty) && qty > 0 ? qty : 1;
     let $title = $('<a>').attr('href', '$').text(element.description);
     let $info = $('<span>').addClass('cart-product-info')
-        .append($('<span>').addClass('cart-product-qty').text('1'))
+        .append($('<span>').addClass('cart-product-qty').text(String(qty)))
         .append(document.createTextNode(' x ' + element.sale_unit_price));
     let $details = $('<div>').addClass('product-details')
         .append($('<h4>').addClass('product-title').append($title))
@@ -78,7 +81,7 @@ function buildCartProductNode(element)
             jQuery('#modal-already-product').modal('show');
         }
 
-    } catch ({error}) {
+    } catch (error) {
         console.log(error)
     }
 
@@ -113,7 +116,8 @@ function calculateTotalCart()
 	array = JSON.parse(array);
 	let total = 0;
 	array.forEach(element => {
-		total += parseFloat(element.sale_unit_price)
+		let qty = Number(element.cantidad);
+		total += parseFloat(element.sale_unit_price) * (Number.isFinite(qty) && qty > 0 ? qty : 1)
 	});
 
 	$(".cart-total-price").empty();
@@ -126,7 +130,7 @@ function logout()
 {
 	$.ajax({
 		url: "/ecommerce/logout",
-		method: 'get',
+		method: 'post',
 		headers: {
 			'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
 		},

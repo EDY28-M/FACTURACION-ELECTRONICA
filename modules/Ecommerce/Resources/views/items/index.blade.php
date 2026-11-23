@@ -1,49 +1,39 @@
 @extends('ecommerce::layouts.layout_ecommerce_item.index')
 @section('content')
 
-@foreach ($records as $item)
+@forelse ($records as $item)
+@php($public = \App\Services\Ecommerce\StoreItemPresenter::present($item))
 <div class="col-6 col-md-4">
     <div class="product">
         <figure class="product-image-container">
             <a href="/ecommerce/item/{{ $item->id }}" class="product-image">
-                <img src="{{ asset('storage/uploads/items/'.$item->image) }}" alt="product">
+                <img src="{{ asset('storage/uploads/items/'.$item->image) }}" alt="{{ $item->description }}">
             </a>
-            <a href="{{route('item_partial', ['id' => $item->id])}}" class="btn-quickview">Quick View</a>
-            <span class="product-label label-sale">-20%</span>
-            <span class="product-label label-hot">New</span>
+            <a href="{{route('item_partial', ['id' => $item->id])}}" class="btn-quickview">Vista Rápida</a>
         </figure>
         <div class="product-details">
-            <div class="ratings-container">
-                <div class="product-ratings">
-                    <span class="ratings" style="width:0%"></span><!-- End .ratings -->
-                </div><!-- End .product-ratings -->
-            </div><!-- End .product-container -->
             <h2 class="product-title">
-                <a href="product.html">{{$item->name}}</a>
+                <a href="/ecommerce/item/{{ $item->id }}">{{ $item->name }}</a>
             </h2>
             <div class="price-box">
-                <span class="old-price">{{ $item->currency_type['symbol'] }} {{ number_format($item->sale_unit_price, 2) }}</span>
-                <span class="product-price">{{ $item->currency_type['symbol'] }} {{ number_format($item->sale_unit_price, 2) }}</span>
+                <span class="product-price">{{ $public['currency_type_symbol'] }} {{ number_format($public['sale_unit_price'], 2) }}</span>
             </div><!-- End .price-box -->
 
             <div class="product-action">
-                <a href="#" class="paction add-wishlist" title="Add to Wishlist">
-                    <span>Add to Wishlist</span>
-                </a>
-
-                <a href="#" data-product="{{ json_encode( $item ) }}" class="paction add-cart" title="Add to Cart">
-                    <span>Add to Cart</span>
-                </a>
-
-                <a href="#" class="paction add-compare" title="Add to Compare">
-                    <span>Add to Compare</span>
+                <a href="#" data-product="{{ json_encode( $public ) }}" class="paction add-cart" title="Agregar a Carrito">
+                    <span>Agregar a Carrito</span>
                 </a>
             </div><!-- End .product-action -->
         </div><!-- End .product-details -->
     </div><!-- End .product -->
 </div><!-- End .col-md-4 -->
-
-@endforeach
-
+@empty
+<div class="col-12">
+    <div class="text-center py-5">
+        <h3>Aún no hay productos publicados</h3>
+        <p>Vuelve pronto para ver nuestro catálogo.</p>
+    </div>
+</div>
+@endforelse
 
 @endsection

@@ -34,7 +34,7 @@ class PromotionController extends Controller
     public function tables()
     {
        
-        $items = Item::where('apply_store', 1)->get();
+        $items = Item::where('apply_store', 1)->where('active', 1)->get();
         return compact('items');
     }
 
@@ -60,17 +60,16 @@ class PromotionController extends Controller
 
     public function store(PromotionRequest $request) {
 
-
         $id = $request->input('id');
 
         if(!$id)
         {
-            $count = Promotion::count();
-            if($count > 2)
+            // The slider shows at most 3 promotions (active ones only, see the Promotion global scope).
+            if(Promotion::count() > 2)
             {
                 return [
                     'success' => false,
-                    'message' => 'Solo esta permitido 3 Promociones',
+                    'message' => 'Solo está permitido tener 3 promociones activas. Elimine una para crear otra.',
                 ];
             }
         }
@@ -78,21 +77,28 @@ class PromotionController extends Controller
         $temp_path = $request->input('temp_path');
         $resolvedImage = $temp_path ? TempImageHelper::resolveValidated($temp_path) : null;
 
-        $item = Promotion::firstOrNew(['id' => $id]);
-        $item->fill($request->all());
+        // Editing an id that does not exist must fail instead of silently creating another record.
+        $item = $id ? Promotion::findOrFail($id) : new Promotion();
+
+        if (!$id && !$resolvedImage) {
+            return response()->json([
+                'image' => ['Suba la imagen de la promoción.'],
+            ], 422);
+        }
+
+        // Only the editable fields: `image` and `status` never come straight from the request body.
+        $item->fill($request->only(['name', 'description', 'item_id']));
 
         if ($resolvedImage) {
             $directory = 'public'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'promotions'.DIRECTORY_SEPARATOR;
             $file_content = file_get_contents($resolvedImage['path']);
             $datenow = date('YmdHis');
-            $slug = Str::slug($item->description) ?: 'promotion';
+            $slug = Str::slug($item->name) ?: (Str::slug($item->description) ?: 'promotion');
             $file_name = $slug.'-'.$datenow.'.'.$resolvedImage['extension'];
             if (!Storage::put($directory.$file_name, $file_content)) {
                 throw new \RuntimeException('Unable to store promotion image.');
             }
             $item->image = $file_name;
-        } elseif (!$request->input('image') && !$request->input('temp_path') && !$request->input('image_url')) {
-            $item->image = 'imagen-no-disponible.jpg';
         }
 
         $item->save();

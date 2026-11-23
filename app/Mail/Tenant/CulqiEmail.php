@@ -25,6 +25,18 @@ class CulqiEmail extends Mailable
      */
     public function build()
     {
+        // Cash orders are not paid yet: they get an order-received message, not a payment receipt.
+        $type = $this->document->mail_type ?? 'card';
+        if ($type === 'cash' || $type === 'owner') {
+            $subject = $type === 'owner'
+                ? 'Nuevo pedido en la tienda virtual '.($this->document->order_number ?? '')
+                : 'Recibimos su pedido '.($this->document->order_number ?? '');
+
+            return $this->subject(trim($subject))
+                        ->from(config('mail.username'), 'Tienda virtual')
+                        ->view('tenant.templates.email.store_order');
+        }
+
         return $this->subject('Constancia - Nuevo pago desde Ecommerce')
                     ->from(config('mail.username'), 'Constancia de Pago')
                     ->view('tenant.templates.email.culqui_payment');

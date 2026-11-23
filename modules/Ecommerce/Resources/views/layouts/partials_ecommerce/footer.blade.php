@@ -13,19 +13,36 @@
             Contáctanos
         </div><!-- End .footer-ribbon -->
         <div class="row">
+            @php
+                $contact_address = trim((string) $information->information_contact_address);
+                $contact_phone = trim((string) $information->information_contact_phone);
+                $contact_email = trim((string) $information->information_contact_email);
+                $has_social = $information->link_facebook || $information->link_twitter || $information->link_youtube;
+            @endphp
+            @if($contact_address !== '' || $contact_phone !== '' || $contact_email !== '')
             <div class="col-lg-4">
                 <div class="widget">
                     <h4 class="widget-title">Ubicación</h4>
                     <ul class="contact-info">
-                        <li>
-                            <span class="contact-info-label">Dirección:</span> {{$information->information_contact_address}}
-                        </li>
-                        <li>
-                            <span class="contact-info-label">Teléfono:</span> <a href="tel:"> {{$information->information_contact_phone}}</a>
-                        </li>
+                        @if($contact_address !== '')
+                            <li>
+                                <span class="contact-info-label">Dirección:</span> {{ $contact_address }}
+                            </li>
+                        @endif
+                        @if($contact_phone !== '')
+                            <li>
+                                <span class="contact-info-label">Teléfono:</span> <a href="tel:{{ preg_replace('/[^0-9+]/', '', $contact_phone) }}">{{ $contact_phone }}</a>
+                            </li>
+                        @endif
+                        @if($contact_email !== '')
+                            <li>
+                                <span class="contact-info-label">Correo:</span> <a href="mailto:{{ $contact_email }}">{{ $contact_email }}</a>
+                            </li>
+                        @endif
                     </ul>
                 </div><!-- End .widget -->
             </div><!-- End .col-lg-3 -->
+            @endif
 
 
             <div class="col-md-4">
@@ -35,14 +52,11 @@
                         <div class="col-sm-6 col-md-5">
                             <ul class="links">
                                 <li><a href="{{ route("tenant.ecommerce.index") }}">Inicio</a></li>
-                                <li><a href="#">Más vendidos</a></li>
-                                <li><a href="#">Populares</a></li>
                             </ul>
                         </div>
                         <div class="col-sm-6 col-md-5">
                             <ul class="links">
                                 <li><a href="{{ route('tenant_detail_cart') }}">Ver Carrito</a></li>
-                                <li><a href="#">Ver Perfil</a></li>
                                 @guest
                                 <li><a href="#" class="login-link" data-toggle="modal" data-target="#login_register_modal">Login</a></li>
                                 @else
@@ -59,26 +73,28 @@
                 </div>
             </div>
 
+            @if($has_social)
             <div class="col-md-4">
                 <div class="widget">
                     <h4 class="widget-title">Redes Sociales</h4>
 
                     <div class="social-icons">
                         @if($information->link_facebook)
-                            <a href="{{$information->link_facebook}}" class="social-icon" target="_blank"><i class="icon-facebook"></i></a>
+                            <a href="{{$information->link_facebook}}" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="icon-facebook"></i></a>
                         @endif
 
                         @if($information->link_twitter)
-                            <a href="{{$information->link_twitter}}" class="social-icon" target="_blank"><i class="icon-twitter"></i></a>
+                            <a href="{{$information->link_twitter}}" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="icon-twitter"></i></a>
                         @endif
 
                         @if($information->link_youtube)
-                            <a href="{{$information->link_youtube}}" class="social-icon" target="_blank"><i class="fab fa-youtube"></i></a>
+                            <a href="{{$information->link_youtube}}" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-youtube"></i></a>
                         @endif
 
                     </div>
                 </div>
             </div>
+            @endif
 
         </div>
     </div>
@@ -86,10 +102,12 @@
 
 <div class="container">
     <div class="footer-bottom">
-        <p class="footer-copyright">Facturador Pro 3. &copy; 2019. Todos los Derechos Reservados</p>
+        <p class="footer-copyright">&copy; {{ date('Y') }} {{ $storeName }}. Todos los derechos reservados.</p>
 
-        <img src="{{ asset('porto-ecommerce/assets/images/payments.png') }}" alt="payment methods"
+        @if(!empty($cardEnabled))
+        <img src="{{ asset('porto-ecommerce/assets/images/payments.png') }}" alt="Medios de pago con tarjeta"
             class="footer-payments">
+        @endif
     </div><!-- End .footer-bottom -->
 </div><!-- End .container -->
 
@@ -170,12 +188,12 @@
                                 <div class="form-group">
                                     <label for="email">Correo Electronico:</label>
                                     <input type="email" required class="form-control" id="email"
-                                        placeholder="Enter email" name="email">
+                                        placeholder="correo@ejemplo.com" name="email">
                                 </div>
                                 <div class="form-group">
                                     <label for="pwd">Contraseña:</label>
                                     <input type="password" required class="form-control" id="pwd"
-                                        placeholder="Enter password" name="password">
+                                        placeholder="Ingrese su contraseña" name="password">
                                 </div>
 
                                 <button type="submit" class="btn btn-primary">Ingresar</button>
@@ -194,12 +212,12 @@
                                 <div class="form-group">
                                     <label for="email">Nombres:</label>
                                     <input type="text" required autocomplete="off" class="form-control" id="name_reg"
-                                        placeholder="Enter name" name="name">
+                                        placeholder="Ingrese su nombre" name="name">
                                 </div>
                                 <div class="form-group">
                                     <label for="email">Correo Electronico:</label>
                                     <input type="email" required autocomplete="off" class="form-control" id="email_reg"
-                                        placeholder="Enter email" name="email">
+                                        placeholder="correo@ejemplo.com" name="email">
                                 </div>
                                 <div class="form-group">
                                     <label for="pwd">Contraseña:</label>
@@ -270,15 +288,24 @@
                     if (data.success) {
                         location.reload();
                     } else {
-                        $('#msg_login').show();
+                        $('#msg_login').text('Usuario o contraseña incorrectos.').show();
                     }
                 },
                 error: function (error_data) {
-                    console.log(error_data)
+                    $('#msg_login').text(requestErrorMessage(error_data)).show();
                 }
             });
         })
 
+    }
+
+    // Human readable message for a failed AJAX call (rate limit, expired session, network, server error).
+    function requestErrorMessage(error_data) {
+        var status = error_data && error_data.status;
+        if (status === 429) return 'Demasiados intentos. Espere un minuto e intente nuevamente.';
+        if (status === 419) return 'Su sesión expiró. Recargue la página e intente nuevamente.';
+        if (status === 0) return 'No hay conexión. Revise su internet e intente nuevamente.';
+        return 'No se pudo completar la solicitud. Intente nuevamente.';
     }
 
     function submitRegister() {
@@ -303,7 +330,8 @@
                     }
                 },
                 error: function (error_data) {
-                    console.log(error_data)
+                    $('#msg_register').show();
+                    $('#msg_register_p').text(requestErrorMessage(error_data))
                 }
             });
         })

@@ -57,6 +57,19 @@
     border-radius: 20px !important;
 }
 
+.store-logo-text {
+    display: inline-block;
+    max-width: 180px;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #222529;
+    /* One line: long names end in an ellipsis instead of breaking mid-word. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
 .search_title{
 
 }
@@ -86,11 +99,11 @@
      <div class="header-middle">
          <div   class="container">
              <div class="header-left">
-                 <a href="{{ route("tenant.ecommerce.index") }}" class="logo" style="max-width: 180px">
-                    @if($information->logo)
-                        <img src="{{ asset('storage/uploads/logos/'.$information->logo) }}" alt="Logo" />
+                 <a href="{{ route("tenant.ecommerce.index") }}" class="logo store-logo" style="max-width: 180px">
+                    @if($storeLogoUrl)
+                        <img src="{{ $storeLogoUrl }}" alt="{{ $storeName }}" />
                     @else
-                        <img src="{{asset('logo/700x300.jpg')}}" alt="Logo" />
+                        <span class="store-logo-text">{{ $storeName }}</span>
                     @endif
                  </a>
              </div><!-- End .header-left -->
@@ -99,12 +112,12 @@
 
                  <div class="header-dropdown" style="min-width:400px;">
 
-                    <input placeholder="Buscar..." type="text" class="search_input form-control form-control-lg" v-model="value" v-on:keyup="autoComplete" />
+                    <input placeholder="Buscar..." type="text" class="search_input form-control form-control-lg" v-model="value" aria-label="Buscar productos" v-on:keyup="autoComplete" v-on:keyup.enter="goSearch" />
                      <div class="header-menu">
                          <ul v-if="results.length > 0">
                             <li v-for="result in results">
                                 <a :href="'/ecommerce/item/' + result.id" class="d-flex">
-                                    <div class="flex-grow-1"><img style="max-width: 80px" :src="result.image_url_small" alt="England flag">
+                                    <div class="flex-grow-1"><img style="max-width: 80px" :src="result.image_url_small" alt="">
                                     <span class="search_title" style="font-size: 1.0em;"> @{{ result.description }} </span>
                                     </div>
                                     <span class="search_price">@{{result.sale_unit_price}}</span>
@@ -150,43 +163,43 @@
      var app = new Vue({
          el: '#header_bar',
          data: {
-             value: '',
+             value: new URLSearchParams(window.location.search).get('search') || '',
              suggestions: [],
+             timer: null,
              resource: 'ecommerce',
              results: [],
          },
-         created() {
-             this.getItems()
-         },
          methods: {
-             autoComplete() {
-                 if (this.value) {
-                    let val = this.value.toUpperCase()
-                    this.results = this.suggestions.filter((obj) => {
-                         let desc = obj.description.toUpperCase()
-                         let internal_id = obj.internal_id ? obj.internal_id.toUpperCase() : ''
-                         return desc.includes(val) ||  internal_id.includes(val)
-                    })
-
-                 } else {
+             // Debounced server-side lookup (the catalogue is not downloaded in advance).
+             autoComplete(event) {
+                 if (event && event.key === 'Enter') return
+                 clearTimeout(this.timer)
+                 const term = (this.value || '').trim()
+                 if (term.length < 2) {
                      this.results = []
+                     return
+                 }
+                 this.timer = setTimeout(() => this.getItems(term), 250)
+             },
+             goSearch() {
+                 const term = (this.value || '').trim()
+                 if (term) {
+                     window.location.href = '/ecommerce?search=' + encodeURIComponent(term)
                  }
              },
-             getItems() {
+             getItems(term) {
                  let contex = this
-                 fetch(`/${this.resource}/items_bar`)
+                 fetch(`/${this.resource}/items_bar?q=` + encodeURIComponent(term))
                      .then(function (response) {
                          return response.json();
                      })
                      .then(function (myJson) {
-                        contex.suggestions = myJson.data
+                         contex.results = myJson.data || []
+                     })
+                     .catch(function () {
+                         contex.results = []
                      });
-             },
-             suggestionClick(item) {
-                 this.results = []
-                 this.value = item.description
              }
-
          }
      })
 

@@ -1,18 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
-
-<!-- Mirrored from portotheme.com/html/porto_ecommerce/demo-6/ by HTTrack Website Copier/3.x [XR&CO'2014], Sat, 07 Sep 2019 03:39:38 GMT -->
+<html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-    <title>eCommerce</title>
+    <title>{{ $storeName ?? 'Tienda virtual' }}</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="keywords" content="ecommerce" />
-    <meta name="description" content="eCommerce">
-    <meta name="author" content="SW-THEMES">
+    <meta name="description" content="{{ ($storeName ?? 'Tienda virtual').' - tienda virtual' }}">
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ asset('porto-ecommerce/assets/images/icons/favicon.ico') }}">
@@ -57,63 +53,22 @@
                             @include('ecommerce::layouts.partials_ecommerce.home_slider')
                         @endif
 
-                        <div class="row">
-
-                            {{--<div class="col-md-4">
-                                <div class="banner banner-image">
-                                    <a href="#">
-                                        <img src="{{ asset('porto-ecommerce/assets/images/banners/banner-1.jpg' ) }}"
-                                            alt="banner">
-                                    </a>
-                                </div><!-- End .banner -->
-                            </div><!-- End .col-md-4 -->
-
-                            <div class="col-md-4">
-                                <div class="banner banner-image">
-                                    <a href="#">
-                                        <img src="{{ asset('porto-ecommerce/assets/images/banners/banner-2.jpg' ) }}"
-                                            alt="banner">
-                                    </a>
-                                </div><!-- End .banner -->
-                            </div><!-- End .col-md-4 -->
-
-                            <div class="col-md-4">
-                                <div class="banner banner-image">
-                                    <a href="#">
-                                        <img src="{{ asset('porto-ecommerce/assets/images/banners/banner-3.jpg' ) }}"
-                                            alt="banner">
-                                    </a>
-                                </div><!-- End .banner -->
-                            </div><!-- End .col-md-4 --> --}}
-                        </div><!-- End .row -->
-
                         <div class="mb-3"></div><!-- margin -->
 
-                        {{-- @include('ecommerce::layouts.partials_ecommerce.featured_products') --}}
                         <div class="row row-sm">
                             @include('ecommerce::layouts.partials_ecommerce.list_products')
                         </div>
 
-                        <div class="row float-right">
-                          <div class="col-md-12 col-lg-12">
-                            {{ $dataPaginate->links() }}
-                          </div>
-                        </div>
+                        @if($dataPaginate->hasPages())
+                            <div class="row float-right">
+                              <div class="col-md-12 col-lg-12">
+                                {{ $dataPaginate->links() }}
+                              </div>
+                            </div>
+                        @endif
 
                         <div class="mb-6"></div><!-- margin -->
 
-                        <div class="row">
-                            <!-- layout-  products_main-->
-
-                        </div><!-- End .row -->
-
-                        <div class="mb-3"></div><!-- margin -->
-
-                        <div class="row">
-                            <!-- layout-  features_box -->
-
-
-                        </div><!-- End .row -->
                     </div><!-- End .col-lg-9 -->
 
                     <aside class="sidebar-home col-lg-3 order-lg-first">
@@ -122,60 +77,22 @@
                             @include('ecommerce::layouts.partials_ecommerce.sidemenu')
                         </div><!-- End .side-menu-container -->
 
-                        <!-- SlidShow Side Bar, Carousel a Editar -->
-
-                <div class="box-carousel">
-                   <div class="widget-banners-slider owl-carousel owl-theme">
-                     @forelse($records as $data)
-                            @if($data->apply_store === 1)
-
-                    <figure class="product-image-container boxing">
-                        <a href="/ecommerce/item/{{ $data->id }}" class="product-image">
-                            <img src="{{ asset('storage/uploads/items/'.$data->image) }}" alt="product" class="image">
-                        </a>
-                        <a href="{{route('item_partial', ['id' => $data->id])}}" class="btn-quickview">Vista Rápida</a>
-                     <span class="product-label label-hot">New Sales Recent</span>
-                                <span class="product-label">{{$data->description}}</span>
-                    </figure>
-                            @endif
-                        @empty
-                            <div class="widget widget-banner">
-                                <div class="banner banner-image">
-                                    <a href="#">
-                                        <img src="{{ asset('porto-ecommerce/assets/images/banners/banner-sidebar.jpg') }}"
-                                            alt="Banner Desc">
-                                    </a>
-                            </div><!-- End .banner -->
-                        </div>
-                    @endforelse
-                            <!-- End .banner -->
-                 </div><!-- End .banner-slider -->
-                       <!-- End .widget or  SlideShow-->
-                </div>
-
-
-
-                        <!-- <div class="widget widget-newsletters">
-                           <h3 class="widget-title">Newsletter</h3>
-                            <p>Get all the latest information on Events, Sales and Offers. </p>
-                            <form action="#">
-                                <div class="form-group">
-                                    <input type="email" class="form-control" id="wemail">
-                                    <label for="wemail"><i class="icon-envolope"></i>Email Address</label>
-                                </div>
-                                <input type="submit" class="btn btn-block" value="Subscribe Now">
-                            </form>
-                        </div>-->
-
-                        {{-- <div class="widget widget-testimonials">
-                            @include('ecommerce::layouts.partials_ecommerce.testimonials')
-                        </div> --}}
-                        <!-- End .widget -->
-
-                        <div class="widget">
-                            <!-- layout-  news -->
-
-                        </div><!-- End .widget -->
+                        @if($records->isNotEmpty())
+                            <div class="box-carousel">
+                                <div class="widget-banners-slider owl-carousel owl-theme">
+                                    @foreach($records as $data)
+                                        <figure class="product-image-container boxing">
+                                            <a href="/ecommerce/item/{{ $data->id }}" class="product-image">
+                                                <img src="{{ asset('storage/uploads/items/'.$data->image) }}" alt="{{ $data->description }}" class="image">
+                                            </a>
+                                            <a href="{{route('item_partial', ['id' => $data->id])}}" class="btn-quickview">Vista Rápida</a>
+                                            <span class="product-label label-hot">Novedad</span>
+                                            <span class="product-label">{{ $data->description }}</span>
+                                        </figure>
+                                    @endforeach
+                                </div><!-- End .banner-slider -->
+                            </div>
+                        @endif
                     </aside><!-- End .col-lg-3 -->
                 </div><!-- End .row -->
             </div><!-- End .container -->
@@ -196,30 +113,6 @@
 
     </div><!-- End .mobile-menu-container -->
 
-    <div class="newsletter-popup mfp-hide" id="newsletter-popup-form">
-        <!-- style="background-image: url(assets/images/newsletter_popup_bg.jpg)" -->
-        <div class="newsletter-popup-content">
-            <img src="{{ asset('porto-ecommerce/assets/images/logo-black.png') }}" alt="Logo" class="logo-newsletter">
-            <h2>BE THE FIRST TO KNOW</h2>
-            <p>Subscribe to the Porto eCommerce newsletter to receive timely updates from your favorite products.</p>
-            <form action="#">
-                <div class="input-group">
-                    <input type="email" class="form-control" id="newsletter-email" name="newsletter-email"
-                        placeholder="Email address" required>
-                    <input type="submit" class="btn" value="Go!">
-                </div><!-- End .from-group -->
-            </form>
-            <div class="newsletter-subscribe">
-                <div class="checkbox">
-                    <label>
-                        <input type="checkbox" value="1">
-                        Don't show this popup again
-                    </label>
-                </div>
-            </div>
-        </div><!-- End .newsletter-popup-content -->
-    </div><!-- End .newsletter-popup -->
-
     <a id="scroll-top" href="#top" title="Top" role="button"><i class="icon-angle-up"></i></a>
 
     <!-- Plugins JS File -->
@@ -236,8 +129,6 @@
 
     @stack('scripts')
 </body>
-
-<!-- Mirrored from portotheme.com/html/porto_ecommerce/demo-6/ by HTTrack Website Copier/3.x [XR&CO'2014], Sat, 07 Sep 2019 03:39:54 GMT -->
 
 </html>
 

@@ -17,6 +17,10 @@ class ItemRequest extends FormRequest
         $id = $this->input('id');
         return [
             'internal_id' => [
+                // A product published on the storefront needs an internal code (same rule as the visibility toggle).
+                Rule::requiredIf(function () {
+                    return filter_var($this->input('apply_store'), FILTER_VALIDATE_BOOLEAN);
+                }),
                 'nullable',
                 Rule::unique('tenant.items')->ignore($id),
             ],
@@ -82,6 +86,7 @@ class ItemRequest extends FormRequest
     {
         return [
             'description.required' => 'El campo nombre es obligatorio.',
+            'internal_id.required' => 'Para mostrar el producto en la tienda virtual, asigne un código interno.',
             'name.max' => 'La descripción debe ser inferior a 600 caracteres.',
             'sale_unit_price.gt' => 'El precio unitario de venta debe ser mayor que 0.',
         ];

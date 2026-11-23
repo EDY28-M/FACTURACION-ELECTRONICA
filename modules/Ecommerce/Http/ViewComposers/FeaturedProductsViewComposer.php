@@ -5,64 +5,27 @@ namespace Modules\Ecommerce\Http\ViewComposers;
 
 use App\Models\Tenant\Item;
 //use App\Http\Resources\Tenant\ItemEcommerceCollection;
-use App\Http\Controllers\Tenant\Api\ServiceController;
+use App\Services\Ecommerce\StoreItemPresenter;
+use Carbon\Carbon;
 
 
 class FeaturedProductsViewComposer
 {
-    private static $exchangeRateCache = [];
-
     public function compose($view)
     {
-
-        $exchange_rate_sale = $this->getExchangeRateSale();
-
         $view->items = Item::with(['currency_type', 'tags'])
-            ->where([['apply_store', 1], ['internal_id','!=', null]])
+            ->where([['apply_store', 1], ['active', 1], ['internal_id', '!=', null]])
             ->get()
-            ->transform(function($row, $key) use($exchange_rate_sale){
+            ->transform(function ($row) {
+                $months = Carbon::now()->diffInMonths($row->created_at);
+                $public = StoreItemPresenter::present($row);
 
-            $sale_unit_price = ($row->has_igv)? $row->sale_unit_price:$row->sale_unit_price * (1 + \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant(null, (bool) $row->igv_general_rate) / 100);
-
-            $carbon = new \Carbon\Carbon();
-            $date = $carbon->now();
-            $months = $date->diffInMonths($row->created_at);
-
-            return (object)[
-                'id' => $row->id,
-                'internal_id' => $row->internal_id,
-                'unit_type_id' => $row->unit_type_id,
-                'description' => $row->description,
-                'name' => $row->name,
-                'second_name' => $row->second_name,
-                'sale_unit_price' => ($row->currency_type_id === 'PEN') ? $sale_unit_price : $sale_unit_price * $exchange_rate_sale,
-                'sale_unit' => $sale_unit_price,
-                'currency_type_id' => $row->currency_type_id,
-                'has_igv' => (bool) $row->has_igv,
-                'sale_affectation_igv_type_id' => $row->sale_affectation_igv_type_id,
-                'currency_type_symbol' => $row->currency_type->symbol,
-                'image' =>  $row->image,
-                'image_medium' => $row->image_medium,
-                'image_small' => $row->image_small,
-                'tags' => $row->tags->pluck('tag_id')->toArray(),
-                'is_new' => ($months > 1) ? 0 : 1,
-                /*'multi_images'  => $row->images->transform(function($r){
-                    return [
-                        $r->image
-                    ];
-                })*/
-            ];
-        });
+                // Buyer-facing fields only; `cart` is what the add-to-cart button serializes.
+                return (object) array_merge($public, [
+                    'cart' => $public,
+                    'tags' => $row->tags->pluck('tag_id')->toArray(),
+                    'is_new' => ($months > 1) ? 0 : 1,
+                ]);
+            });
     }
-
-    private function getExchangeRateSale(){
-        $date = date('Y-m-d');
-        if (!array_key_exists($date, self::$exchangeRateCache)) {
-            $exchange_rate = app(ServiceController::class)->exchangeRateTest($date);
-            self::$exchangeRateCache[$date] = (is_array($exchange_rate) && array_key_exists('sale', $exchange_rate)) ? $exchange_rate['sale'] : 1;
-        }
-
-        return self::$exchangeRateCache[$date];
-    }
-
 }

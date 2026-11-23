@@ -175,7 +175,7 @@ function findAll(node, pred, acc = []) { walk(node, n => { if (n.tag && pred(n))
 // ---------- 3. quick-view partial: product JSON is data, not inline code ----------
 {
     assert(!/onclick\s*=/i.test(partialSrc), 'partial must not use inline onclick');
-    assert(/data-product="\{\{ json_encode\( \$record \) \}\}"/.test(partialSrc), 'data-product must use escaped {{ }}');
+    assert(/data-product="\{\{ json_encode\( \$public \) \}\}"/.test(partialSrc), 'data-product must use escaped {{ }}');
     assert(!/\{!!/.test(partialSrc), 'no unescaped Blade output in partial');
 
     const scriptMatch = partialSrc.match(/<script[^>]*>([\s\S]*?)<\/script>/);

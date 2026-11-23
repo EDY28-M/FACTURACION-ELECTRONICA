@@ -30,6 +30,11 @@ class Order extends ModelTenant
         'purchase' => 'object'
     ];
 
+    public function inventory_kardex()
+    {
+        return $this->morphMany(InventoryKardex::class, 'inventory_kardexable');
+    }
+
     public function status_order()
     {
         return $this->belongsTo(StatusOrder::class);

@@ -69,6 +69,10 @@
                         <td>OP.EXONERADAS</td>
                         <td>S/ @{{ summary.total_exonerated }}</td>
                     </tr>
+                    <tr v-if="summary.total_unaffected > 0">
+                        <td>OP.INAFECTAS</td>
+                        <td>S/ @{{ summary.total_unaffected }}</td>
+                    </tr>
                     <tr v-if="summary.total_taxed > 0">
                         <td>OP.GRAVADA</td>
                         <td>S/ @{{ summary.total_taxed }}</td>
@@ -89,12 +93,16 @@
             <div class="checkout-methods text-center">
 
                 @guest
+                @if(!empty($cardEnabled))
                 <a href="#" class="btn btn-block btn-sm btn-primary login-link culqi" data-toggle="modal" data-target="#login_register_modal">Pagar
                     con VISA</a>
+                @endif
                 <a href="#" class="btn btn-block btn-sm btn-primary login-link" data-toggle="modal" data-target="#login_register_modal">Pagar
                     con EFECTIVO</a>
                 @else
+                @if(!empty($cardEnabled))
                 <button class="btn btn-block btn-sm btn-primary culqi" onclick="execCulqi()"> Pagar con VISA </button>
+                @endif
 
                 <button @click="payment_cash.clicked = !payment_cash.clicked" class="btn btn-block btn-sm btn-primary">
                     Pagar con EFECTIVO </button>
@@ -127,7 +135,7 @@
                     <option value="1">Boleta</option>
                     <option value="6">Factura</option>
                 </select>
-                <small class="form-control-feedback" v-if="errors.identity_document_type_id">El campo Comprobante es obligatorio.</small>
+                <small class="form-control-feedback" v-if="errors.identity_document_type_id" v-text="errors.identity_document_type_id[0]"></small>
             </div>
             <div class="form-group" :class="{'text-danger': errors.codigo_tipo_documento_identidad}">
                 <label>Tipo de documento:</label>
@@ -150,14 +158,14 @@
 
             <form autocomplete="off" action="#">
                 <div class="form-group" :class="{'text-danger': errors.telefono}">
-                    <label for="email">Teléfono:</label>
-                    <input v-model="form_contact.telephone" type="text" autocomplete="off" class="form-control" placeholder="Ingrese número de teléfono" name="teléfono">
+                    <label for="contact_phone">Teléfono:</label>
+                    <input id="contact_phone" v-model="form_contact.telephone" type="text" autocomplete="off" class="form-control" placeholder="Ingrese número de teléfono" name="teléfono">
                     <small class="form-control-feedback" v-if="errors.telefono" v-text="errors.telefono[0]"></small>
                 </div>
-                <div class="form-group" :class="{'text-danger': errors.address}">
-                    <label for="email">Dirección:</label>
-                    <textarea v-model="form_contact.address" class="form-control" placeholder="Ingrese dirección de envío" rows="2" cols="10"></textarea>
-                    <small class="form-control-feedback" v-if="errors.address" v-text="errors.address[0]"></small>
+                <div class="form-group" :class="{'text-danger': errors.direccion}">
+                    <label for="contact_address">Dirección:</label>
+                    <textarea id="contact_address" v-model="form_contact.address" class="form-control" placeholder="Ingrese dirección de envío" rows="2" cols="10"></textarea>
+                    <small class="form-control-feedback" v-if="errors.direccion" v-text="errors.direccion[0]"></small>
                 </div>
             </form>
         </div>
@@ -207,7 +215,12 @@
             summary: {
                 subtotal: '0.0',
                 tax: '0.0',
-                total: '0.0'
+                total: '0.0',
+                total_taxed: '0.0',
+                total_value: '0.0',
+                total_exonerated: '0.0',
+                total_unaffected: '0.0',
+                total_igv: '0.0'
             },
             aux_totals: {},
             form_document: {},
@@ -238,9 +251,17 @@
             let id = $(this).data('product')
             let row = contex.records.find(x => x.id == id)
 
+            if (!row || !(value > 0)) return
+
             row.cantidad = value
             row.sub_total = (parseFloat(row.sale_unit_price) * value).toFixed(2)
+            contex.persistQuantity(id, value)
             contex.applyQuote()
+          })
+
+          // Reflect the saved quantities in the touchspin inputs.
+          this.records.forEach(function (row) {
+            $('.input_quantity[data-product="' + row.id + '"]').val(row.cantidad)
           })
 
           await this.applyQuote()
@@ -249,10 +270,16 @@
             let array = localStorage.getItem('products_cart');
             array = JSON.parse(array)
             if (array) {
+                // Older carts saved the whole product record in the browser; keep only public fields.
+                const allowed = ['id', 'internal_id', 'unit_type_id', 'description', 'name', 'image', 'image_medium', 'image_small',
+                    'sale_affectation_igv_type_id', 'igv_general_rate', 'currency_type_id', 'currency_type_symbol', 'sale_unit_price']
                 this.records = array.map(function (item) {
-                    let obj = item
-                    obj.cantidad = 1
-                    obj.sub_total = parseFloat(item.sale_unit_price).toFixed(2)
+                    let obj = {}
+                    allowed.forEach(function (key) { if (item[key] !== undefined) obj[key] = item[key] })
+                    // The quantity chosen on this page survives navigation (saved in the cart entry).
+                    const savedQty = Number(item.cantidad)
+                    obj.cantidad = Number.isFinite(savedQty) && savedQty > 0 ? savedQty : 1
+                    obj.sub_total = (parseFloat(item.sale_unit_price) * obj.cantidad).toFixed(2)
                     obj.exchange_rate_sale = ''
                     return obj
                 })
@@ -279,18 +306,35 @@
                     this.$set(row, 'exchange_rate_sale', line.exchange_rate_sale)
                     this.$set(row, 'cantidad', line.cantidad)
                     this.$set(row, 'sub_total', Number(line.sub_total).toFixed(2))
+                    // Tax data comes from the server quote so the summary equals what is charged.
+                    this.$set(row, 'sale_affectation_igv_type_id', String(line.sale_affectation_igv_type_id))
+                    this.$set(row, 'igv_percentage', Number(line.igv_percentage))
                   })
                   this.exchange_rate_sale = parseFloat(response.data.exchange_rate_sale) || 1
+                } else if (response.data && typeof response.data.message === 'string' && response.data.message) {
+                  // e.g. not enough stock / product no longer available: show it as plain text.
+                  swal('Revise su carrito', response.data.message, 'warning')
                 }
-              } catch (e) {}
+              } catch (e) {
+                // Keep the last known prices but tell the buyer they may be outdated.
+                swal('No se pudo actualizar el carrito', 'No pudimos confirmar los precios actuales. Revise su conexión e intente nuevamente antes de pagar.', 'warning')
+              }
             }
             this.calculateSummary()
+          },
+          persistQuantity(id, quantity) {
+            try {
+              let stored = JSON.parse(localStorage.getItem('products_cart')) || []
+              stored.forEach(function (entry) { if (entry.id == id) entry.cantidad = quantity })
+              localStorage.setItem('products_cart', JSON.stringify(stored))
+            } catch (e) {}
           },
           async changeExchangeRate(exchange_rate_date){
             var response = await axios.get(`/exchange_rate/ecommence/${exchange_rate_date}`)
             this.exchange_rate_sale = parseFloat(response.data.sale)
           },
-          optionDocument() {
+          optionDocument(keepSelection) {
+              const previousType = this.typeDocuments
               this.typeDocumentList = []
               this.typeDocuments = ''
               let voucher = [{id: '6', name: 'RUC'}]
@@ -303,6 +347,10 @@
                 this.typeDocuments = ''
               } else {
                 this.typeDocumentList = ticket
+              }
+              // Recalculating the cart must not wipe the document type already chosen.
+              if (keepSelection === true && this.typeDocumentList.some(function (t) { return t.id === previousType })) {
+                this.typeDocuments = previousType
               }
           },
             refreshSetDatosCliente()
@@ -326,8 +374,7 @@
                     precio: precio,
                     precio_culqi: precio_culqi,
                     customer: this.form_document.datos_del_cliente_o_receptor,
-                    items: this.records,
-                    purchase: await this.getDocument()
+                    items: this.records.map(x => ({ id: x.id, cantidad: x.cantidad }))
                 }
             },
             async paymentCash() {
@@ -363,16 +410,16 @@
                     let response = await axios.post(url_finally, await this.getFormPaymentCash(), this.getHeaderConfig())
                     if (response.data && response.data.success === true) {
                         this.saveContactDataUser()
-                        this.clearShoppingCart()
                         this.response_order_total = response.data.order.total
+                        this.order_generated = response.data.order
+                        const orderNumber = response.data.order.order_id ? ` Su número de pedido es ${response.data.order.order_id}.` : ''
+                        // Keep the cart (and the page) until the buyer has read the confirmation.
+                        const finish = () => { this.clearShoppingCart() }
                         swal({
                             title: "Gracias por su pago!",
-                            text: "En breve le enviaremos un correo electronico con los detalles de su compra.",
+                            text: "En breve le enviaremos un correo electronico con los detalles de su compra." + orderNumber,
                             type: "success"
-                        }).then((x) => {
-                          app_cart.order_generated = order
-                            //askedDocument(response.data.order);
-                        })
+                        }).then(finish, finish)
                     } else {
                         // Business rejection (HTTP 200 with success !== true): replace the loader and keep the cart.
                         // The server message is shown as plain text only (never as the HTML title).
@@ -385,7 +432,12 @@
                     }
                 } catch (error) {
                     // Transport/HTTP error: replace the loader and keep the cart so the buyer can retry.
-                    swal("Pago No realizado", 'Sucedio algo inesperado.', "error");
+                    let detail = 'Sucedio algo inesperado.'
+                    if (error && error.response && error.response.status === 422 && error.response.data) {
+                        const first = Object.values(error.response.data)[0]
+                        if (Array.isArray(first) && typeof first[0] === 'string') detail = first[0]
+                    }
+                    swal("Pago No realizado", detail, "error");
                     if (error && error.response && error.response.status === 422) {
                         this.errors = error.response.data;
                     } else {
@@ -407,119 +459,6 @@
                     headers.Authorization = `Bearer ${this.user.api_token}`;
                 }
                 return { headers: headers };
-            },
-            async getDocument() {
-                this.form_document.items = await this.getItemsDocument()
-                this.form_document.totales = await this.getTotales()
-
-                if (this.formIdentity.identity_document_type_id === '6') {
-                    this.form_document.serie_documento = 'F001'
-                    this.form_document.codigo_tipo_documento = '01'
-                }
-                if (this.formIdentity.identity_document_type_id === '1') {
-                    this.form_document.serie_documento = 'B001'
-                    this.form_document.codigo_tipo_documento = '03'
-                }
-                return this.form_document
-            },
-            async getTotales() {
-
-                let totals = await {
-                    "total_exportacion": 0.00,
-                    "total_operaciones_gravadas": this.aux_totals.total_taxed,
-                    "total_operaciones_inafectas": 0.00,
-                    "total_operaciones_exoneradas": this.aux_totals.total_exonerated,
-                    "total_operaciones_gratuitas": 0.00,
-                    "total_igv": this.aux_totals.total_igv,
-                    "total_impuestos": this.aux_totals.total_igv,
-                    "total_valor": this.aux_totals.total_value,
-                    "total_venta": this.aux_totals.total
-                }
-
-                return totals
-            },
-            async getItemsDocument() {
-
-                let rec = await this.records.map((item) => {
-
-                    let sale_unit_price = 0
-                    let total_exonerated = 0
-                    let total_igv = 0
-                    let total_val = 0
-                    let total = 0
-                    let percentage_igv = item.igv_general_rate ? 18 : {{ \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant() }}
-
-                    if (item.sale_affectation_igv_type_id === '10') {
-
-                        if(item.currency_type_id === 'USD') {
-                            sale_unit_price = (parseFloat(item.sale_unit_price) * this.exchange_rate_sale).toFixed(2)
-                        } else {
-                            sale_unit_price = item.sale_unit_price
-                        }
-
-                        unit_value = sale_unit_price / (1 + percentage_igv / 100)
-                        total_igv = item.cantidad * parseFloat(sale_unit_price - unit_value)
-                        total = (item.cantidad * sale_unit_price)
-                        //sale_unit_price = parseFloat(item.sale_unit_price)
-                        total_val = (unit_value * item.cantidad)
-
-                        return {
-                            "codigo_interno": (item.internal_id) ? item.internal_id:"",
-                            "descripcion": item.description,
-                            "codigo_producto_sunat": "",
-                            "unidad_de_medida": item.unit_type_id,
-                            "cantidad": item.cantidad,
-                            "valor_unitario": unit_value,
-                            "codigo_tipo_precio": "01",
-                            "precio_unitario": sale_unit_price,
-                            "codigo_tipo_afectacion_igv": "10",
-                            "total_base_igv": total_val,
-                            "porcentaje_igv": percentage_igv,
-                            "total_igv": total_igv,
-                            "total_impuestos": total_igv,
-                            "total_valor_item": total_val,
-                            "total_item": total
-                        }
-
-                    }
-
-                    if (item.sale_affectation_igv_type_id === '20') {
-
-                        if(item.currency_type_id === 'USD') {
-                            sale_unit_price = (parseFloat(item.sale_unit_price) * this.exchange_rate_sale).toFixed(2)
-                        } else {
-                            sale_unit_price = item.sale_unit_price
-                        }
-
-                        unit_value = parseFloat(sale_unit_price)
-                        total_igv = 0
-                        total = (parseFloat(item.cantidad) * parseFloat(sale_unit_price))
-                        //sale_unit_price = parseFloat(item.sale_unit_price)
-                        total_val = (parseFloat(unit_value) * parseFloat(item.cantidad))
-
-                        return {
-                            "codigo_interno": (item.internal_id) ? item.internal_id:"",
-                            "descripcion": item.description,
-                            "codigo_producto_sunat": "",
-                            "unidad_de_medida": item.unit_type_id,
-                            "cantidad": item.cantidad,
-                            "valor_unitario": unit_value,
-                            "codigo_tipo_precio": "01",
-                            "precio_unitario": sale_unit_price,
-                            "codigo_tipo_afectacion_igv": "20",
-                            "total_base_igv": total_val,
-                            "porcentaje_igv": percentage_igv,
-                            "total_igv": 0,
-                            "total_impuestos": 0,
-                            "total_valor_item": total_val,
-                            "total_item": total
-                        }
-
-                    }
-
-                })
-
-                return rec
             },
             initForm() {
               this.errors = {}
@@ -572,7 +511,10 @@
                 let array = localStorage.getItem('products_cart');
                 array = JSON.parse(array);
                 let indexFound = array.findIndex(x => x.id == id)
-                array.splice(indexFound, 1);
+                // findIndex is -1 when the id is not stored: splice(-1, 1) would remove the last product.
+                if (indexFound !== -1) {
+                    array.splice(indexFound, 1);
+                }
                 localStorage.setItem('products_cart', JSON.stringify(array));
 
                 this.calculateSummary()
@@ -600,38 +542,41 @@
             },
             calculateSummary() {
 
-                //let subtotal = 0.00
                 let total_taxed = 0
                 let total_value = 0
                 let total_exonerated = 0
+                let total_unaffected = 0
                 let total_igv = 0
                 let total = 0
 
                 this.records.forEach(function (item) {
 
-                    //subtotal += parseFloat(item.sub_total)
+                    // sub_total is the amount the server charges for the line (IGV included when taxed).
+                    let unit_price = parseFloat(item.sub_total)
+                    let affectation = parseInt(item.sale_affectation_igv_type_id, 10)
+                    let percentage_igv = item.igv_percentage !== undefined && !isNaN(item.igv_percentage)
+                        ? item.igv_percentage
+                        : (item.igv_general_rate ? 18 : {{ \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant() }})
 
-                    let unit_price = item.sub_total
-                    let unit_value = unit_price
-                    let percentage_igv = item.igv_general_rate ? 18 : {{ \App\CoreFacturalo\Helpers\Igv\IgvRate::forTenant() }}
-
-                    if (item.sale_affectation_igv_type_id === '10') {
-                        unit_value = item.sub_total / (1 + percentage_igv / 100)
-                        total_taxed += parseFloat(unit_value)
-                        total_igv += parseFloat(unit_price - unit_value)
+                    if (isNaN(affectation) || (affectation >= 10 && affectation <= 17)) {
+                        let unit_value = unit_price / (1 + percentage_igv / 100)
+                        total_taxed += unit_value
+                        total_igv += unit_price - unit_value
+                        total_value += unit_value
+                    } else if (affectation === 20 || affectation === 21) {
+                        total_exonerated += unit_price
+                        total_value += unit_price
+                    } else {
+                        total_unaffected += unit_price
+                        total_value += unit_price
                     }
-                    if (item.sale_affectation_igv_type_id === '20') {
-                        total_exonerated += parseFloat(unit_value)
-                    }
 
-                    total_value = total_taxed + total_exonerated
-                    total += parseFloat(unit_price)
+                    total += unit_price
                 })
-
-                // console.log(total_taxed, total_exonerated, total_igv)
 
                 this.summary.total_taxed = total_taxed.toFixed(2)
                 this.summary.total_exonerated = total_exonerated.toFixed(2)
+                this.summary.total_unaffected = total_unaffected.toFixed(2)
                 this.summary.total_igv = total_igv.toFixed(2)
                 this.summary.total_value = total_value.toFixed(2)
                 this.summary.total = total.toFixed(2)
@@ -641,10 +586,10 @@
 
                 $("#total_amount").data('total', this.summary.total);
 
-                this.formIdentity.identity_document_type_id = ''
-                this.optionDocument()
-
                 this.payment_cash.amount = this.summary.total;
+
+                // Keep the buyer's comprobante choice across recalculations; only refresh what it allows.
+                this.optionDocument(true)
 
                 // let x =
                 // console.log(x)
@@ -680,16 +625,8 @@
 </script>
 
 <script>
-    var culqi_public_key = {!! json_encode($configuration->token_public_culqui ) !!};
-    if(!culqi_public_key)
-    {
-      $('.culqi').hide()
-    }
-
-    async function askedDocument(order) {
-        app_cart.order_generated = order
-        $('#modal_ask_document').modal('show')
-    }
+    // Card payments are rendered only when both Culqi keys are configured (see $cardEnabled).
+    var culqi_public_key = {!! json_encode(!empty($cardEnabled) ? optional($configuration)->token_public_culqui : null) !!};
 
     function showPaymentLoading() {
         swal({
@@ -724,21 +661,20 @@
                     base.precio = precio;
                     base.precio_culqi = Number($("#total_amount").data('total')).toFixed(2);
                     base.customer = JSON.stringify(formpayment.customer);
-                    base.items = JSON.stringify(getItems());
-                    base.purchase = JSON.stringify(formpayment.purchase);
+                    base.items = JSON.stringify(getItems().map(function (x) { return { id: x.id, cantidad: x.cantidad }; }));
 
                     return base;
                 },
                 onSuccess: function (data) {
                     app_cart.saveContactDataUser();
-                    app_cart.clearShoppingCart();
+                    app_cart.order_generated = data.order;
+                    // Clear the cart (it reloads the page) only after the buyer has read the confirmation.
+                    const finish = function () { app_cart.clearShoppingCart(); };
                     swal({
                         title: "Gracias por su pago!",
                         text: "En breve le enviaremos un correo electronico con los detalles de su compra.",
                         type: "success"
-                    }).then((x) => {
-                        askedDocument(data.order);
-                    })
+                    }).then(finish, finish)
                 },
                 onFailure: function (data) {
                     swal("Pago No realizado", data.message, "error");

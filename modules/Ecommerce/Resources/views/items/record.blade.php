@@ -64,17 +64,18 @@
 
 
 
+                @if(!empty($rating['count']))
                 <div class="ratings-container">
-                    <div class="product-ratings">
-                        <span class="ratings" style="width:60%"></span><!-- End .ratings -->
-                    </div><!-- End .product-ratings -->
-
-                    <a href="#" class="rating-link">( 6 vistas )</a>
-                </div><!-- End .product-container -->
+                    <div class="product-ratings" title="Valoración promedio: {{ number_format($rating['average'], 1) }} de 5">
+                        <span class="ratings" style="width:{{ round($rating['average'] / 5 * 100) }}%"></span>
+                    </div>
+                    <span class="rating-link">({{ $rating['count'] }} {{ $rating['count'] == 1 ? 'valoración' : 'valoraciones' }})</span>
+                </div>
+                @endif
 
                 <div class="price-box">
                     <!-- <span class="old-price">S/ {{ number_format( ($record->sale_unit_price * 1.2 ) , 2 )}}</span> -->
-                    <span class="product-price">{{ $record->currency_type_symbol }} {{ number_format($record->sale_unit, 2 )}}</span>
+                    <span class="product-price">{{ $record->price_label }}</span>
                 </div><!-- End .price-box -->
 
                 <div class="product-desc">
@@ -95,7 +96,7 @@
                     </div>-->
                     <!-- End .product-single-qty -->
 
-                    <a href="#" class="paction add-cart" data-product="{{ json_encode( $record ) }}"
+                    <a href="#" class="paction add-cart" data-product="{{ json_encode( $record->cart ) }}"
                         title="Add to Cart">
                         <span>Agregar a Carrito</span>
                     </a>

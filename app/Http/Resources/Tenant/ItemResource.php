@@ -56,7 +56,7 @@ class ItemResource extends JsonResource
             'apply_store' => (bool)$this->apply_store,
             'has_plastic_bag_taxes' => (bool)$this->has_plastic_bag_taxes,
             'tags' => $this->tags,
-            'tags_id' => $this->tags->pluck('tag_id'),
+            'tags_id' => $this->tags->filter(function ($itemTag) { return $itemTag->tag; })->pluck('tag_id')->values(),
             // 'individual_items' => collect($this->sets)->pluck('individual_item_id'),
             'commission_amount' => $this->commission_amount,
             'lot_code' => $this->lot_code,

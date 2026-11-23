@@ -14,16 +14,11 @@
               <a  href="{{route('item_partial', ['id' => $item->id])}}" class="btn-quickview">Quick View</a>
           </figure>
           <div class="product-details">
-              <div class="ratings-container">
-                  <div class="product-ratings">
-                      <span class="ratings" style="width:80%"></span><!-- End .ratings -->
-                  </div><!-- End .product-ratings -->
-              </div><!-- End .product-container -->
               <h2 class="product-title">
                   <a href="#">{{$item->name}}</a>
               </h2>
               <div class="price-box">
-                  <span class="product-price">S/ {{ number_format($item->sale_unit_price, 2) }}</span>
+                  <span class="product-price">{{ $item->currency_type_symbol ?? 'S/' }} {{ number_format($item->sale_unit_price, 2) }}</span>
               </div><!-- End .price-box -->
 
               <div class="product-action">
@@ -31,7 +26,7 @@
                       <span>Add to Wishlist</span>
                   </a>
 
-                  <a href="#" data-product="{{ json_encode( $item ) }}" class="paction add-cart" title="Add to Cart">
+                  <a href="#" data-product="{{ json_encode( $item->cart ?? [] ) }}" class="paction add-cart" title="Add to Cart">
                       <span>Add to Cart</span>
                   </a>
 

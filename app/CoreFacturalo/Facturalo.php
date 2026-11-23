@@ -202,7 +202,17 @@ class Facturalo
             $document = $this->document;
             $email = ($this->document->customer) ? $this->document->customer->email : $this->document->supplier->email;
 
-            Mail::to($email)->send(new DocumentEmail($company, $document));
+            // Best effort: a mail failure (bad SMTP credentials, provider down) must never roll back
+            // or block issuing the document. It is logged; the email can be resent from the panel.
+            if (empty($email) || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return;
+            }
+
+            try {
+                Mail::to($email)->send(new DocumentEmail($company, $document));
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
         }
     }

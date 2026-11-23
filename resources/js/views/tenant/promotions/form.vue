@@ -29,8 +29,8 @@
               <label class="control-label">
                 Imágen
                 <span class="text-danger"></span>
-                <div class="sub-title text-danger">
-                  <small>Se requiere resoluciones 1024x720</small>
+                <div class="sub-title text-muted">
+                  <small>Tamaño recomendado 1024x720. Formatos JPG, PNG, WEBP o GIF.</small>
                 </div>
               </label>
               <el-upload

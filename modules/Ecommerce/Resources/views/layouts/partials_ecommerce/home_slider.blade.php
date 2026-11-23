@@ -1,3 +1,4 @@
+@if($items->isNotEmpty())
 <div class="home-slider owl-carousel owl-carousel-lazy owl-theme owl-theme-light">
 
     @foreach ($items as $item)
@@ -16,3 +17,4 @@
     @endforeach
 
 </div>
+@endif
