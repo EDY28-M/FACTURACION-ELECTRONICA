@@ -2,6 +2,7 @@
 
 namespace Modules\Treasury\Services;
 
+use App\Models\Tenant\Document;
 use App\Models\Tenant\DocumentPayment;
 use App\Models\Tenant\PurchasePayment;
 use App\Models\Tenant\SaleNotePayment;
@@ -211,6 +212,7 @@ class ReceivablePayableService
         $snPaymentsByNote = $this->loadPaymentsGrouped('sale_note_payments', 'sale_note_id', $snIds);
         $docFeesByDoc = $this->loadDocumentFeesGrouped($docIds);
         $invoiceDueByDoc = $this->loadInvoiceDueDates($docIds);
+        $receivedRetentionsByDoc = $this->loadReceivedRetentionsGrouped($docIds);
 
         $allDocPaymentIds = $this->flattenPaymentIds($docPaymentsByDoc);
         $allSnPaymentIds = $this->flattenPaymentIds($snPaymentsByNote);
@@ -248,6 +250,11 @@ class ReceivablePayableService
             $detractionPen = $this->extractDetractionPen($doc->detraction ?? null);
             $detractionInCurrency = $this->convertPenToCurrency($detractionPen, $currency, $exchangeRateSale);
             $retentionAmount = $this->extractRetentionAmount($doc->discounts ?? null);
+            // Phase 4: a CRE registered in Treasury (retention_received) is the customer's proof of retention.
+            // The invoice may already declare the same retention (discount code 62), so the effective amount is
+            // the larger of both, never their sum (that would count the same retention twice).
+            $registeredRetention = Money::round((float) ($receivedRetentionsByDoc[$docId] ?? 0.0));
+            $effectiveRetention = max($retentionAmount, $registeredRetention);
 
             $rawFees = $docFeesByDoc[$docId] ?? [];
             $hasCustomSchedule = !empty($rawFees);
@@ -263,7 +270,7 @@ class ReceivablePayableService
                         'id' => null,
                         'date' => $invoiceDueDate ?? $lastFeeDate ?? $dateOfIssue,
                         'amount' => $residualAmount,
-                        'source' => ($detractionInCurrency + $retentionAmount > 0.0)
+                        'source' => ($detractionInCurrency + $effectiveRetention > 0.0)
                             ? 'detraction_retention'
                             : 'unscheduled_balance',
                     ];
@@ -271,7 +278,7 @@ class ReceivablePayableService
 
                 $installments = $this->allocateInstallmentsFifo($scheduleInput, $totalPaid, $asOf);
             } else {
-                $netCreditAmount = Money::round(max(0.0, $total - $detractionInCurrency - $retentionAmount));
+                $netCreditAmount = Money::round(max(0.0, $total - $detractionInCurrency - $effectiveRetention));
                 $installments = $this->allocateInstallmentsFifo([
                     [
                         'id' => null,
@@ -321,7 +328,12 @@ class ReceivablePayableService
                 'detraction_amount' => $detractionInCurrency,
                 'detraction_amount_pen' => $detractionPen,
                 'retention_amount' => $retentionAmount,
+                'retention_registered_amount' => $registeredRetention,
                 'net_credit_amount' => $netCreditAmount,
+                // Explicit net receivable (Phase 4): what the customer still owes ME in my normal accounts =
+                // gross balance (parity with UnpaidController) - detraction (deposited by the customer in the BN
+                // account, tracked in Detracciones) - retention (certificate received).
+                'net_receivable_amount' => Money::round(max(0.0, $balance - $detractionInCurrency - $effectiveRetention)),
                 'has_installments' => $hasCustomSchedule,
                 'installments_count' => count($installments),
                 'installments' => $installments,
@@ -412,7 +424,9 @@ class ReceivablePayableService
                 'detraction_amount' => 0.0,
                 'detraction_amount_pen' => 0.0,
                 'retention_amount' => 0.0,
+                'retention_registered_amount' => 0.0,
                 'net_credit_amount' => $total,
+                'net_receivable_amount' => $balance,
                 'has_installments' => false,
                 'installments_count' => count($installments),
                 'installments' => $installments,
@@ -571,6 +585,9 @@ class ReceivablePayableService
             $effectiveRate = $this->resolveEffectiveExchangeRate($currency, $exchangeRateSale, $fallbackUsdSaleRate);
             $balancePen = $effectiveRate !== null ? Money::round($balance * $effectiveRate) : null;
 
+            $purchaseDetractionPen = $this->extractDetractionPen($purchase->detraction ?? null);
+            $purchaseDetraction = $this->convertPenToCurrency($purchaseDetractionPen, $currency, $exchangeRateSale);
+
             $rows[] = [
                 'id' => $purchaseId,
                 'type' => 'purchase',
@@ -590,6 +607,11 @@ class ReceivablePayableService
                 'balance' => $balance,
                 'balance_pen' => $balancePen,
                 'total_canceled' => isset($purchase->total_canceled) ? (bool) $purchase->total_canceled : false,
+                'detraction_amount' => $purchaseDetraction,
+                'detraction_amount_pen' => $purchaseDetractionPen,
+                // Explicit net payable (Phase 4): what I still pay the SUPPLIER = gross balance (parity) - the
+                // detraction I deposit in the supplier's BN account (tracked in Detracciones).
+                'net_payable_amount' => Money::round(max(0.0, $balance - $purchaseDetraction)),
                 'has_installments' => $hasCustomSchedule,
                 'installments_count' => count($installments),
                 'installments' => $installments,
@@ -1162,6 +1184,9 @@ class ReceivablePayableService
         if ($this->hasColumn('purchases', 'total_canceled')) {
             $columns[] = 'purchases.total_canceled';
         }
+        if ($this->hasColumn('purchases', 'detraction')) {
+            $columns[] = 'purchases.detraction';
+        }
 
         $query = DB::connection('tenant')
             ->table('purchases')
@@ -1425,6 +1450,36 @@ class ReceivablePayableService
      * @param  array<int, int>  $docIds
      * @return array<int, ?string>
      */
+    /**
+     * Sum of active received CREs (treasury_withholdings.retention_received) per invoice, in the invoice currency.
+     *
+     * @param array<int, int> $docIds
+     * @return array<int, float>
+     */
+    private function loadReceivedRetentionsGrouped(array $docIds): array
+    {
+        if (empty($docIds) || !$this->hasTable('treasury_withholdings')) {
+            return [];
+        }
+
+        $rows = DB::connection('tenant')
+            ->table('treasury_withholdings')
+            ->select('parent_id', DB::raw('SUM(amount) as total_amount'))
+            ->where('kind', 'retention_received')
+            ->where('state', 'active')
+            ->where('parent_type', Document::class)
+            ->whereIn('parent_id', $docIds)
+            ->groupBy('parent_id')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row->parent_id] = Money::round((float) $row->total_amount);
+        }
+
+        return $map;
+    }
+
     private function loadInvoiceDueDates(array $docIds): array
     {
         if (empty($docIds) || !$this->hasTable('invoices')) {

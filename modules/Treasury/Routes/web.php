@@ -51,6 +51,26 @@ if ($hostname) {
                 Route::get('receivables-payables/records', 'ReceivablePayableController@records');
                 Route::post('receivables-payables/purchase-fees/{purchase}', 'ReceivablePayableController@storePurchaseFees');
                 Route::delete('receivables-payables/purchase-fees/{purchase}', 'ReceivablePayableController@deletePurchaseFees');
+
+                // Phase 4: Detractions (SPOT) control
+                Route::get('detractions', 'DetractionController@index')->name('tenant.treasury.detractions.index');
+                Route::get('detractions/tables', 'DetractionController@tables');
+                Route::get('detractions/records', 'DetractionController@records');
+                Route::post('detractions/sync', 'DetractionController@sync');
+                Route::post('detractions/release', 'DetractionController@release');
+                Route::post('detractions/{id}/deposit', 'DetractionController@deposit');
+                Route::post('detractions/{id}/revert', 'DetractionController@revert');
+
+                // Phase 4: Retentions (CRE) and perceptions (CPE): compute, offer the existing emission flow, link
+                Route::get('withholdings/tables', 'WithholdingController@tables');
+                Route::get('withholdings/records', 'WithholdingController@records');
+                Route::get('withholdings/retention-offers/{purchase}', 'WithholdingController@retentionOffers');
+                Route::get('withholdings/perception-offers/{document}', 'WithholdingController@perceptionOffers');
+                Route::post('withholdings/received-retentions/{document}', 'WithholdingController@storeReceivedRetention');
+                Route::post('withholdings/issued-retentions/{payment}', 'WithholdingController@linkRetention');
+                Route::post('withholdings/issued-perceptions/{payment}', 'WithholdingController@linkPerception');
+                Route::post('withholdings/settle', 'WithholdingController@settle');
+                Route::post('withholdings/{id}/void', 'WithholdingController@void');
             });
         });
     });

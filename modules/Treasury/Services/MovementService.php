@@ -10,8 +10,10 @@ use App\Models\Tenant\Person;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\Treasury\Models\DetractionRecord;
 use Modules\Treasury\Models\TreasuryConcept;
 use Modules\Treasury\Models\TreasuryMovement;
+use Modules\Treasury\Models\TreasuryWithholding;
 use Modules\Treasury\Support\Money;
 
 /**
@@ -117,6 +119,14 @@ class MovementService
             $destination = $this->lockAndValidateDestination($destinationClass, $destinationId, 'destination_id', $date);
             $isBankDestination = ($destination instanceof BankAccount);
             $destinationCurrency = $isBankDestination ? (string) $destination->currency_type_id : 'PEN';
+
+            // SPOT account: funds can only be used to pay SUNAT taxes (TUO DL 940). Deposits and releases are
+            // registered by the detraction flows, never as a manual movement.
+            if ($isBankDestination && ($destination->account_type ?? null) === 'detraction_bn' && $kind !== 'tax_payment') {
+                throw ValidationException::withMessages([
+                    'destination_id' => ['La cuenta de detracciones del Banco de la Nación solo puede usarse para pagar tributos administrados por SUNAT.'],
+                ]);
+            }
 
             if ($isBankDestination && !empty($destination->establishment_id)) {
                 $accountEstId = (int) $destination->establishment_id;
@@ -384,7 +394,7 @@ class MovementService
     /**
      * Atomically voids a movement (or full transfer group) and all active linked ITF/bank_fee children (D6, D10).
      */
-    public function void(int $movementId, string $reason, int $userId): array
+    public function void(int $movementId, string $reason, int $userId, bool $allowDetractionLinked = false): array
     {
         $cleanReason = trim($reason);
         if (mb_strlen($cleanReason) < 3) {
@@ -399,12 +409,20 @@ class MovementService
             ]);
         }
 
-        return DB::connection('tenant')->transaction(function () use ($movementId, $cleanReason, $userId) {
+        return DB::connection('tenant')->transaction(function () use ($movementId, $cleanReason, $userId, $allowDetractionLinked) {
             $target = TreasuryMovement::whereKey($movementId)->lockForUpdate()->firstOrFail();
 
             if ($target->state === TreasuryMovement::STATE_VOIDED) {
                 throw ValidationException::withMessages([
                     'movement' => ['El movimiento ya se encuentra anulado.'],
+                ]);
+            }
+
+            // Deposit movements are owned by a detraction record: voiding them directly would leave the record
+            // marked as deposited. They must be reverted from the detraction flow (which passes the flag).
+            if (!$allowDetractionLinked && $target->source_type === DetractionRecord::class) {
+                throw ValidationException::withMessages([
+                    'movement' => ['Este movimiento pertenece al control de detracciones. Revierta el depósito desde Detracciones.'],
                 ]);
             }
 
@@ -459,11 +477,250 @@ class MovementService
                 $item->save();
             }
 
+            $this->releaseWithholdingSettlements($toVoid->pluck('id')->all());
+
             return [
                 'voided_movements' => $toVoid->all(),
                 'count' => $toVoid->count(),
                 'transfer_group' => $target->transfer_group,
             ];
+        });
+    }
+
+    /**
+     * A voided `tax_payment` no longer settles retained/perceived amounts: clear the link (same transaction, rows
+     * locked) so they return to the "payable to SUNAT" list and can be voided or settled again.
+     *
+     * @param array<int, int> $movementIds
+     */
+    private function releaseWithholdingSettlements(array $movementIds): void
+    {
+        if (empty($movementIds)) {
+            return;
+        }
+
+        try {
+            if (!DB::connection('tenant')->getSchemaBuilder()->hasTable('treasury_withholdings')) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $rows = TreasuryWithholding::query()
+            ->whereIn('settled_movement_id', $movementIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($rows as $row) {
+            $row->settled_movement_id = null;
+            $row->save();
+        }
+    }
+
+    /**
+     * Registers the SPOT deposit of a detraction record as a `detraction_deposit` movement (Phase 4).
+     *
+     * - receivable: my customer deposited into MY Banco de la Nacion detraction account (inflow into that account).
+     * - payable: I deposited into my SUPPLIER's account from one of my own accounts (outflow from that account).
+     *
+     * The detraction amount is always expressed in PEN, so the account must be a PEN account.
+     * Must run inside the caller's tenant transaction (DetractionService does so).
+     *
+     * @param array{side: string, bank_account_id: int, amount_pen: float|string, date: string, establishment_id?: int,
+     *     operation_number?: ?string, description?: ?string, source_id: int, counterparty_name?: ?string,
+     *     counterparty_document?: ?string} $payload
+     */
+    public function createDetractionDeposit(array $payload, int $userId): TreasuryMovement
+    {
+        if ($userId <= 0) {
+            throw ValidationException::withMessages([
+                'user_id' => ['El usuario que registra el depósito es obligatorio.'],
+            ]);
+        }
+
+        $side = (string) ($payload['side'] ?? '');
+        if (!in_array($side, [DetractionRecord::SIDE_RECEIVABLE, DetractionRecord::SIDE_PAYABLE], true)) {
+            throw ValidationException::withMessages([
+                'side' => ['El tipo de detracción no es válido.'],
+            ]);
+        }
+
+        $date = $this->validateDate((string) ($payload['date'] ?? ''));
+        $amount = $this->validateAmount($payload['amount_pen'] ?? null, 'amount_pen');
+        $accountId = (int) ($payload['bank_account_id'] ?? 0);
+        if ($accountId <= 0) {
+            throw ValidationException::withMessages([
+                'bank_account_id' => ['Seleccione una cuenta bancaria válida.'],
+            ]);
+        }
+
+        return DB::connection('tenant')->transaction(function () use ($payload, $userId, $side, $date, $amount, $accountId) {
+            /** @var BankAccount $account */
+            $account = $this->lockAndValidateDestination(BankAccount::class, $accountId, 'bank_account_id', $date);
+            $isBn = ($account->account_type ?? null) === 'detraction_bn';
+
+            if ($side === DetractionRecord::SIDE_RECEIVABLE && !$isBn) {
+                throw ValidationException::withMessages([
+                    'bank_account_id' => ['El depósito recibido debe registrarse en la cuenta de detracciones del Banco de la Nación.'],
+                ]);
+            }
+            if ($side === DetractionRecord::SIDE_PAYABLE && $isBn) {
+                throw ValidationException::withMessages([
+                    'bank_account_id' => ['El depósito a su proveedor debe salir de una cuenta propia distinta a la cuenta de detracciones.'],
+                ]);
+            }
+            if (strtoupper((string) $account->currency_type_id) !== 'PEN') {
+                throw ValidationException::withMessages([
+                    'bank_account_id' => ['Las detracciones se depositan en soles. Seleccione una cuenta en PEN.'],
+                ]);
+            }
+
+            $establishmentId = !empty($account->establishment_id)
+                ? (int) $account->establishment_id
+                : (int) ($payload['establishment_id'] ?? 0);
+            if ($establishmentId <= 0) {
+                throw ValidationException::withMessages([
+                    'establishment_id' => ['La sede es obligatoria para registrar un movimiento de tesorería.'],
+                ]);
+            }
+
+            $description = $this->nullableTrim($payload['description'] ?? null)
+                ?: ($side === DetractionRecord::SIDE_RECEIVABLE
+                    ? 'Depósito de detracción recibido'
+                    : 'Depósito de detracción a proveedor');
+
+            return TreasuryMovement::create([
+                'establishment_id' => $establishmentId,
+                'date' => $date,
+                'kind' => 'detraction_deposit',
+                'direction' => $side === DetractionRecord::SIDE_RECEIVABLE
+                    ? TreasuryMovement::DIRECTION_INFLOW
+                    : TreasuryMovement::DIRECTION_OUTFLOW,
+                'destination_type' => BankAccount::class,
+                'destination_id' => $account->getKey(),
+                'currency_type_id' => 'PEN',
+                'amount' => $amount,
+                'exchange_rate_purchase' => null,
+                'exchange_rate_sale' => null,
+                'exchange_rate_used' => 1.0,
+                'amount_pen' => $amount,
+                'operation_number' => $this->nullableTrim($payload['operation_number'] ?? null),
+                'counterparty_document' => $this->nullableTrim($payload['counterparty_document'] ?? null),
+                'counterparty_name' => $this->nullableTrim($payload['counterparty_name'] ?? null),
+                'description' => $description,
+                'source_type' => DetractionRecord::class,
+                'source_id' => (int) ($payload['source_id'] ?? 0) ?: null,
+                'state' => TreasuryMovement::STATE_ACTIVE,
+                'user_id' => $userId,
+            ]);
+        });
+    }
+
+    /**
+     * Registers the release of SPOT funds (Formulario 1697, approved by SUNAT) as two linked
+     * `detraction_release` legs: outflow from the BN detraction account, inflow into one of my own accounts.
+     * Both accounts are locked in a deterministic order (D10).
+     *
+     * @return array{out: TreasuryMovement, in: TreasuryMovement, transfer_group: string}
+     */
+    public function createDetractionRelease(array $payload, int $userId): array
+    {
+        if ($userId <= 0) {
+            throw ValidationException::withMessages([
+                'user_id' => ['El usuario que registra la liberación es obligatorio.'],
+            ]);
+        }
+
+        $date = $this->validateDate((string) ($payload['date'] ?? ''));
+        $amount = $this->validateAmount($payload['amount'] ?? null, 'amount');
+        $originId = (int) ($payload['origin_id'] ?? 0);
+        $targetId = (int) ($payload['target_id'] ?? 0);
+
+        if ($originId <= 0) {
+            throw ValidationException::withMessages([
+                'origin_id' => ['Seleccione la cuenta de detracciones de origen.'],
+            ]);
+        }
+        if ($targetId <= 0 || $targetId === $originId) {
+            throw ValidationException::withMessages([
+                'target_id' => ['Seleccione la cuenta de destino de los fondos liberados.'],
+            ]);
+        }
+
+        return DB::connection('tenant')->transaction(function () use ($payload, $userId, $date, $amount, $originId, $targetId) {
+            $locked = [];
+            $ids = [$originId, $targetId];
+            sort($ids);
+            foreach ($ids as $id) {
+                $field = $id === $originId ? 'origin_id' : 'target_id';
+                $locked[$id] = $this->lockAndValidateDestination(BankAccount::class, $id, $field, $date);
+            }
+
+            /** @var BankAccount $origin */
+            $origin = $locked[$originId];
+            /** @var BankAccount $target */
+            $target = $locked[$targetId];
+
+            if (($origin->account_type ?? null) !== 'detraction_bn') {
+                throw ValidationException::withMessages([
+                    'origin_id' => ['La cuenta de origen debe ser la cuenta de detracciones del Banco de la Nación.'],
+                ]);
+            }
+            if (($target->account_type ?? null) === 'detraction_bn') {
+                throw ValidationException::withMessages([
+                    'target_id' => ['La cuenta de destino no puede ser una cuenta de detracciones.'],
+                ]);
+            }
+            foreach (['origin_id' => $origin, 'target_id' => $target] as $field => $account) {
+                if (strtoupper((string) $account->currency_type_id) !== 'PEN') {
+                    throw ValidationException::withMessages([
+                        $field => ['La liberación de fondos se realiza en soles. Seleccione cuentas en PEN.'],
+                    ]);
+                }
+            }
+
+            $fallbackEstablishmentId = (int) ($payload['establishment_id'] ?? 0);
+            $originEstablishmentId = !empty($origin->establishment_id) ? (int) $origin->establishment_id : $fallbackEstablishmentId;
+            $targetEstablishmentId = !empty($target->establishment_id) ? (int) $target->establishment_id : $fallbackEstablishmentId;
+            if ($originEstablishmentId <= 0 || $targetEstablishmentId <= 0) {
+                throw ValidationException::withMessages([
+                    'establishment_id' => ['La sede es obligatoria para registrar un movimiento de tesorería.'],
+                ]);
+            }
+
+            $group = (string) \Illuminate\Support\Str::uuid();
+            $description = $this->nullableTrim($payload['description'] ?? null) ?: 'Liberación de fondos de detracciones (Formulario 1697)';
+            $operationNumber = $this->nullableTrim($payload['operation_number'] ?? null);
+
+            $base = [
+                'date' => $date,
+                'kind' => 'detraction_release',
+                'destination_type' => BankAccount::class,
+                'currency_type_id' => 'PEN',
+                'amount' => $amount,
+                'exchange_rate_used' => 1.0,
+                'amount_pen' => $amount,
+                'operation_number' => $operationNumber,
+                'description' => $description,
+                'transfer_group' => $group,
+                'state' => TreasuryMovement::STATE_ACTIVE,
+                'user_id' => $userId,
+            ];
+
+            $out = TreasuryMovement::create($base + [
+                'establishment_id' => $originEstablishmentId,
+                'direction' => TreasuryMovement::DIRECTION_OUTFLOW,
+                'destination_id' => $origin->getKey(),
+            ]);
+            $in = TreasuryMovement::create($base + [
+                'establishment_id' => $targetEstablishmentId,
+                'direction' => TreasuryMovement::DIRECTION_INFLOW,
+                'destination_id' => $target->getKey(),
+            ]);
+
+            return ['out' => $out, 'in' => $in, 'transfer_group' => $group];
         });
     }
 

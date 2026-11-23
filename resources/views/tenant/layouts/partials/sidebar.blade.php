@@ -649,6 +649,9 @@
                             <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'receivables-payables') ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('tenant.treasury.receivables_payables.index') }}">Cobranzas y pagos</a>
                             </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'detractions') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.detractions.index') }}">Detracciones</a>
+                            </li>
                         </ul>
                     </li>
                     @endif

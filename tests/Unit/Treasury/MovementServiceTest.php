@@ -389,7 +389,7 @@ class MovementServiceTest extends TestCase
         }
     }
 
-    public function test_adjustment_requires_explicit_direction_and_bn_account_skips_itf(): void
+    public function test_adjustment_requires_explicit_direction_and_bn_account_only_allows_tax_payment_without_itf(): void
     {
         $service = $this->makeService();
 
@@ -411,22 +411,41 @@ class MovementServiceTest extends TestCase
             $this->assertArrayHasKey('direction', $e->errors());
         }
 
-        // Explicit direction +1 on ITF-exempt BN account skips automatic ITF
+        // Phase 4: the BN detraction account (ITF-exempt) only accepts tax payments; an adjustment is rejected on purpose
+        // (previously this test used an adjustment on that account).
+        try {
+            $service->createManual([
+                'establishment_id' => 1,
+                'date' => '2026-11-22',
+                'kind' => 'adjustment',
+                'direction' => 1,
+                'destination_type' => 'bank_account',
+                'destination_id' => 3,
+                'currency_type_id' => 'PEN',
+                'amount' => 10000.00,
+                'treasury_concept_id' => 1,
+                'description' => 'Ajuste BN bloqueado',
+            ], 1);
+            $this->fail('Expected ValidationException for a non tax_payment movement on the BN account.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('destination_id', $e->errors());
+        }
+
+        // A tax payment from the ITF-exempt BN account is allowed and skips automatic ITF.
         $created = $service->createManual([
             'establishment_id' => 1,
             'date' => '2026-11-22',
-            'kind' => 'adjustment',
-            'direction' => 1,
+            'kind' => 'tax_payment',
             'destination_type' => 'bank_account',
             'destination_id' => 3,
             'currency_type_id' => 'PEN',
             'amount' => 10000.00,
             'treasury_concept_id' => 1,
-            'description' => 'Ajuste BN exento',
+            'description' => 'Pago de tributos BN exento',
             'include_itf' => true,
         ], 1);
 
-        $this->assertSame(1, $created['movement']->direction);
+        $this->assertSame(-1, $created['movement']->direction);
         $this->assertCount(0, $created['related_movements']);
     }
 

@@ -61,6 +61,41 @@ class TreasuryAccessTest extends TestCase
         return strpos($path, 'treasury/payment-evidences') === 0;
     }
 
+    public function test_phase_4_detraction_and_withholding_routes_exist_and_require_only_the_treasury_module(): void
+    {
+        $map = $this->map();
+        $declared = array_map(function ($route) {
+            return $route[1] . ' ' . $route[0];
+        }, $this->declaredTreasuryRoutes());
+
+        $expected = [
+            ['GET', 'treasury/detractions'],
+            ['GET', 'treasury/detractions/tables'],
+            ['GET', 'treasury/detractions/records'],
+            ['POST', 'treasury/detractions/sync'],
+            ['POST', 'treasury/detractions/release'],
+            ['POST', 'treasury/detractions/1/deposit'],
+            ['POST', 'treasury/detractions/1/revert'],
+            ['GET', 'treasury/withholdings/tables'],
+            ['GET', 'treasury/withholdings/records'],
+            ['GET', 'treasury/withholdings/retention-offers/1'],
+            ['GET', 'treasury/withholdings/perception-offers/1'],
+            ['POST', 'treasury/withholdings/received-retentions/1'],
+            ['POST', 'treasury/withholdings/issued-retentions/1'],
+            ['POST', 'treasury/withholdings/issued-perceptions/1'],
+            ['POST', 'treasury/withholdings/settle'],
+            ['POST', 'treasury/withholdings/1/void'],
+        ];
+
+        foreach ($expected as [$method, $path]) {
+            $this->assertContains($method . ' ' . $path, $declared, "Route not declared: {$method} {$path}");
+            $rule = $map->resolve($path, $method);
+            $this->assertNotNull($rule, "Missing permission rule for {$method} {$path}");
+            $this->assertSame('treasury', $rule['module'], "Wrong module for {$method} {$path}");
+            $this->assertTrue($rule['ajax']);
+        }
+    }
+
     public function test_every_declared_treasury_route_has_a_permission_rule_with_ajax_enforcement(): void
     {
         $map = $this->map();

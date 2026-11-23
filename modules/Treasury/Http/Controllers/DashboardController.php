@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
+use Modules\Treasury\Services\DetractionService;
 use Modules\Treasury\Services\ReceivablePayableService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 
@@ -15,13 +16,16 @@ class DashboardController extends Controller
 {
     private $balanceService;
     private $receivablePayableService;
+    private $detractionService;
 
     public function __construct(
         TreasuryBalanceService $balanceService,
-        ?ReceivablePayableService $receivablePayableService = null
+        ?ReceivablePayableService $receivablePayableService = null,
+        ?DetractionService $detractionService = null
     ) {
         $this->balanceService = $balanceService;
         $this->receivablePayableService = $receivablePayableService;
+        $this->detractionService = $detractionService;
     }
 
     public function index()
@@ -93,6 +97,35 @@ class DashboardController extends Controller
                 $summary['alerts']['unbancarized_obligations_count'] = (int) ($rpAlerts['summary']['unbancarized_count'] ?? 0);
             } catch (\Throwable $e) {
                 Log::warning('Treasury dashboard alerts failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $summary['alerts']['overdue_detractions'] = [];
+        $summary['alerts']['overdue_detractions_count'] = 0;
+        $summary['alerts']['overdue_detractions_amount_pen'] = 0.0;
+
+        if ($this->detractionService !== null) {
+            try {
+                $user = auth()->user();
+                $isAdmin = $user !== null && ($user->type ?? null) === 'admin';
+
+                // Bounded, idempotent lazy sync (at most once per throttle window per tenant) so brand-new
+                // detractions show up without opening Detracciones.
+                $this->detractionService->syncThrottled(100);
+
+                $detractionAlerts = $this->detractionService->getOverdueAlerts([
+                    'is_admin' => $isAdmin,
+                    'user_id' => !$isAdmin ? ($user ? (int) $user->id : null) : null,
+                    'establishment_id' => !$isAdmin
+                        ? ($user && !empty($user->establishment_id) ? (int) $user->establishment_id : 0)
+                        : (!empty($validated['establishment_id']) ? (int) $validated['establishment_id'] : null),
+                ]);
+
+                $summary['alerts']['overdue_detractions'] = $detractionAlerts['items'];
+                $summary['alerts']['overdue_detractions_count'] = (int) $detractionAlerts['count'];
+                $summary['alerts']['overdue_detractions_amount_pen'] = (float) $detractionAlerts['amount_pen'];
+            } catch (\Throwable $e) {
+                Log::warning('Treasury dashboard detraction alerts failed', ['error' => $e->getMessage()]);
             }
         }
 

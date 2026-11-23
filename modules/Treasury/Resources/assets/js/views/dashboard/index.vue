@@ -205,6 +205,28 @@
                     </ul>
                 </div>
 
+                <!-- Phase 4 overdue detractions (SPOT) -->
+                <div
+                    v-if="alerts.overdue_detractions && alerts.overdue_detractions.length > 0"
+                    class="alert alert-danger mb-3"
+                    role="alert"
+                >
+                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                        <strong>
+                            Detracciones vencidas ({{ alerts.overdue_detractions_count }}):
+                            {{ formatSignedCurrency(alerts.overdue_detractions_amount_pen, 'PEN') }}
+                        </strong>
+                        <a class="btn btn-sm btn-outline-dark mt-2 mt-md-0" href="/treasury/detractions">Ver detracciones</a>
+                    </div>
+                    <ul class="mb-0 mt-1 pl-3">
+                        <li v-for="item in alerts.overdue_detractions" :key="item.side + '-' + item.id">
+                            {{ item.side === 'payable' ? 'Por depositar' : 'Por recibir' }} · {{ item.number_full }}
+                            ({{ item.party_name }}): {{ formatSignedCurrency(item.amount_pen, 'PEN') }},
+                            venció el {{ item.due_date }}{{ item.due_date_is_estimate ? ' (estimado)' : '' }} ({{ item.days_overdue }} d)
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Phase 3 Receivables & Payables Alerts -->
                 <div
                     v-if="hasReceivablePayableAlerts"
@@ -347,6 +369,8 @@ export default {
             alerts: {
                 negative_accounts: [],
                 overdue_detractions: [],
+                overdue_detractions_count: 0,
+                overdue_detractions_amount_pen: 0,
                 missing_exchange_rate: false,
                 overdue_installments_count: 0,
                 due_soon_installments_count: 0,

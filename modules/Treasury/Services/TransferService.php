@@ -539,6 +539,14 @@ class TransferService
             ]);
         }
 
+        // SPOT account: its funds can only pay SUNAT taxes, and it is only credited by detraction deposits.
+        // Releases (Formulario 1697) are registered from Tesorería > Detracciones, never as a generic transfer.
+        if ($model instanceof BankAccount && ($model->account_type ?? null) === 'detraction_bn') {
+            throw ValidationException::withMessages([
+                $field => ['La cuenta de detracciones del Banco de la Nación no admite transferencias. Use Detracciones para registrar liberaciones de fondos.'],
+            ]);
+        }
+
         if ($model instanceof Cash) {
             if ((int) $model->state !== 1) {
                 throw ValidationException::withMessages([

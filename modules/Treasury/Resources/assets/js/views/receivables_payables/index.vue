@@ -295,12 +295,22 @@
                                                 >
                                                     Neto crédito: {{ formatCurrency(row.net_credit_amount, row.currency_type_id) }}
                                                 </div>
+                                                <div v-if="row.retention_registered_amount > 0" class="small text-muted">
+                                                    CRE recibido: {{ formatCurrency(row.retention_registered_amount, row.currency_type_id) }}
+                                                </div>
                                             </td>
                                             <td class="text-right">
                                                 {{ formatCurrency(row.total_paid, row.currency_type_id) }}
                                             </td>
                                             <td class="text-right font-weight-bold">
                                                 {{ formatCurrency(row.balance, row.currency_type_id) }}
+                                                <div
+                                                    v-if="row.detraction_amount > 0 || row.retention_registered_amount > 0 || row.retention_amount > 0"
+                                                    class="small text-info font-weight-normal"
+                                                    title="Saldo menos detracción y retención: lo que su cliente aún le debe en sus cuentas normales"
+                                                >
+                                                    Neto por cobrar: {{ formatCurrency(row.net_receivable_amount, row.currency_type_id) }}
+                                                </div>
                                             </td>
                                             <td class="text-center">
                                                 <span class="badge" :class="statusBadgeClass(row.status)">
@@ -324,6 +334,25 @@
                                                 </div>
                                             </td>
                                             <td class="text-right text-nowrap">
+                                                <el-button
+                                                    v-if="row.type === 'document' && row.document_type_id === '01'"
+                                                    size="mini"
+                                                    plain
+                                                    class="mr-1"
+                                                    title="Registrar el comprobante de retención que le entregó su cliente"
+                                                    @click="openWithholding('received_retention', row.id)"
+                                                >
+                                                    CRE recibido
+                                                </el-button>
+                                                <el-button
+                                                    v-if="row.type === 'document' && withholding.flags.is_perception_agent"
+                                                    size="mini"
+                                                    plain
+                                                    class="mr-1"
+                                                    @click="openWithholding('perception_offers', row.id)"
+                                                >
+                                                    Percepción
+                                                </el-button>
                                                 <el-button
                                                     size="mini"
                                                     type="primary"
@@ -441,6 +470,13 @@
                                             </td>
                                             <td class="text-right font-weight-bold">
                                                 {{ formatCurrency(row.balance, row.currency_type_id) }}
+                                                <div
+                                                    v-if="row.detraction_amount > 0"
+                                                    class="small text-info font-weight-normal"
+                                                    title="Saldo menos la detracción que usted deposita en la cuenta del proveedor"
+                                                >
+                                                    Neto por pagar: {{ formatCurrency(row.net_payable_amount, row.currency_type_id) }}
+                                                </div>
                                             </td>
                                             <td class="text-center">
                                                 <span class="badge" :class="statusBadgeClass(row.status)">
@@ -472,6 +508,15 @@
                                                     @click="openPurchaseFeesDialog(row)"
                                                 >
                                                     Cuotas
+                                                </el-button>
+                                                <el-button
+                                                    v-if="row.type === 'purchase' && withholding.flags.is_retention_agent"
+                                                    size="mini"
+                                                    plain
+                                                    class="mr-1"
+                                                    @click="openWithholding('retention_offers', row.id)"
+                                                >
+                                                    Retención
                                                 </el-button>
                                                 <el-button
                                                     size="mini"
@@ -813,6 +858,15 @@
             :expenseId="activePaymentRecordId"
         />
 
+        <!-- Retention (CRE) / perception (CPE) dialog: computes, offers the existing emission flow and links -->
+        <withholding-dialog
+            :show-dialog.sync="showWithholdingDialog"
+            :mode="withholdingMode"
+            :record-id="withholdingRecordId"
+            :perception-rates="withholding.perception_rates"
+            @saved="loadRecords(true)"
+        />
+
         <!-- Manual Purchase Installments Dialog -->
         <purchase-fees-dialog
             :show-dialog.sync="showPurchaseFeesDialog"
@@ -828,6 +882,7 @@ import SaleNotePayments from '@views/sale_notes/partials/payments.vue'
 import PurchasePayments from '@viewsModulePurchase/purchase_payments/payments.vue'
 import ExpensePayments from '@viewsModuleExpense/expense_payments/payments.vue'
 import PurchaseFeesDialog from './PurchaseFeesDialog.vue'
+import WithholdingDialog from '../partials/WithholdingDialog.vue'
 
 export default {
     components: {
@@ -836,6 +891,7 @@ export default {
         PurchasePayments,
         ExpensePayments,
         PurchaseFeesDialog,
+        WithholdingDialog,
     },
     data() {
         return {
@@ -846,6 +902,13 @@ export default {
             agingSide: 'receivables',
             asOfDate: '',
             expandedRows: {},
+            showWithholdingDialog: false,
+            withholdingMode: 'received_retention',
+            withholdingRecordId: null,
+            withholding: {
+                flags: { is_retention_agent: false, is_perception_agent: false },
+                perception_rates: {},
+            },
             tables: {
                 establishments: [],
                 currency_types: [],
@@ -943,6 +1006,7 @@ export default {
         this.$eventHub.$on('reloadData', this.onExternalReload)
 
         this.loadTables()
+        this.loadWithholdingTables()
         this.loadRecords()
     },
     beforeDestroy() {
@@ -964,6 +1028,23 @@ export default {
                     }
                 })
                 .catch(() => {})
+        },
+        loadWithholdingTables() {
+            this.$http
+                .get('/treasury/withholdings/tables')
+                .then(response => {
+                    const data = response.data || {}
+                    this.withholding.flags = data.flags || this.withholding.flags
+                    this.withholding.perception_rates = (data.perception_rates && !Array.isArray(data.perception_rates)) ? data.perception_rates : {}
+                })
+                .catch(() => {})
+        },
+        openWithholding(mode, recordId) {
+            this.withholdingMode = mode
+            this.withholdingRecordId = recordId
+            this.$nextTick(() => {
+                this.showWithholdingDialog = true
+            })
         },
         loadRecords(silent = false) {
             const isSilent = silent === true

@@ -5,14 +5,17 @@ namespace Modules\Treasury\Providers;
 use Illuminate\Support\ServiceProvider;
 use Modules\Treasury\Services\BancarizationChecker;
 use Modules\Treasury\Services\CashTreasuryIntegrationService;
+use Modules\Treasury\Services\DetractionService;
 use Modules\Treasury\Services\ItfCalculator;
 use Modules\Treasury\Services\MovementService;
 use Modules\Treasury\Services\PaymentEvidenceService;
 use Modules\Treasury\Services\PurchaseFeeService;
 use Modules\Treasury\Services\ReceivablePayableService;
+use Modules\Treasury\Services\RetentionPerceptionService;
 use Modules\Treasury\Services\TaxRateRepository;
 use Modules\Treasury\Services\TransferService;
 use Modules\Treasury\Services\TreasuryBalanceService;
+use Modules\Treasury\Support\BusinessDayCalculator;
 
 class TreasuryServiceProvider extends ServiceProvider
 {
@@ -73,6 +76,23 @@ class TreasuryServiceProvider extends ServiceProvider
                 $app->make(TaxRateRepository::class),
                 $app->make(BancarizationChecker::class)
             );
+        });
+
+        // Holidays are data-driven (config `treasury.holidays`); rebind this to read them from a table instead.
+        $this->app->singleton(BusinessDayCalculator::class, function () {
+            return new BusinessDayCalculator();
+        });
+
+        $this->app->singleton(DetractionService::class, function ($app) {
+            return new DetractionService(
+                $app->make(MovementService::class),
+                $app->make(BusinessDayCalculator::class),
+                $app->make(TaxRateRepository::class)
+            );
+        });
+
+        $this->app->singleton(RetentionPerceptionService::class, function ($app) {
+            return new RetentionPerceptionService($app->make(TaxRateRepository::class));
         });
 
         $this->app->register(RouteServiceProvider::class);

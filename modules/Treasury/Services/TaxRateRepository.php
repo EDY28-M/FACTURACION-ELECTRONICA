@@ -18,6 +18,7 @@ class TaxRateRepository
     public const TAX_RETENTION_IGV = 'retention_igv';
     public const TAX_PERCEPTION_IGV = 'perception_igv';
     public const TAX_DETRACTION = 'detraction';
+    public const TAX_DETRACTION_DEPOSIT_BUSINESS_DAY = 'detraction_deposit_business_day';
 
     public function getEffective(string $tax, string $date, ?string $code = null): ?TreasuryTaxRate
     {
@@ -47,6 +48,104 @@ class TaxRateRepository
         }
 
         return (float) $record->rate;
+    }
+
+    /**
+     * Effective IGV retention rule on a date: rate and minimum operation amount (PEN), or null if none is loaded.
+     *
+     * @return array{rate: float, min_operation: float, legal_reference: ?string}|null
+     */
+    public function getRetentionRule(string $date): ?array
+    {
+        $record = $this->getEffective(self::TAX_RETENTION_IGV, $date);
+        if (!$record || $record->rate === null || $record->rate <= 0) {
+            return null;
+        }
+
+        return [
+            'rate' => (float) $record->rate,
+            'min_operation' => $record->min_operation !== null ? (float) $record->min_operation : 0.0,
+            'legal_reference' => $record->legal_reference,
+        ];
+    }
+
+    /**
+     * Effective IGV perception rate for a class code (general | fuel | agent) on a date.
+     *
+     * @return array{rate: float, code: string, legal_reference: ?string}|null
+     */
+    public function getPerceptionRule(string $code, string $date): ?array
+    {
+        $record = $this->getEffective(self::TAX_PERCEPTION_IGV, $date, $code);
+        if (!$record || $record->rate === null || $record->rate <= 0) {
+            return null;
+        }
+
+        return [
+            'rate' => (float) $record->rate,
+            'code' => $code,
+            'legal_reference' => $record->legal_reference,
+        ];
+    }
+
+    /**
+     * Effective detraction rule for a Catalogo 54 code on a date.
+     *
+     * @return array{rate: float, min_operation: ?float, legal_reference: ?string}|null
+     */
+    public function getDetractionRule(string $code, string $date): ?array
+    {
+        $record = $this->getEffective(self::TAX_DETRACTION, $date, $code);
+        if (!$record || $record->rate === null || $record->rate <= 0) {
+            return null;
+        }
+
+        return [
+            'rate' => (float) $record->rate,
+            'min_operation' => $record->min_operation !== null ? (float) $record->min_operation : null,
+            'legal_reference' => $record->legal_reference,
+        ];
+    }
+
+    /**
+     * Business day of the month after the Registro de Compras entry by which a detraction must be deposited,
+     * effective on a date. Null when the row is not loaded (caller falls back to config).
+     */
+    public function getDetractionDepositBusinessDay(string $date): ?int
+    {
+        $record = $this->getEffective(self::TAX_DETRACTION_DEPOSIT_BUSINESS_DAY, $date);
+        if (!$record || $record->amount === null || (int) $record->amount < 1) {
+            return null;
+        }
+
+        return (int) $record->amount;
+    }
+
+    /**
+     * Lists the perception rate classes effective on a date (code => rate).
+     *
+     * @return array<string, float>
+     */
+    public function listPerceptionRates(string $date): array
+    {
+        if (!$this->hasTable('treasury_tax_rates')) {
+            return [];
+        }
+
+        $rows = TreasuryTaxRate::query()
+            ->where('tax', self::TAX_PERCEPTION_IGV)
+            ->effectiveOn($date)
+            ->get();
+
+        $rates = [];
+        foreach ($rows as $row) {
+            // effectiveOn orders by valid_from desc, so the first row per code is the latest version.
+            if ($row->code !== null && !isset($rates[$row->code]) && $row->rate !== null) {
+                $rates[$row->code] = (float) $row->rate;
+            }
+        }
+
+        return $rates;
     }
 
     /**
