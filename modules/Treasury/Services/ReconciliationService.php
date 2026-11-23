@@ -90,7 +90,7 @@ class ReconciliationService
         ['class' => SaleNotePayment::class, 'pay' => 'sale_note_payments', 'fk' => 'sale_note_id', 'parent' => 'sale_notes', 'sign' => 1, 'has_state' => true, 'has_changed' => true, 'has_currency' => true, 'label' => 'Cobro nota de venta', 'number_cols' => ['series', 'number']],
         ['class' => QuotationPayment::class, 'pay' => 'quotation_payments', 'fk' => 'quotation_id', 'parent' => 'quotations', 'sign' => 1, 'has_state' => true, 'has_changed' => true, 'has_currency' => true, 'label' => 'Cobro cotización', 'number_cols' => []],
         ['class' => ContractPayment::class, 'pay' => 'contract_payments', 'fk' => 'contract_id', 'parent' => 'contracts', 'sign' => 1, 'has_state' => true, 'has_changed' => true, 'has_currency' => true, 'label' => 'Cobro contrato', 'number_cols' => []],
-        ['class' => IncomePayment::class, 'pay' => 'income_payments', 'fk' => 'income_id', 'parent' => 'incomes', 'sign' => 1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true, 'label' => 'Ingreso', 'number_cols' => []],
+        ['class' => IncomePayment::class, 'pay' => 'income_payments', 'fk' => 'income_id', 'parent' => 'income', 'sign' => 1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true, 'label' => 'Ingreso', 'number_cols' => []],
         ['class' => TechnicalServicePayment::class, 'pay' => 'technical_service_payments', 'fk' => 'technical_service_id', 'parent' => 'technical_services', 'sign' => 1, 'has_state' => false, 'has_changed' => false, 'has_currency' => false, 'label' => 'Cobro servicio técnico', 'number_cols' => []],
         ['class' => PurchasePayment::class, 'pay' => 'purchase_payments', 'fk' => 'purchase_id', 'parent' => 'purchases', 'sign' => -1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true, 'label' => 'Pago de compra', 'number_cols' => ['series', 'number']],
         ['class' => ExpensePayment::class, 'pay' => 'expense_payments', 'fk' => 'expense_id', 'parent' => 'expenses', 'sign' => -1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true, 'label' => 'Pago de gasto', 'number_cols' => ['number']],
@@ -1687,6 +1687,10 @@ class ReconciliationService
 
         $items = [];
         foreach (self::PAYMENT_SPECS as $spec) {
+            // The real MariaDB table is the singular `income`; `incomes` only exists in legacy test fixtures.
+            if ($spec['parent'] === 'income' && !$schema->hasTable('income') && $schema->hasTable('incomes')) {
+                $spec['parent'] = 'incomes';
+            }
             if (!$schema->hasTable($spec['pay']) || !$schema->hasTable($spec['parent'])) {
                 continue;
             }

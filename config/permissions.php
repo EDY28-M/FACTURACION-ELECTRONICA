@@ -165,6 +165,9 @@ return [
         ['path' => 'treasury/detractions', 'module' => 'treasury', 'ajax' => true],
         ['path' => 'treasury/withholdings', 'module' => 'treasury', 'ajax' => true],
         ['path' => 'treasury/reconciliation', 'module' => 'treasury', 'ajax' => true],
+        ['path' => 'treasury/cash-flow', 'module' => 'treasury', 'ajax' => true],
+        ['path' => 'treasury/cash-book', 'module' => 'treasury', 'ajax' => true],
+        ['path' => 'treasury/cash-counts', 'module' => 'treasury', 'ajax' => true],
         ['path' => 'treasury', 'module' => 'treasury', 'ajax' => true],
 
         // Shared catalog reads used by document/purchase forms.

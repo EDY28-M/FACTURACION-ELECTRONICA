@@ -1601,6 +1601,20 @@ html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .table > tbody
     white-space: nowrap;
 }
 
+/* Row actions whose button count varies per row: pin them to the right edge so the primary
+   action (last button) lines up in the same spot on every row */
+html:not(.dashboard-system) .tn-row-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+}
+
+html:not(.dashboard-system) .tn-row-actions > .el-button,
+html:not(.dashboard-system) .tn-row-actions > .btn {
+    margin: 0 !important;
+}
+
 /* Buttons: Porto teal and waves give way to the portal blue; small row actions become soft tinted chips */
 html:not(.dashboard-system) :is(.tn-content, .el-dialog__wrapper) .btn {
     border-radius: 12px;

@@ -18,6 +18,7 @@ use Modules\Sale\Models\ContractPayment;
 use Modules\Sale\Models\QuotationPayment;
 use Modules\Sale\Models\TechnicalServicePayment;
 use Modules\Treasury\Models\TreasuryMovement;
+use Modules\Treasury\Support\Money;
 
 /**
  * Single source of truth for cash and bank account balances (Decision D3).
@@ -524,8 +525,11 @@ class TreasuryBalanceService
      *
      * @return array{currency_type_id: string, balance: float}
      */
-    public function getBankAccountBalanceAsOf(int $accountId, ?string $dateEnd = null): array
-    {
+    public function getBankAccountBalanceAsOf(
+        int $accountId,
+        ?string $dateEnd = null,
+        ?int $establishmentId = null
+    ): array {
         $account = BankAccount::query()->whereKey($accountId)->first();
         if (!$account) {
             throw new \InvalidArgumentException('Bank account not found: ' . $accountId);
@@ -546,7 +550,7 @@ class TreasuryBalanceService
             [$accountId],
             null,
             $dateEnd,
-            null
+            $establishmentId
         )[$accountId] ?? ['net_currency' => 0.0, 'net_pen' => 0.0];
 
         if ($currency === 'PEN') {
@@ -649,6 +653,235 @@ class TreasuryBalanceService
         }
 
         return $items;
+    }
+
+    /**
+     * Balance of Cash boxes (PEN) as of $dateEnd (inclusive; null = no date bound), optionally filtered by
+     * establishment and/or a single cash box id. Uses the exact same formula as getSummary()
+     * (entry - egress + net_pen, rounded via Money::round()).
+     */
+    public function getCashBalanceAsOf(
+        ?string $dateEnd = null,
+        ?int $establishmentId = null,
+        ?int $cashId = null,
+        bool $boundCreditNotesByIssueDate = true,
+        ?int $userId = null
+    ): float {
+        $scopedCashIds = $this->resolveScopedCashIds($establishmentId, $cashId, $userId);
+        if ($scopedCashIds !== null && empty($scopedCashIds)) {
+            return 0.0;
+        }
+
+        $cashGlobalAggById = $this->aggregateGlobalPaymentsByDestination(
+            Cash::class,
+            $scopedCashIds ?? [],
+            null,
+            $dateEnd,
+            [],
+            $boundCreditNotesByIssueDate
+        );
+
+        $cashTreasuryById = $this->loadTreasuryAggregatesByDestination(
+            Cash::class,
+            $scopedCashIds ?? [],
+            null,
+            $dateEnd,
+            $cashId !== null ? null : $establishmentId
+        );
+
+        $totals = $this->emptyDestinationAggregate();
+        foreach ($cashGlobalAggById as $agg) {
+            foreach ($totals as $key => $val) {
+                $totals[$key] += $agg[$key];
+            }
+        }
+
+        $totalCashTreasuryPen = (float) array_sum(array_column($cashTreasuryById, 'net_pen'));
+
+        $entry = $totals['document_payment']
+            + $totals['sale_note_payment']
+            + $totals['quotation_payment']
+            + $totals['contract_payment']
+            + $totals['income_payment']
+            + $totals['cash_pos']
+            + $totals['technical_service_payment'];
+        $egress = $totals['expense_payment'] + $totals['purchase_payment'];
+
+        return Money::round($entry - $egress + $totalCashTreasuryPen);
+    }
+
+    /**
+     * Credit-note deductions that getCashBalanceAsOf() applies to Cash destinations (PEN), itemized.
+     *
+     * Mirrors getBankAccountCreditNoteAdjustments() so Formato 1.1 can reconcile credit-note deductions
+     * transparently against the system balance.
+     *
+     * @return array<int, array{key: string, cash_id: int, credit_note_document_id: int, document_id: int, date: string, amount: float, number: string, document_number: string, currency_type_id: string}>
+     */
+    public function getCashCreditNoteAdjustments(
+        ?string $dateStart = null,
+        ?string $dateEnd = null,
+        ?int $establishmentId = null,
+        ?int $cashId = null,
+        ?int $userId = null
+    ): array {
+        if (!$this->hasTable('global_payments') || !$this->hasTable('document_payments')
+            || !$this->hasTable('documents') || !$this->hasTable('notes')) {
+            return [];
+        }
+
+        $scopedCashIds = $this->resolveScopedCashIds($establishmentId, $cashId, $userId);
+        if ($scopedCashIds !== null && empty($scopedCashIds)) {
+            return [];
+        }
+
+        $docQuery = DB::connection('tenant')
+            ->table('global_payments as gp')
+            ->join('document_payments as p', 'p.id', '=', 'gp.payment_id')
+            ->join('documents as d', 'd.id', '=', 'p.document_id')
+            ->where('gp.destination_type', Cash::class)
+            ->where('gp.payment_type', DocumentPayment::class)
+            ->whereIn('d.state_type_id', self::ACCEPTED_STATE_TYPES);
+
+        if ($scopedCashIds !== null) {
+            $docQuery->whereIn('gp.destination_id', $scopedCashIds);
+        }
+        if ($dateEnd) {
+            $docQuery->where('p.date_of_payment', '<=', $dateEnd);
+        }
+
+        $pairs = $docQuery
+            ->select('gp.destination_id', 'd.id as document_id')
+            ->distinct()
+            ->get();
+
+        if ($pairs->isEmpty()) {
+            return [];
+        }
+
+        $docIdsByCash = [];
+        $allDocIds = [];
+        foreach ($pairs as $pair) {
+            $destId = (int) $pair->destination_id;
+            $docId = (int) $pair->document_id;
+            $docIdsByCash[$docId][$destId] = true;
+            $allDocIds[$docId] = true;
+        }
+
+        $query = DB::connection('tenant')
+            ->table('notes as n')
+            ->join('documents as nd', 'nd.id', '=', 'n.document_id')
+            ->join('documents as d', 'd.id', '=', 'n.affected_document_id')
+            ->where('n.note_type', 'credit')
+            ->whereIn('n.affected_document_id', array_keys($allDocIds))
+            ->whereIn('nd.state_type_id', self::ACCEPTED_STATE_TYPES)
+            ->orderBy('nd.date_of_issue')
+            ->orderBy('nd.id');
+
+        if ($dateStart) {
+            $query->whereDate('nd.date_of_issue', '>=', $dateStart);
+        }
+        if ($dateEnd) {
+            $query->whereDate('nd.date_of_issue', '<=', $dateEnd);
+        }
+
+        $rows = $query->get([
+            'n.affected_document_id',
+            'nd.id as nd_id',
+            'nd.series as nd_series',
+            'nd.number as nd_number',
+            'nd.date_of_issue',
+            'nd.total',
+            'nd.currency_type_id',
+            'nd.exchange_rate_sale',
+            'd.series as d_series',
+            'd.number as d_number',
+        ]);
+
+        $items = [];
+        foreach ($rows as $row) {
+            $affectedDocId = (int) $row->affected_document_id;
+            $amountPen = $this->convertAmountToAccountCurrency(
+                (float) $row->total,
+                (string) ($row->currency_type_id ?? 'PEN'),
+                (float) ($row->exchange_rate_sale ?? 1.0),
+                'PEN'
+            );
+            $destIds = array_keys($docIdsByCash[$affectedDocId] ?? []);
+            sort($destIds);
+
+            foreach ($destIds as $destId) {
+                $items[] = [
+                    'key' => 'credit_note_adjustment:' . $destId . ':' . (int) $row->nd_id . ':' . $affectedDocId,
+                    'cash_id' => $destId,
+                    'credit_note_document_id' => (int) $row->nd_id,
+                    'document_id' => $affectedDocId,
+                    'date' => substr((string) $row->date_of_issue, 0, 10),
+                    'amount' => -Money::round($amountPen),
+                    'number' => trim($row->nd_series . '-' . $row->nd_number, '-'),
+                    'document_number' => trim($row->d_series . '-' . $row->d_number, '-'),
+                    'currency_type_id' => 'PEN',
+                ];
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Resolves the income table name (singular `income` in real MariaDB migrations, with fallback to `incomes`
+     * for legacy test fixtures).
+     */
+    protected function resolveIncomeTable(): ?string
+    {
+        if ($this->hasTable('income')) {
+            return 'income';
+        }
+        if ($this->hasTable('incomes')) {
+            return 'incomes';
+        }
+
+        return null;
+    }
+
+    /**
+     * @return ?array<int, int> null means unscoped (all cash boxes); empty array means no cash boxes matched
+     */
+    private function resolveScopedCashIds(?int $establishmentId, ?int $cashId, ?int $userId = null): ?array
+    {
+        if ($cashId !== null) {
+            if (($establishmentId !== null || $userId !== null) && $this->hasTable('cash') && $this->hasTable('users')) {
+                $q = DB::connection('tenant')
+                    ->table('cash')
+                    ->join('users', 'users.id', '=', 'cash.user_id')
+                    ->where('cash.id', $cashId);
+                if ($establishmentId !== null) {
+                    $q->where('users.establishment_id', $establishmentId);
+                }
+                if ($userId !== null) {
+                    $q->where('cash.user_id', $userId);
+                }
+
+                return $q->exists() ? [$cashId] : [];
+            }
+
+            return [$cashId];
+        }
+
+        if (($establishmentId !== null || $userId !== null) && $this->hasTable('cash')) {
+            $q = DB::connection('tenant')->table('cash');
+            if ($establishmentId !== null && $this->hasTable('users')) {
+                $q->join('users', 'users.id', '=', 'cash.user_id')
+                    ->where('users.establishment_id', $establishmentId);
+            }
+            if ($userId !== null) {
+                $q->where('cash.user_id', $userId);
+            }
+
+            return $q->pluck('cash.id')->map('intval')->all();
+        }
+
+        return null;
     }
 
     private function emptyDestinationAggregate(): array
@@ -800,18 +1033,19 @@ class TreasuryBalanceService
         }
 
         // 2. Standard inflow & outflow payment tables (1 SQL query per table)
+        $incomeTable = $this->resolveIncomeTable();
         $specs = [
             ['key' => 'sale_note_payment', 'class' => SaleNotePayment::class, 'pay' => 'sale_note_payments', 'fk' => 'sale_note_id', 'parent' => 'sale_notes', 'sign' => 1, 'has_state' => true, 'has_changed' => true, 'has_currency' => true],
             ['key' => 'quotation_payment', 'class' => QuotationPayment::class, 'pay' => 'quotation_payments', 'fk' => 'quotation_id', 'parent' => 'quotations', 'sign' => 1, 'has_state' => true, 'has_changed' => true, 'has_currency' => true],
             ['key' => 'contract_payment', 'class' => ContractPayment::class, 'pay' => 'contract_payments', 'fk' => 'contract_id', 'parent' => 'contracts', 'sign' => 1, 'has_state' => true, 'has_changed' => true, 'has_currency' => true],
-            ['key' => 'income_payment', 'class' => IncomePayment::class, 'pay' => 'income_payments', 'fk' => 'income_id', 'parent' => 'incomes', 'sign' => 1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true],
+            ['key' => 'income_payment', 'class' => IncomePayment::class, 'pay' => 'income_payments', 'fk' => 'income_id', 'parent' => $incomeTable, 'sign' => 1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true],
             ['key' => 'technical_service_payment', 'class' => TechnicalServicePayment::class, 'pay' => 'technical_service_payments', 'fk' => 'technical_service_id', 'parent' => 'technical_services', 'sign' => 1, 'has_state' => false, 'has_changed' => false, 'has_currency' => false],
             ['key' => 'purchase_payment', 'class' => PurchasePayment::class, 'pay' => 'purchase_payments', 'fk' => 'purchase_id', 'parent' => 'purchases', 'sign' => -1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true],
             ['key' => 'expense_payment', 'class' => ExpensePayment::class, 'pay' => 'expense_payments', 'fk' => 'expense_id', 'parent' => 'expenses', 'sign' => -1, 'has_state' => true, 'has_changed' => false, 'has_currency' => true],
         ];
 
         foreach ($specs as $spec) {
-            if (!$this->hasTable($spec['pay']) || !$this->hasTable($spec['parent'])) {
+            if (empty($spec['parent']) || !$this->hasTable($spec['pay']) || !$this->hasTable($spec['parent'])) {
                 continue;
             }
 
@@ -961,10 +1195,10 @@ class TreasuryBalanceService
             $query->where('establishment_id', $establishmentId);
         }
         if ($dateStart) {
-            $query->where('date', '>=', $dateStart);
+            $query->whereDate('date', '>=', $dateStart);
         }
         if ($dateEnd) {
-            $query->where('date', '<=', $dateEnd);
+            $query->whereDate('date', '<=', $dateEnd);
         }
 
         $rows = $query->groupBy('destination_id')->get();
@@ -995,10 +1229,10 @@ class TreasuryBalanceService
             ->where('destination_type', $destinationType);
 
         if ($dateStart) {
-            $query->where('date', '>=', $dateStart);
+            $query->whereDate('date', '>=', $dateStart);
         }
         if ($dateEnd) {
-            $query->where('date', '<=', $dateEnd);
+            $query->whereDate('date', '<=', $dateEnd);
         }
 
         $sum = $query->selectRaw('COALESCE(SUM(direction * amount_pen), 0) as net_pen')->value('net_pen');
@@ -1023,10 +1257,10 @@ class TreasuryBalanceService
             ->whereIn('destination_id', $accountIds);
 
         if ($dateStart) {
-            $query->where('date', '>=', $dateStart);
+            $query->whereDate('date', '>=', $dateStart);
         }
         if ($dateEnd) {
-            $query->where('date', '<=', $dateEnd);
+            $query->whereDate('date', '<=', $dateEnd);
         }
 
         $rows = $query->groupBy('destination_id')->get();

@@ -70,6 +70,14 @@ return [
     ],
 
     /*
+     * Phase 6 - cash count (arqueo de caja): PEN denominations shown in the UI grid.
+     * Values >= 10 are labelled as bills, the rest as coins.
+     */
+    'cash_count' => [
+        'denominations' => [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1],
+    ],
+
+    /*
      * Informational text for the SPOT fund release windows (Formulario 1697).
      * Source: docs/plans/tesoreria-investigacion-sunat.md section 2. Never used for calculations.
      */

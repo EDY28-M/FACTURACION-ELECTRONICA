@@ -152,22 +152,24 @@
                                     <span v-else class="badge badge-danger">Anulada</span>
                                 </td>
                                 <td class="text-right text-nowrap">
-                                    <button
-                                        type="button"
-                                        class="btn btn-xs mr-1"
-                                        :class="row.has_evidence ? 'btn-success' : 'btn-outline-secondary'"
-                                        @click.prevent="openEvidence(row.id)"
-                                    >
-                                        {{ row.has_evidence ? 'Evidencia ✓' : 'Evidencia' }}
-                                    </button>
-                                    <button
-                                        v-if="row.state === 'active'"
-                                        type="button"
-                                        class="btn btn-xs btn-danger"
-                                        @click.prevent="openVoidDialog(row)"
-                                    >
-                                        Anular
-                                    </button>
+                                    <div class="tn-row-actions">
+                                        <button
+                                            v-if="row.state === 'active'"
+                                            type="button"
+                                            class="btn btn-xs btn-danger"
+                                            @click.prevent="openVoidDialog(row)"
+                                        >
+                                            Anular
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-xs"
+                                            :class="row.has_evidence ? 'btn-success' : 'btn-outline-secondary'"
+                                            @click.prevent="openEvidence(row.id)"
+                                        >
+                                            {{ row.has_evidence ? 'Evidencia ✓' : 'Evidencia' }}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>

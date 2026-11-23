@@ -238,7 +238,6 @@
                             <table class="table table-sm table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th style="width: 36px;"></th>
                                         <th>Comprobante</th>
                                         <th>Cliente</th>
                                         <th>Emisión / Venc.</th>
@@ -252,26 +251,47 @@
                                 <tbody>
                                     <template v-for="row in receivables.rows">
                                         <tr :key="'ar-' + row.type + '-' + row.id">
-                                            <td class="align-middle text-center">
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-link btn-xs p-0"
-                                                    :aria-expanded="isExpanded('ar', row)"
-                                                    :aria-label="`${isExpanded('ar', row) ? 'Ocultar' : 'Ver'} cuotas de ${row.number_full}`"
-                                                    :title="isExpanded('ar', row) ? 'Ocultar cuotas' : 'Ver cuotas'"
-                                                    @click="toggleExpand('ar', row)"
-                                                >
-                                                    <i :class="isExpanded('ar', row) ? 'el-icon-arrow-down' : 'el-icon-arrow-right'"></i>
-                                                </button>
-                                            </td>
                                             <td>
-                                                <strong>{{ row.number_full }}</strong>
-                                                <div class="small text-muted">
-                                                    {{ row.type === 'sale_note' ? 'Nota de venta' : 'Comprobante' }}
-                                                    <span v-if="row.has_installments" class="badge badge-light border ml-1">
-                                                        {{ row.installments_count }} cuota(s)
-                                                    </span>
+                                                <div class="tn-doc-meta">
+                                                    <strong>{{ row.number_full }}</strong>
+                                                    <el-popover
+                                                        v-if="row.has_installments"
+                                                        placement="right"
+                                                        trigger="hover"
+                                                        popper-class="tn-installments-popover"
+                                                    >
+                                                        <div class="small font-weight-bold mb-2">Cronograma de cuotas</div>
+                                                        <table class="table table-xs table-bordered mb-0">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Cuota</th>
+                                                                    <th>Vencimiento</th>
+                                                                    <th class="text-right">Importe</th>
+                                                                    <th class="text-right">Pagado</th>
+                                                                    <th class="text-right">Pendiente</th>
+                                                                    <th class="text-center">Estado</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <tr v-for="(inst, idx) in row.installments" :key="idx">
+                                                                    <td>{{ installmentLabel(inst, idx) }}</td>
+                                                                    <td>{{ inst.date }}</td>
+                                                                    <td class="text-right">{{ formatCurrency(inst.amount, row.currency_type_id) }}</td>
+                                                                    <td class="text-right">{{ formatCurrency(inst.paid_amount, row.currency_type_id) }}</td>
+                                                                    <td class="text-right font-weight-bold">{{ formatCurrency(inst.pending_amount, row.currency_type_id) }}</td>
+                                                                    <td class="text-center">
+                                                                        <span class="badge" :class="statusBadgeClass(inst.status)">
+                                                                            {{ statusLabel(inst.status, inst.days_overdue, inst.days_until_due) }}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                            
+                                                        </table>
+                                                        <span slot="reference" class="tn-installments-pill" tabindex="0">{{ installmentsLabel(row.installments_count) }}</span>
+                                                    </el-popover>
                                                 </div>
+                                                <div class="small text-muted">{{ row.type === 'sale_note' ? 'Nota de venta' : 'Comprobante' }}</div>
                                             </td>
                                             <td>
                                                 <div>{{ row.customer_name }}</div>
@@ -334,69 +354,32 @@
                                                 </div>
                                             </td>
                                             <td class="text-right text-nowrap">
-                                                <el-button
-                                                    v-if="row.type === 'document' && row.document_type_id === '01'"
-                                                    size="mini"
-                                                    plain
-                                                    class="mr-1"
-                                                    title="Registrar el comprobante de retención que le entregó su cliente"
-                                                    @click="openWithholding('received_retention', row.id)"
-                                                >
-                                                    CRE recibido
-                                                </el-button>
-                                                <el-button
-                                                    v-if="row.type === 'document' && withholding.flags.is_perception_agent"
-                                                    size="mini"
-                                                    plain
-                                                    class="mr-1"
-                                                    @click="openWithholding('perception_offers', row.id)"
-                                                >
-                                                    Percepción
-                                                </el-button>
-                                                <el-button
-                                                    size="mini"
-                                                    type="primary"
-                                                    @click="openPaymentModal(row.payment_endpoint_type, row.id)"
-                                                >
-                                                    Cobrar
-                                                </el-button>
-                                            </td>
-                                        </tr>
-                                        <tr
-                                            v-if="isExpanded('ar', row)"
-                                            :key="'ar-exp-' + row.type + '-' + row.id"
-                                            class="bg-light"
-                                        >
-                                            <td colspan="9" class="p-3">
-                                                <div class="small font-weight-bold mb-2">
-                                                    Cronograma de cuotas (asignación FIFO de pagos)
+                                                <div class="tn-row-actions">
+                                                    <el-button
+                                                        v-if="row.type === 'document' && row.document_type_id === '01'"
+                                                        size="mini"
+                                                        plain
+                                                        title="Registrar el comprobante de retención que le entregó su cliente"
+                                                        @click="openWithholding('received_retention', row.id)"
+                                                    >
+                                                        CRE recibido
+                                                    </el-button>
+                                                    <el-button
+                                                        v-if="row.type === 'document' && withholding.flags.is_perception_agent"
+                                                        size="mini"
+                                                        plain
+                                                        @click="openWithholding('perception_offers', row.id)"
+                                                    >
+                                                        Percepción
+                                                    </el-button>
+                                                    <el-button
+                                                        size="mini"
+                                                        type="primary"
+                                                        @click="openPaymentModal(row.payment_endpoint_type, row.id)"
+                                                    >
+                                                        Cobrar
+                                                    </el-button>
                                                 </div>
-                                                <table class="table table-xs table-bordered bg-white mb-0">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Cuota</th>
-                                                            <th>Vencimiento</th>
-                                                            <th class="text-right">Importe</th>
-                                                            <th class="text-right">Pagado</th>
-                                                            <th class="text-right">Pendiente</th>
-                                                            <th class="text-center">Estado</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <tr v-for="(inst, idx) in row.installments" :key="idx">
-                                                            <td>{{ installmentLabel(inst, idx) }}</td>
-                                                            <td>{{ inst.date }}</td>
-                                                            <td class="text-right">{{ formatCurrency(inst.amount, row.currency_type_id) }}</td>
-                                                            <td class="text-right">{{ formatCurrency(inst.paid_amount, row.currency_type_id) }}</td>
-                                                            <td class="text-right font-weight-bold">{{ formatCurrency(inst.pending_amount, row.currency_type_id) }}</td>
-                                                            <td class="text-center">
-                                                                <span class="badge" :class="statusBadgeClass(inst.status)">
-                                                                    {{ statusLabel(inst.status, inst.days_overdue, inst.days_until_due) }}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
                                             </td>
                                         </tr>
                                     </template>
@@ -419,7 +402,6 @@
                             <table class="table table-sm table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th style="width: 36px;"></th>
                                         <th>Compra / Gasto</th>
                                         <th>Proveedor</th>
                                         <th>Emisión / Venc.</th>
@@ -433,26 +415,47 @@
                                 <tbody>
                                     <template v-for="row in payables.rows">
                                         <tr :key="'ap-' + row.type + '-' + row.id">
-                                            <td class="align-middle text-center">
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-link btn-xs p-0"
-                                                    :aria-expanded="isExpanded('ap', row)"
-                                                    :aria-label="`${isExpanded('ap', row) ? 'Ocultar' : 'Ver'} cuotas de ${row.number_full}`"
-                                                    :title="isExpanded('ap', row) ? 'Ocultar cuotas' : 'Ver cuotas'"
-                                                    @click="toggleExpand('ap', row)"
-                                                >
-                                                    <i :class="isExpanded('ap', row) ? 'el-icon-arrow-down' : 'el-icon-arrow-right'"></i>
-                                                </button>
-                                            </td>
                                             <td>
-                                                <strong>{{ row.number_full }}</strong>
-                                                <div class="small text-muted">
-                                                    {{ row.type === 'expense' ? 'Gasto' : 'Compra' }}
-                                                    <span v-if="row.has_installments" class="badge badge-light border ml-1">
-                                                        {{ row.installments_count }} cuota(s)
-                                                    </span>
+                                                <div class="tn-doc-meta">
+                                                    <strong>{{ row.number_full }}</strong>
+                                                    <el-popover
+                                                        v-if="row.has_installments"
+                                                        placement="right"
+                                                        trigger="hover"
+                                                        popper-class="tn-installments-popover"
+                                                    >
+                                                        <div class="small font-weight-bold mb-2">Cronograma de cuotas</div>
+                                                        <table class="table table-xs table-bordered mb-0">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Cuota</th>
+                                                                    <th>Vencimiento</th>
+                                                                    <th class="text-right">Importe</th>
+                                                                    <th class="text-right">Pagado</th>
+                                                                    <th class="text-right">Pendiente</th>
+                                                                    <th class="text-center">Estado</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <tr v-for="(inst, idx) in row.installments" :key="idx">
+                                                                    <td>{{ installmentLabel(inst, idx) }}</td>
+                                                                    <td>{{ inst.date }}</td>
+                                                                    <td class="text-right">{{ formatCurrency(inst.amount, row.currency_type_id) }}</td>
+                                                                    <td class="text-right">{{ formatCurrency(inst.paid_amount, row.currency_type_id) }}</td>
+                                                                    <td class="text-right font-weight-bold">{{ formatCurrency(inst.pending_amount, row.currency_type_id) }}</td>
+                                                                    <td class="text-center">
+                                                                        <span class="badge" :class="statusBadgeClass(inst.status)">
+                                                                            {{ statusLabel(inst.status, inst.days_overdue, inst.days_until_due) }}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                            
+                                                        </table>
+                                                        <span slot="reference" class="tn-installments-pill" tabindex="0">{{ installmentsLabel(row.installments_count) }}</span>
+                                                    </el-popover>
                                                 </div>
+                                                <div class="small text-muted">{{ row.type === 'expense' ? 'Gasto' : 'Compra' }}</div>
                                             </td>
                                             <td>
                                                 <div>{{ row.supplier_name }}</div>
@@ -500,68 +503,31 @@
                                                 </div>
                                             </td>
                                             <td class="text-right text-nowrap">
-                                                <el-button
-                                                    v-if="row.type === 'purchase'"
-                                                    size="mini"
-                                                    plain
-                                                    class="mr-1"
-                                                    @click="openPurchaseFeesDialog(row)"
-                                                >
-                                                    Cuotas
-                                                </el-button>
-                                                <el-button
-                                                    v-if="row.type === 'purchase' && withholding.flags.is_retention_agent"
-                                                    size="mini"
-                                                    plain
-                                                    class="mr-1"
-                                                    @click="openWithholding('retention_offers', row.id)"
-                                                >
-                                                    Retención
-                                                </el-button>
-                                                <el-button
-                                                    size="mini"
-                                                    type="primary"
-                                                    @click="openPaymentModal(row.payment_endpoint_type, row.id)"
-                                                >
-                                                    Pagar
-                                                </el-button>
-                                            </td>
-                                        </tr>
-                                        <tr
-                                            v-if="isExpanded('ap', row)"
-                                            :key="'ap-exp-' + row.type + '-' + row.id"
-                                            class="bg-light"
-                                        >
-                                            <td colspan="9" class="p-3">
-                                                <div class="small font-weight-bold mb-2">
-                                                    Cronograma de cuotas (asignación FIFO de pagos)
+                                                <div class="tn-row-actions">
+                                                    <el-button
+                                                        v-if="row.type === 'purchase'"
+                                                        size="mini"
+                                                        plain
+                                                        @click="openPurchaseFeesDialog(row)"
+                                                    >
+                                                        Cuotas
+                                                    </el-button>
+                                                    <el-button
+                                                        v-if="row.type === 'purchase' && withholding.flags.is_retention_agent"
+                                                        size="mini"
+                                                        plain
+                                                        @click="openWithholding('retention_offers', row.id)"
+                                                    >
+                                                        Retención
+                                                    </el-button>
+                                                    <el-button
+                                                        size="mini"
+                                                        type="primary"
+                                                        @click="openPaymentModal(row.payment_endpoint_type, row.id)"
+                                                    >
+                                                        Pagar
+                                                    </el-button>
                                                 </div>
-                                                <table class="table table-xs table-bordered bg-white mb-0">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Cuota</th>
-                                                            <th>Vencimiento</th>
-                                                            <th class="text-right">Importe</th>
-                                                            <th class="text-right">Pagado</th>
-                                                            <th class="text-right">Pendiente</th>
-                                                            <th class="text-center">Estado</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <tr v-for="(inst, idx) in row.installments" :key="idx">
-                                                            <td>{{ installmentLabel(inst, idx) }}</td>
-                                                            <td>{{ inst.date }}</td>
-                                                            <td class="text-right">{{ formatCurrency(inst.amount, row.currency_type_id) }}</td>
-                                                            <td class="text-right">{{ formatCurrency(inst.paid_amount, row.currency_type_id) }}</td>
-                                                            <td class="text-right font-weight-bold">{{ formatCurrency(inst.pending_amount, row.currency_type_id) }}</td>
-                                                            <td class="text-center">
-                                                                <span class="badge" :class="statusBadgeClass(inst.status)">
-                                                                    {{ statusLabel(inst.status, inst.days_overdue, inst.days_until_due) }}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
                                             </td>
                                         </tr>
                                     </template>
@@ -901,7 +867,6 @@ export default {
             activeTab: 'receivables',
             agingSide: 'receivables',
             asOfDate: '',
-            expandedRows: {},
             showWithholdingDialog: false,
             withholdingMode: 'received_retention',
             withholdingRecordId: null,
@@ -1015,6 +980,10 @@ export default {
         this.$eventHub.$off('reloadData', this.onExternalReload)
     },
     methods: {
+        installmentsLabel(count) {
+            const n = Number(count) || 0;
+            return n === 1 ? '1 cuota' : `${n} cuotas`;
+        },
         loadTables() {
             this.$http
                 .get('/treasury/receivables-payables/tables')
@@ -1089,13 +1058,6 @@ export default {
             }
             return `Cuota ${idx + 1}`
         },
-        toggleExpand(prefix, row) {
-            const key = `${prefix}-${row.type}-${row.id}`
-            this.$set(this.expandedRows, key, !this.expandedRows[key])
-        },
-        isExpanded(prefix, row) {
-            return !!this.expandedRows[`${prefix}-${row.type}-${row.id}`]
-        },
         openPaymentModal(endpointType, recordId) {
             this.activePaymentRecordId = recordId
             if (endpointType === 'document') {
@@ -1167,3 +1129,44 @@ export default {
     },
 }
 </script>
+
+<style>
+.tn-doc-meta {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) 1fr;
+    align-items: center;
+    column-gap: 12px;
+    white-space: nowrap;
+}
+
+.tn-doc-meta > .el-popover__reference-wrapper,
+.tn-doc-meta > span {
+    justify-self: start;
+}
+
+.tn-installments-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.08);
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.tn-installments-popover {
+    width: auto !important;
+    min-width: 480px;
+    max-width: 640px;
+}
+
+.tn-installments-popover .table th,
+.tn-installments-popover .table td {
+    white-space: nowrap;
+    padding: 6px 10px;
+}
+</style>

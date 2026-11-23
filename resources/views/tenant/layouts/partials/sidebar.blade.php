@@ -655,6 +655,15 @@
                             <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'reconciliation') ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('tenant.treasury.reconciliation.index') }}">Conciliación bancaria</a>
                             </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'cash-flow') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.cash_flow.index') }}">Flujo de caja</a>
+                            </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'cash-book') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.cash_book.index') }}">Libro Caja y Bancos</a>
+                            </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'cash-counts') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.cash_counts.index') }}">Arqueo de caja</a>
+                            </li>
                         </ul>
                     </li>
                     @endif

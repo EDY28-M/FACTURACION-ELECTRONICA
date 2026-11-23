@@ -96,6 +96,41 @@ class TreasuryAccessTest extends TestCase
         }
     }
 
+    public function test_phase_6_report_and_cash_count_routes_exist_and_require_only_the_treasury_module(): void
+    {
+        $map = $this->map();
+        $declared = array_map(function ($route) {
+            return $route[1] . ' ' . $route[0];
+        }, $this->declaredTreasuryRoutes());
+
+        $expected = [
+            ['GET', 'treasury/cash-flow'],
+            ['GET', 'treasury/cash-flow/tables'],
+            ['GET', 'treasury/cash-flow/records'],
+            ['GET', 'treasury/cash-flow/excel'],
+            ['GET', 'treasury/cash-flow/pdf'],
+            ['GET', 'treasury/cash-book'],
+            ['GET', 'treasury/cash-book/tables'],
+            ['GET', 'treasury/cash-book/records'],
+            ['GET', 'treasury/cash-book/excel'],
+            ['GET', 'treasury/cash-book/pdf'],
+            ['GET', 'treasury/cash-counts'],
+            ['GET', 'treasury/cash-counts/tables'],
+            ['GET', 'treasury/cash-counts/records'],
+            ['GET', 'treasury/cash-counts/system-balance/1'],
+            ['POST', 'treasury/cash-counts'],
+            ['GET', 'treasury/cash-counts/1/pdf'],
+        ];
+
+        foreach ($expected as [$method, $path]) {
+            $this->assertContains($method . ' ' . $path, $declared, "Route not declared: {$method} {$path}");
+            $rule = $map->resolve($path, $method);
+            $this->assertNotNull($rule, "Missing permission rule for {$method} {$path}");
+            $this->assertSame('treasury', $rule['module'], "Wrong module for {$method} {$path}");
+            $this->assertTrue($rule['ajax']);
+        }
+    }
+
     public function test_every_declared_treasury_route_has_a_permission_rule_with_ajax_enforcement(): void
     {
         $map = $this->map();

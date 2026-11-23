@@ -93,6 +93,26 @@ if ($hostname) {
                 Route::post('reconciliation/lines/{id}/create-movement', 'ReconciliationController@createMovement');
                 Route::post('reconciliation/mappings', 'ReconciliationController@saveMapping');
                 Route::post('reconciliation/mappings/{id}/delete', 'ReconciliationController@deleteMapping');
+
+                // Phase 6: Reports (Cash Flow, Libro Caja y Bancos 1.1 & 1.2, Cash Count / Arqueo de caja)
+                Route::get('cash-flow', 'ReportController@cashFlowIndex')->name('tenant.treasury.cash_flow.index');
+                Route::get('cash-flow/tables', 'ReportController@cashFlowTables');
+                Route::get('cash-flow/records', 'ReportController@cashFlowRecords');
+                Route::get('cash-flow/excel', 'ReportController@cashFlowExportExcel');
+                Route::get('cash-flow/pdf', 'ReportController@cashFlowExportPdf');
+
+                Route::get('cash-book', 'ReportController@cashBookIndex')->name('tenant.treasury.cash_book.index');
+                Route::get('cash-book/tables', 'ReportController@cashBookTables');
+                Route::get('cash-book/records', 'ReportController@cashBookRecords');
+                Route::get('cash-book/excel', 'ReportController@cashBookExportExcel');
+                Route::get('cash-book/pdf', 'ReportController@cashBookExportPdf');
+
+                Route::get('cash-counts', 'CashCountController@index')->name('tenant.treasury.cash_counts.index');
+                Route::get('cash-counts/tables', 'CashCountController@tables');
+                Route::get('cash-counts/records', 'CashCountController@records');
+                Route::get('cash-counts/system-balance/{cash}', 'CashCountController@systemBalance');
+                Route::post('cash-counts', 'CashCountController@store');
+                Route::get('cash-counts/{id}/pdf', 'CashCountController@pdf');
             });
         });
     });

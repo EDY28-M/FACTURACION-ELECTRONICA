@@ -191,6 +191,9 @@ Vue.component('tenant-treasury-transfers-index', (resolve, reject) => require.en
 Vue.component('tenant-treasury-receivables-payables-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/receivables_payables/index.vue')), reject, 'tenant-treasury-receivables-payables'));
 Vue.component('tenant-treasury-detractions-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/detractions/index.vue')), reject, 'tenant-treasury-detractions'));
 Vue.component('tenant-treasury-reconciliation-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/reconciliation/index.vue')), reject, 'tenant-treasury-reconciliation'));
+Vue.component('tenant-treasury-cash-flow-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/reports/cash_flow.vue')), reject, 'tenant-treasury-cash-flow'));
+Vue.component('tenant-treasury-cash-book-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/reports/cash_book.vue')), reject, 'tenant-treasury-cash-book'));
+Vue.component('tenant-treasury-cash-counts-index', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/cash_counts/index.vue')), reject, 'tenant-treasury-cash-counts'));
 Vue.component('tenant-treasury-withholding-dialog', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/partials/WithholdingDialog.vue')), reject, 'tenant-treasury-withholding'));
 Vue.component('tenant-treasury-payment-evidence-dialog', (resolve, reject) => require.ensure([], require => resolve(require('@viewsModuleTreasury/partials/PaymentEvidenceDialog.vue')), reject, 'tenant-treasury-evidence'));
 

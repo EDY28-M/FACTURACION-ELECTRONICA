@@ -4,6 +4,9 @@ namespace Modules\Treasury\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Modules\Treasury\Services\BancarizationChecker;
+use Modules\Treasury\Services\CashBookReport;
+use Modules\Treasury\Services\CashCountService;
+use Modules\Treasury\Services\CashFlowService;
 use Modules\Treasury\Services\CashTreasuryIntegrationService;
 use Modules\Treasury\Services\DetractionService;
 use Modules\Treasury\Services\ItfCalculator;
@@ -108,6 +111,25 @@ class TreasuryServiceProvider extends ServiceProvider
             );
         });
 
+        $this->app->singleton(CashFlowService::class, function ($app) {
+            return new CashFlowService(
+                $app->make(TreasuryBalanceService::class),
+                $app->make(ReceivablePayableService::class)
+            );
+        });
+
+        $this->app->singleton(CashBookReport::class, function ($app) {
+            return new CashBookReport(
+                $app->make(TreasuryBalanceService::class)
+            );
+        });
+
+        $this->app->singleton(CashCountService::class, function ($app) {
+            return new CashCountService(
+                $app->make(TreasuryBalanceService::class)
+            );
+        });
+
         $this->app->register(RouteServiceProvider::class);
     }
 
@@ -150,6 +172,9 @@ class TreasuryServiceProvider extends ServiceProvider
             CashTreasuryIntegrationService::class,
             PurchaseFeeService::class,
             ReceivablePayableService::class,
+            CashFlowService::class,
+            CashBookReport::class,
+            CashCountService::class,
         ];
     }
 }
