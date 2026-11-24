@@ -10,6 +10,7 @@ use Illuminate\Events\Dispatcher;
 use Illuminate\Support\Facades\Facade;
 use Modules\Treasury\Services\BancarizationChecker;
 use Modules\Treasury\Services\DetractionService;
+use Modules\Treasury\Services\InstrumentService;
 use Modules\Treasury\Services\ItfCalculator;
 use Modules\Treasury\Services\MovementService;
 use Modules\Treasury\Services\PaymentEvidenceService;
@@ -19,6 +20,7 @@ use Modules\Treasury\Services\TaxRateRepository;
 use Modules\Treasury\Services\TransferService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 use Modules\Treasury\Support\BusinessDayCalculator;
+use Modules\Treasury\Support\InstrumentDeadlines;
 
 /**
  * Shared SQLite + container harness for the Phase 4 (detractions, retentions, perceptions) tests.
@@ -82,6 +84,13 @@ trait Phase4Harness
 
         $this->createHarnessSchema();
         $this->seedHarness();
+
+        // Phase 7 migration last: it seeds treasury_concepts/treasury_tax_rates rows on top of the fixtures above.
+        require_once __DIR__ . '/../../../database/migrations/tenant/2026_11_23_000016_tenant_create_treasury_instruments_tables.php';
+        (new \TenantCreateTreasuryInstrumentsTables())->up();
+        // 000017 adds treasury_instruments.payment_*, treasury_concepts.code and tags the two instrument concepts.
+        require_once __DIR__ . '/../../../database/migrations/tenant/2026_11_23_000017_tenant_add_payment_link_and_concept_code_for_instruments.php';
+        (new \TenantAddPaymentLinkAndConceptCodeForInstruments())->up();
     }
 
     protected function tearDownHarness(): void
@@ -158,6 +167,9 @@ trait Phase4Harness
             ['2026_11_23_000009_tenant_create_bank_statements_tables.php', '\\TenantCreateBankStatementsTables'],
             ['2026_11_23_000010_tenant_create_bank_statement_line_matches_table.php', '\\TenantCreateBankStatementLineMatchesTable'],
             ['2026_11_23_000011_tenant_add_unbalanced_import_flag_to_bank_statements.php', '\\TenantAddUnbalancedImportFlagToBankStatements'],
+            ['2026_11_23_000014_tenant_create_treasury_holidays_table.php', '\\TenantCreateTreasuryHolidaysTable'],
+            ['2026_11_23_000015_tenant_add_sunat_financial_entity_code_to_bank_accounts.php', '\\TenantAddSunatFinancialEntityCodeToBankAccounts'],
+            ['2026_11_23_000018_tenant_add_cert_active_key_to_treasury_withholdings.php', '\\TenantAddCertActiveKeyToTreasuryWithholdings'],
         ] as [$file, $class]) {
             require_once __DIR__ . '/../../../database/migrations/tenant/' . $file;
             (new $class())->up();
@@ -282,6 +294,15 @@ trait Phase4Harness
             $this->makeMovementService(),
             new BusinessDayCalculator($holidays),
             new TaxRateRepository()
+        );
+    }
+
+    protected function makeInstrumentService(array $holidays = []): InstrumentService
+    {
+        return new InstrumentService(
+            $this->makeMovementService(),
+            new InstrumentDeadlines(new TaxRateRepository(), new BusinessDayCalculator($holidays)),
+            new \Modules\Treasury\Services\InstrumentPaymentService()
         );
     }
 

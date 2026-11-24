@@ -679,6 +679,60 @@ class CashFlowServiceTest extends TestCase
         $this->assertEqualsWithDelta(400.00, $totalFor($admin), 0.001);
     }
 
+    public function test_non_admin_opening_on_shared_account_is_scoped_and_reconciles_with_closing(): void
+    {
+        $this->db->table('bank_accounts')->delete();
+        $this->db->table('bank_accounts')->insert([
+            'id' => 7, 'bank_id' => 1, 'description' => 'Compartida', 'number' => '191-007', 'currency_type_id' => 'PEN',
+            'status' => 1, 'initial_balance' => 500, 'show_in_documents' => 1, 'account_type' => 'checking', 'itf_exempt' => 0, 'establishment_id' => null,
+        ]);
+        // Before the period: mine 100 (est 1), other 300 (est 2), plus a credit note on the other establishment's document.
+        $mineOld = $this->insertDocument(['establishment_id' => 1, 'date_of_issue' => '2026-10-05', 'total' => 100.00]);
+        $otherOld = $this->insertDocument(['establishment_id' => 2, 'date_of_issue' => '2026-10-06', 'total' => 300.00]);
+        $this->bankPayment($mineOld, 100.00, '2026-10-05', 7);
+        $this->bankPayment($otherOld, 300.00, '2026-10-06', 7);
+        $this->creditNote($otherOld, 40.00, '2026-10-07', 'FC01-1');
+        // In the period: mine 50, other 70, and a credit note on the other establishment's document.
+        $mine = $this->insertDocument(['establishment_id' => 1, 'date_of_issue' => '2026-11-05', 'total' => 50.00]);
+        $other = $this->insertDocument(['establishment_id' => 2, 'date_of_issue' => '2026-11-06', 'total' => 70.00]);
+        $this->bankPayment($mine, 50.00, '2026-11-05', 7);
+        $this->bankPayment($other, 70.00, '2026-11-06', 7);
+        $this->creditNote($other, 10.00, '2026-11-08', 'FC01-2');
+        TreasuryMovement::create([
+            'establishment_id' => 1, 'date' => '2026-10-15', 'kind' => 'income', 'direction' => 1,
+            'destination_type' => BankAccount::class, 'destination_id' => 7, 'currency_type_id' => 'PEN',
+            'amount' => 20.00, 'amount_pen' => 20.00, 'description' => 'Est 1 prior', 'state' => 'active', 'user_id' => 1,
+        ]);
+        TreasuryMovement::create([
+            'establishment_id' => 2, 'date' => '2026-10-15', 'kind' => 'income', 'direction' => 1,
+            'destination_type' => BankAccount::class, 'destination_id' => 7, 'currency_type_id' => 'PEN',
+            'amount' => 900.00, 'amount_pen' => 900.00, 'description' => 'Est 2 prior', 'state' => 'active', 'user_id' => 1,
+        ]);
+
+        $filters = ['date_start' => '2026-11-01', 'date_end' => '2026-11-30', 'destination_type' => 'bank_account'];
+        $seller = $this->service()->getRealCashFlow($filters, ['is_admin' => false, 'user_id' => 2, 'establishment_id' => 1]);
+
+        // Own sources only (100 payment + 20 movement); initial balance and est 2 payments/credit note are excluded.
+        $this->assertEqualsWithDelta(120.00, $seller['opening_balance'], 0.001);
+        // Hidden: initial 500 + other payment 300 - other credit note 40.
+        $this->assertEqualsWithDelta(760.00, $seller['out_of_scope_opening'], 0.001);
+        $this->assertSame([CashFlowService::SHARED_OPENING_NOTE], $seller['opening_notes']);
+        $this->assertSame('Saldo inicial de cuenta compartida no atribuible a la sede', CashFlowService::SHARED_OPENING_NOTE);
+
+        // Opening + flows = scoped closing (the same scoped sources as of date_end).
+        $scopedClosing = $this->makeBalanceService()->getBankAccountBalanceAsOf(7, '2026-11-30', 1, true)['balance'];
+        $this->assertEqualsWithDelta($scopedClosing, $seller['totals']['closing_balance'], 0.001);
+        $this->assertEqualsWithDelta(170.00, $seller['totals']['closing_balance'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $seller['totals']['outflows'], 0.001, 'Hidden credit notes must not leak into the scoped view');
+
+        // Admins keep the account-level opening, nothing hidden.
+        $admin = $this->service()->getRealCashFlow($filters, ['is_admin' => true, 'user_id' => 1, 'establishment_id' => null]);
+        $this->assertEqualsWithDelta(0.0, $admin['out_of_scope_opening'], 0.001);
+        $this->assertSame([], $admin['opening_notes']);
+        // 500 initial + 100 + 300 - 40 credit note + 20 + 900 movements
+        $this->assertEqualsWithDelta(1780.00, $admin['opening_balance'], 0.001);
+    }
+
     private function bankPayment(int $documentId, float $amount, string $date, int $accountId = 1): void
     {
         $paymentId = (int) $this->db->table('document_payments')->insertGetId([

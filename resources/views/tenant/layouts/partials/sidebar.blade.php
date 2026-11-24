@@ -664,6 +664,12 @@
                             <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'cash-counts') ? 'nav-active' : '' }}">
                                 <a class="nav-link" href="{{ route('tenant.treasury.cash_counts.index') }}">Arqueo de caja</a>
                             </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'instruments') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.instruments.index') }}">Cheques y letras</a>
+                            </li>
+                            <li class="{{ ($path[0] === 'treasury' && ($path[1] ?? '') === 'holidays') ? 'nav-active' : '' }}">
+                                <a class="nav-link" href="{{ route('tenant.treasury.holidays.index') }}">Feriados</a>
+                            </li>
                         </ul>
                     </li>
                     @endif

@@ -5,9 +5,10 @@ return [
     'allow_future_dates' => false,
 
     /*
-     * Non-working days (Y-m-d) used for the detraction deposit deadline (5th business day).
-     * Weekends are always excluded by BusinessDayCalculator. National holidays are published by decree
-     * every year, so they are data-driven: list them here (or bind another HolidayProvider).
+     * Extra non-working days (Y-m-d) for the detraction deposit deadline (5th business day).
+     * Weekends are always excluded by BusinessDayCalculator. National holidays live in the tenant table
+     * `treasury_holidays` (managed in Tesorería > Feriados); HolidayProvider merges this list on top of it and
+     * uses it alone when the table does not exist. Leave empty unless you need a manual override.
      */
     'holidays' => [],
 
@@ -85,6 +86,73 @@ return [
     'reports' => [
         'max_range_days' => 366,
         'cash_selector_limit' => 200,
+    ],
+
+    /*
+     * PLE TXT export of the Libro Caja y Bancos (010100 / 010200). Layout: Anexo 2 of RS 286-2009/SUNAT
+     * ("Estructura del PLE", docs/plans/tesoreria-investigacion-sunat.md "PLE layout confirmado").
+     */
+    'ple' => [
+        // UNCONFIRMED by the official layout: a trailing pipe after the last field. Default off (the layout lists
+        // N fields separated by pipes). Flip it only if the official PLE validator rejects the file without it.
+        'trailing_pipe' => false,
+        // Record terminator. Windows style, as produced by the PLE program itself.
+        'line_ending' => "\r\n",
+        // true: transliterate to plain ASCII (a, e, i, o, u, n; unknown symbols dropped). ASCII bytes are identical in
+        // UTF-8 and ISO-8859-1 so the file is safe whatever encoding the validator assumes. false: keep UTF-8 letters.
+        'ascii_only' => true,
+        // Field 4 of 1.1 (cuenta contable del efectivo, at maximum disaggregation) when the cash has no own account.
+        'default_cash_account' => '101',
+        // Field 11 of 1.2 when the operation has no identifiable counterparty ("varios" is allowed for multiple operations).
+        'unknown_counterparty_name' => 'varios',
+        // Table 3 (entidad financiera) codes offered in the bank account form. REFERENCIAL / UNCONFIRMED: the official
+        // table is not published in the PLE structure workbook. The export only uses the code stored per account, and
+        // refuses to run when an account with movements has none. Validate them in the official PLE validator.
+        'financial_entity_codes' => [
+            '01' => 'Banco Central de Reserva del Perú',
+            '02' => 'Banco de Crédito del Perú',
+            '03' => 'Banco Internacional del Perú (Interbank)',
+            '09' => 'Scotiabank Perú',
+            '11' => 'BBVA Perú (ex Banco Continental)',
+            '18' => 'Banco de la Nación',
+        ],
+    ],
+
+    /*
+     * Phase 7 - cheques y letras (Ley 27287, Ley de Titulos Valores).
+     * The legal periods live in treasury_tax_rates (cheque_presentation_days, cheque_deferred_max_days,
+     * bill_protest_days); the *_fallback values are used ONLY when those rows are not loaded.
+     * All of them come from a secondary source (docs/plans/tesoreria-investigacion-sunat.md): [REVISAR].
+     */
+    'instruments' => [
+        'cheque_presentation_days_fallback' => 30,
+        'cheque_deferred_max_days_fallback' => 30,
+        'bill_protest_days_fallback' => 15,
+        // [REVISAR] 'business' counts the protest period in business days (BusinessDayCalculator + holidays);
+        // 'calendar' counts calendar days. The research document only says "15 days".
+        'protest_day_type' => 'business',
+        // Dashboard alert windows (days).
+        'alert_cheque_days' => 7,
+        'alert_bill_days' => 7,
+        'alert_protest_days' => 3,
+        'alert_max_items' => 10,
+        // SUNAT Tabla 1 code stored on the movement created by a cheque / bill. Bills have no dedicated code in the
+        // Tabla 1 loaded in this module, so 999 (otros medios de pago) is used. [REVISAR]
+        'sunat_payment_codes' => [
+            'cheque' => '007',
+            'bill' => '999',
+        ],
+        // Stable codes (treasury_concepts.code, tagged by migration 000017) of the concepts used on the movements.
+        'concept_income' => 'instrument_income',
+        'concept_expense' => 'instrument_expense',
+        // payment_method_types.id used on the legacy DocumentPayment / PurchasePayment created when an instrument
+        // linked to a document or purchase is collected (D4). The catalog has no cheque / letra method, so the
+        // closest bank-credit one ('04' Transferencia) is used and the instrument number goes in the reference. [REVISAR]
+        'payment_method_type' => [
+            'cheque' => '04',
+            'bill' => '04',
+        ],
+        'max_per_page' => 100,
     ],
 
     /*

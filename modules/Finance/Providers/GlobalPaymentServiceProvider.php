@@ -28,6 +28,9 @@ class GlobalPaymentServiceProvider extends ServiceProvider
     public function boot()
     {
 
+        // Must be registered BEFORE the cascade listeners below: it has to see the global_payments row they delete.
+        \Modules\Treasury\Support\ClosedReconciliationGuard::register();
+
         $this->deletingPayment(SaleNotePayment::class);
         $this->deletingPayment(DocumentPayment::class);
         $this->deletingPayment(PurchasePayment::class);

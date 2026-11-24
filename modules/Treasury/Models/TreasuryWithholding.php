@@ -36,6 +36,7 @@ class TreasuryWithholding extends ModelTenant
         'retention_id',
         'perception_id',
         'active_link_key',
+        'cert_active_key',
         'person_id',
         'counterparty_document',
         'counterparty_name',

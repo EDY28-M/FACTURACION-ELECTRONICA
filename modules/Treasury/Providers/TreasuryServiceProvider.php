@@ -9,6 +9,8 @@ use Modules\Treasury\Services\CashCountService;
 use Modules\Treasury\Services\CashFlowService;
 use Modules\Treasury\Services\CashTreasuryIntegrationService;
 use Modules\Treasury\Services\DetractionService;
+use Modules\Treasury\Services\InstrumentPaymentService;
+use Modules\Treasury\Services\InstrumentService;
 use Modules\Treasury\Services\ItfCalculator;
 use Modules\Treasury\Services\MovementService;
 use Modules\Treasury\Services\PaymentEvidenceService;
@@ -20,6 +22,8 @@ use Modules\Treasury\Services\TaxRateRepository;
 use Modules\Treasury\Services\TransferService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 use Modules\Treasury\Support\BusinessDayCalculator;
+use Modules\Treasury\Support\HolidayProvider;
+use Modules\Treasury\Support\InstrumentDeadlines;
 use Modules\Treasury\Support\StatementParser;
 
 class TreasuryServiceProvider extends ServiceProvider
@@ -83,12 +87,38 @@ class TreasuryServiceProvider extends ServiceProvider
             );
         });
 
-        // Holidays are data-driven (config `treasury.holidays`); rebind this to read them from a table instead.
-        $this->app->singleton(BusinessDayCalculator::class, function () {
-            return new BusinessDayCalculator();
+        // Holidays are data-driven: table `treasury_holidays` first, config `treasury.holidays` as fallback.
+        // BusinessDayCalculator caches the holiday list for its own lifetime, so it (and everything that holds it) is
+        // bound per resolution, NOT a singleton: a long-lived worker serving several tenants, or a holiday added during
+        // the request, must never see a stale list. Services below that take it are bound the same way.
+        $this->app->bind(HolidayProvider::class, function () {
+            return new HolidayProvider();
         });
 
-        $this->app->singleton(DetractionService::class, function ($app) {
+        $this->app->bind(BusinessDayCalculator::class, function ($app) {
+            return new BusinessDayCalculator($app->make(HolidayProvider::class));
+        });
+
+        $this->app->bind(InstrumentDeadlines::class, function ($app) {
+            return new InstrumentDeadlines(
+                $app->make(TaxRateRepository::class),
+                $app->make(BusinessDayCalculator::class)
+            );
+        });
+
+        $this->app->bind(InstrumentPaymentService::class, function () {
+            return new InstrumentPaymentService();
+        });
+
+        $this->app->bind(InstrumentService::class, function ($app) {
+            return new InstrumentService(
+                $app->make(MovementService::class),
+                $app->make(InstrumentDeadlines::class),
+                $app->make(InstrumentPaymentService::class)
+            );
+        });
+
+        $this->app->bind(DetractionService::class, function ($app) {
             return new DetractionService(
                 $app->make(MovementService::class),
                 $app->make(BusinessDayCalculator::class),
@@ -175,6 +205,7 @@ class TreasuryServiceProvider extends ServiceProvider
             CashFlowService::class,
             CashBookReport::class,
             CashCountService::class,
+            InstrumentService::class,
         ];
     }
 }

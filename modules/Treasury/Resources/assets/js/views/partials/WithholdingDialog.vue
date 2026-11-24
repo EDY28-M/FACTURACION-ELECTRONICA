@@ -170,6 +170,56 @@
                         </table>
                     </div>
 
+                    <!-- One CRE covering several payments of the same supplier -->
+                    <div v-if="mode === 'retention_offers' && multiOptions.length > 1" class="border rounded p-2 mb-3">
+                        <div class="font-weight-bold small mb-1">Un comprobante para varios pagos</div>
+                        <p class="small text-muted mb-2">
+                            Si el comprobante de retención cubre varios pagos del mismo proveedor, seleccione los pagos.
+                            La suma de las retenciones debe coincidir con el total del comprobante.
+                        </p>
+                        <el-checkbox-group v-model="multiSelected" class="d-block mb-2">
+                            <div v-for="opt in multiOptions" :key="opt.payment_id" class="small">
+                                <el-checkbox :label="opt.payment_id">
+                                    {{ opt.document }} &middot; {{ opt.date }} &middot; Pago {{ money(opt.payment, opt.currency_type_id) }}
+                                    &middot; Retención {{ money(opt.retention_amount, opt.currency_type_id) }}
+                                </el-checkbox>
+                            </div>
+                        </el-checkbox-group>
+                        <div class="d-flex align-items-center flex-wrap">
+                            <el-input
+                                v-model="multiForm.series"
+                                size="mini"
+                                placeholder="Serie"
+                                maxlength="10"
+                                style="width: 80px;"
+                                class="mr-1"
+                                aria-label="Serie del comprobante para varios pagos"
+                            />
+                            <el-input
+                                v-model="multiForm.number"
+                                size="mini"
+                                placeholder="Número"
+                                maxlength="20"
+                                style="width: 100px;"
+                                class="mr-2"
+                                aria-label="Número del comprobante para varios pagos"
+                            />
+                            <el-button
+                                size="mini"
+                                type="primary"
+                                :disabled="multiSelected.length === 0"
+                                :loading="multiLinking"
+                                @click="linkMany"
+                            >
+                                Enlazar {{ multiSelected.length }} pago(s)
+                            </el-button>
+                            <span v-if="multiSelected.length" class="small text-muted ml-2">
+                                Retención total: {{ money(multiTotal, multiCurrency) }}
+                            </span>
+                        </div>
+                        <small v-if="multiError" class="text-danger d-block mt-1">{{ multiError }}</small>
+                    </div>
+
                     <div v-if="offers.emit_url" class="mt-2">
                         <a :href="offers.emit_url" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
                             {{ mode === 'retention_offers' ? 'Emitir comprobante de retención' : 'Emitir comprobante de percepción' }}
@@ -215,10 +265,40 @@ export default {
             rateCode: 'general',
             linkForms: {},
             linkErrors: {},
+            multiSelected: [],
+            multiForm: { series: '', number: '' },
+            multiLinking: false,
+            multiError: null,
             form: { series: '', number: '', date: null, amount: '', notes: '' },
         }
     },
     computed: {
+        // Pending (unlinked, applicable) payments of this purchase plus other pending payments of the same supplier.
+        multiOptions() {
+            if (!this.offers || this.mode !== 'retention_offers') {
+                return []
+            }
+            const own = (this.offers.lines || [])
+                .filter(line => line.applicable && !line.linked)
+                .map(line => ({
+                    payment_id: line.payment_id,
+                    document: 'Esta compra',
+                    date: line.date,
+                    payment: line.payment,
+                    currency_type_id: line.currency_type_id,
+                    retention_amount: line.retention_amount,
+                }))
+            return own.concat(this.offers.supplier_candidates || [])
+        },
+        multiTotal() {
+            const selected = this.multiSelected
+            return this.multiOptions
+                .filter(opt => selected.indexOf(opt.payment_id) !== -1)
+                .reduce((sum, opt) => sum + parseFloat(opt.retention_amount || 0), 0)
+        },
+        multiCurrency() {
+            return this.multiOptions.length ? this.multiOptions[0].currency_type_id : 'PEN'
+        },
         dialogTitle() {
             if (this.mode === 'retention_offers') return 'Retención del IGV (CRE)'
             if (this.mode === 'perception_offers') return 'Percepción del IGV (CPE)'
@@ -239,6 +319,9 @@ export default {
             this.generalError = null
             this.errorMessage = null
             this.linkErrors = {}
+            this.multiSelected = []
+            this.multiForm = { series: '', number: '' }
+            this.multiError = null
             if (this.mode === 'received_retention') {
                 this.form = { series: '', number: '', date: null, amount: '', notes: '' }
             } else {
@@ -321,6 +404,37 @@ export default {
                 })
             } finally {
                 this.linking = null
+            }
+        },
+        async linkMany() {
+            if (this.multiLinking || this.multiSelected.length === 0) {
+                return
+            }
+            this.multiLinking = true
+            this.multiError = null
+            try {
+                const payload = {
+                    series: this.multiForm.series,
+                    number: this.multiForm.number,
+                    payment_ids: this.multiSelected.slice(),
+                }
+                const res = await this.$http.post('/treasury/withholdings/issued-retentions', payload)
+                this.$message.success((res.data && res.data.message) || 'Comprobante enlazado correctamente.')
+                this.multiSelected = []
+                this.multiForm = { series: '', number: '' }
+                this.$emit('saved')
+                await this.loadOffers()
+            } catch (error) {
+                this.handleError(error, errs => {
+                    const first = Object.keys(errs).map(k => errs[k][0])[0]
+                    this.multiError = first || 'No se pudo enlazar el comprobante.'
+                })
+                if (this.generalError) {
+                    this.multiError = this.generalError
+                    this.generalError = null
+                }
+            } finally {
+                this.multiLinking = false
             }
         },
         handleError(error, onFieldErrors) {

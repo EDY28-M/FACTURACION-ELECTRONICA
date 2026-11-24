@@ -95,7 +95,7 @@ class DetractionService
      */
     private function depositBusinessDay(string $date): int
     {
-        $key = substr($date, 0, 7);
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . substr($date, 0, 7);
         if (!isset($this->depositDayCache[$key])) {
             $day = $this->taxRateRepository->getDetractionDepositBusinessDay($date);
             if ($day === null) {
@@ -1205,8 +1205,8 @@ class DetractionService
 
     private function hasTable(string $table): bool
     {
-        if (isset($this->schemaCache['t:' . $table])) {
-            return $this->schemaCache['t:' . $table];
+        if (isset($this->schemaCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table])) {
+            return $this->schemaCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table];
         }
 
         if (!Model::getConnectionResolver()) {
@@ -1214,7 +1214,7 @@ class DetractionService
         }
 
         try {
-            return $this->schemaCache['t:' . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
+            return $this->schemaCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
             return false;
         }
@@ -1222,7 +1222,7 @@ class DetractionService
 
     private function hasColumn(string $table, string $column): bool
     {
-        $key = 'c:' . $table . '.' . $column;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . 'c:' . $table . '.' . $column;
         if (isset($this->schemaCache[$key])) {
             return $this->schemaCache[$key];
         }

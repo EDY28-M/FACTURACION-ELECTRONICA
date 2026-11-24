@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Modules\Treasury\Services\DetractionService;
+use Modules\Treasury\Services\InstrumentService;
 use Modules\Treasury\Services\ReceivablePayableService;
 use Modules\Treasury\Services\TreasuryBalanceService;
 
@@ -17,15 +18,18 @@ class DashboardController extends Controller
     private $balanceService;
     private $receivablePayableService;
     private $detractionService;
+    private $instrumentService;
 
     public function __construct(
         TreasuryBalanceService $balanceService,
         ?ReceivablePayableService $receivablePayableService = null,
-        ?DetractionService $detractionService = null
+        ?DetractionService $detractionService = null,
+        ?InstrumentService $instrumentService = null
     ) {
         $this->balanceService = $balanceService;
         $this->receivablePayableService = $receivablePayableService;
         $this->detractionService = $detractionService;
+        $this->instrumentService = $instrumentService;
     }
 
     public function index()
@@ -126,6 +130,36 @@ class DashboardController extends Controller
                 $summary['alerts']['overdue_detractions_amount_pen'] = (float) $detractionAlerts['amount_pen'];
             } catch (\Throwable $e) {
                 Log::warning('Treasury dashboard detraction alerts failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $summary['alerts']['instruments'] = [
+            'counts' => [
+                'cheque_presentation_soon' => 0,
+                'cheque_presentation_expired' => 0,
+                'bill_due_soon' => 0,
+                'bill_overdue' => 0,
+                'protest_deadline_soon' => 0,
+                'protest_deadline_expired' => 0,
+            ],
+            'total' => 0,
+            'items' => [],
+        ];
+
+        if ($this->instrumentService !== null) {
+            try {
+                $user = auth()->user();
+                $isAdmin = $user !== null && ($user->type ?? null) === 'admin';
+
+                $summary['alerts']['instruments'] = $this->instrumentService->getAlerts([
+                    'is_admin' => $isAdmin,
+                    'user_id' => $user ? (int) $user->id : null,
+                    'establishment_id' => !$isAdmin
+                        ? ($user && !empty($user->establishment_id) ? (int) $user->establishment_id : 0)
+                        : (!empty($validated['establishment_id']) ? (int) $validated['establishment_id'] : null),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Treasury dashboard instrument alerts failed', ['error' => $e->getMessage()]);
             }
         }
 

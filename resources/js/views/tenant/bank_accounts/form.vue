@@ -76,6 +76,16 @@
                             <small class="form-control-feedback" v-if="errors.establishment_id" v-text="errors.establishment_id[0]"></small>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="form-group" :class="{'has-danger': errors.sunat_financial_entity_code}">
+                            <label for="bank-account-entity-code" class="control-label">Código de entidad financiera (PLE, Tabla 3)</label>
+                            <el-select id="bank-account-entity-code" v-model="form.sunat_financial_entity_code" clearable filterable allow-create default-first-option placeholder="Ej. 02">
+                                <el-option v-for="option in financial_entity_codes" :key="option.id" :value="option.id" :label="option.description"></el-option>
+                            </el-select>
+                            <small class="form-text text-muted">Referencial: valide el código en el validador oficial del PLE. Se exige para exportar el Libro Caja y Bancos (1.2).</small>
+                            <small class="form-control-feedback" v-if="errors.sunat_financial_entity_code" v-text="errors.sunat_financial_entity_code[0]"></small>
+                        </div>
+                    </div>
                     <div class="col-md-6 form-group mt-3">
                         <el-switch id="bank-account-show-docs" v-model="form.show_in_documents"></el-switch>
                         <label for="bank-account-show-docs">Mostrar cuenta en los reportes de comprobantes</label>
@@ -115,6 +125,7 @@
                 banks: [],
                 currency_types: [],
                 establishments: [],
+                financial_entity_codes: [],
                 account_types: [
                     { id: 'checking', description: 'Cuenta corriente' },
                     { id: 'savings', description: 'Cuenta de ahorros' },
@@ -131,6 +142,7 @@
                     this.banks = response.data.banks || []
                     this.currency_types = response.data.currency_types || []
                     this.establishments = response.data.establishments || []
+                    this.financial_entity_codes = response.data.financial_entity_codes || []
                     if (response.data.account_types && response.data.account_types.length > 0) {
                         this.account_types = response.data.account_types
                     }
@@ -153,6 +165,7 @@
                     show_in_documents: false,
                     account_type: 'checking',
                     pcge_account: null,
+                    sunat_financial_entity_code: null,
                     itf_exempt: false,
                     establishment_id: null,
                 }

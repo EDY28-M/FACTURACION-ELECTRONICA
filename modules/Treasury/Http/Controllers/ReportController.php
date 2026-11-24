@@ -9,6 +9,7 @@ use App\Models\Tenant\Establishment;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Modules\Treasury\Exports\CashBookFormat11Export;
@@ -16,9 +17,14 @@ use Modules\Treasury\Exports\CashBookFormat12Export;
 use Modules\Treasury\Exports\CashFlowExport;
 use Modules\Treasury\Http\Requests\CashBookReportRequest;
 use Modules\Treasury\Http\Requests\CashFlowReportRequest;
+use Modules\Treasury\Http\Requests\PleExportRequest;
 use Modules\Treasury\Services\CashBookReport;
 use Modules\Treasury\Services\CashFlowService;
+use Modules\Treasury\Services\PleCashBookExporter;
 use Modules\Treasury\Support\CashSelector;
+use Modules\Treasury\Support\PleExportException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 /**
  * Treasury Phase 6 Reports controller (Real & Projected Cash Flow, Libro Caja y Bancos 1.1 & 1.2).
@@ -28,11 +34,13 @@ class ReportController extends Controller
 {
     private $cashFlowService;
     private $cashBookReport;
+    private $pleExporter;
 
-    public function __construct(CashFlowService $cashFlowService, CashBookReport $cashBookReport)
+    public function __construct(CashFlowService $cashFlowService, CashBookReport $cashBookReport, PleCashBookExporter $pleExporter)
     {
         $this->cashFlowService = $cashFlowService;
         $this->cashBookReport = $cashBookReport;
+        $this->pleExporter = $pleExporter;
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -208,6 +216,153 @@ class ReportController extends Controller
             ->setPaper('a4', 'portrait');
 
         return $pdf->download('Libro_Caja_Bancos_F11_' . date('Ymd') . '.pdf');
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // PLE TXT (Libro Caja y Bancos 010100 / 010200)
+    // ---------------------------------------------------------------------------------------------------------
+
+    /**
+     * Dry run: file names, line counts and the blockers (missing Tabla 1 / Tabla 3 codes...) without any content.
+     */
+    public function pleCashBookPreview(PleExportRequest $request): JsonResponse
+    {
+        if ($denied = $this->pleAdminOnly()) {
+            return $denied;
+        }
+
+        $validated = $request->validated();
+        $result = $this->pleExporter->build($validated['period'], $this->scope(auth()->user()), $validated);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'period' => $result['period'],
+                'ruc' => $result['ruc'],
+                'files' => array_map(function ($file) {
+                    unset($file['content']);
+
+                    return $file;
+                }, $result['files']),
+                'blockers' => $result['blockers'],
+                'warnings' => $result['warnings'],
+                'can_export' => empty($result['blockers']),
+            ],
+        ]);
+    }
+
+    public function pleCashBookFile(PleExportRequest $request)
+    {
+        if ($denied = $this->pleAdminOnly()) {
+            return $denied;
+        }
+
+        $validated = $request->validated();
+        if (empty($validated['format'])) {
+            return response()->json(['message' => 'Indique el formato (1.1 o 1.2).', 'errors' => ['format' => ['Indique el formato (1.1 o 1.2).']]], 422);
+        }
+
+        try {
+            // Only the blockers of the requested format apply: a 1.2 problem must not block the 1.1 (cash) file.
+            $result = $this->pleExporter->buildOrFail($validated['period'], $this->scope(auth()->user()), $validated, $validated['format']);
+        } catch (PleExportException $e) {
+            return $this->pleRefusal($e);
+        }
+
+        $currency = $validated['format'] === '1.1' ? 'PEN' : ($validated['currency'] ?? 'PEN');
+        foreach ($result['files'] as $file) {
+            if ($file['format'] === $validated['format'] && $file['currency'] === $currency) {
+                return new Response($file['content'], 200, [
+                    'Content-Type' => 'text/plain; charset=UTF-8',
+                    'Content-Disposition' => 'attachment; filename="' . $file['filename'] . '"',
+                ]);
+            }
+        }
+
+        return response()->json(['message' => 'No hay un archivo PLE para ese formato y moneda en el periodo.'], 404);
+    }
+
+    public function pleCashBookZip(PleExportRequest $request)
+    {
+        if ($denied = $this->pleAdminOnly()) {
+            return $denied;
+        }
+
+        $validated = $request->validated();
+
+        try {
+            $result = $this->pleExporter->buildOrFail($validated['period'], $this->scope(auth()->user()), $validated);
+        } catch (PleExportException $e) {
+            return $this->pleRefusal($e);
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'ple');
+        if ($path === false) {
+            return $this->zipFailure(null);
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($path, \ZipArchive::OVERWRITE) !== true) {
+            return $this->zipFailure($path);
+        }
+        foreach ($result['files'] as $file) {
+            if (!$zip->addFromString($file['filename'], $file['content'])) {
+                $zip->close();
+
+                return $this->zipFailure($path);
+            }
+        }
+        if (!$zip->close()) {
+            return $this->zipFailure($path);
+        }
+
+        $name = 'PLE_Libro_Caja_Bancos_' . $result['ruc'] . '_' . str_replace('-', '', $result['period']) . '.zip';
+
+        $download = new BinaryFileResponse($path, 200, ['Content-Type' => 'application/zip'], false);
+        $download->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $name);
+
+        return $download->deleteFileAfterSend(true);
+    }
+
+    /**
+     * The PLE is the company's book: the exporter scopes by user, so a non-admin would download (or preview) a
+     * partial book presented as complete. Only administrators export it.
+     */
+    private function pleAdminOnly(): ?JsonResponse
+    {
+        $user = auth()->user();
+        if ($user !== null && ($user->type ?? null) === 'admin') {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Solo un administrador puede generar el PLE del libro Caja y Bancos.',
+        ], 403);
+    }
+
+    /** Removes the temporary file (when it exists) and answers 500 so a broken ZIP is never sent. */
+    private function zipFailure(?string $path): JsonResponse
+    {
+        if ($path !== null && is_file($path)) {
+            @unlink($path);
+        }
+
+        return response()->json(['message' => 'No se pudo crear el archivo ZIP.'], 500);
+    }
+
+    private function pleRefusal(PleExportException $e): JsonResponse
+    {
+        $messages = [];
+        foreach ($e->blockers() as $blocker) {
+            $messages[] = $blocker['message'] . (empty($blocker['items']) ? '' : ' ' . implode('; ', $blocker['items']) . '.');
+        }
+
+        return response()->json([
+            'message' => $messages[0] ?? $e->getMessage(),
+            'errors' => ['ple' => $messages],
+            'blockers' => $e->blockers(),
+        ], 422);
     }
 
     // ---------------------------------------------------------------------------------------------------------

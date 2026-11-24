@@ -25,6 +25,7 @@ class BankAccountCollection extends ResourceCollection
 				'show_in_documents'         => $row->show_in_documents,
 				'account_type'              => $row->account_type ?: 'checking',
 				'pcge_account'              => $row->pcge_account,
+				'sunat_financial_entity_code' => $row->sunat_financial_entity_code,
 				'itf_exempt'                => (bool) $row->itf_exempt,
 				'establishment_id'          => $row->establishment_id,
 			];

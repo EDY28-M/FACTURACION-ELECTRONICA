@@ -54,6 +54,10 @@
         </div>
     @endif
 
+    @foreach(($report['opening_notes'] ?? []) as $note)
+        <div class="alert">{{ $note }}.</div>
+    @endforeach
+
     <table class="grid">
         <thead>
             <tr>

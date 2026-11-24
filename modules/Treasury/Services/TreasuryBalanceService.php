@@ -523,13 +523,21 @@ class TreasuryBalanceService
      * Same formula as getSummary() (initial_balance + global payments + active treasury movements), used by the
      * bank reconciliation to compare against the statement closing balance.
      *
+     * $scopePaymentsToEstablishment (default false) narrows a SHARED account to what one establishment can see: only
+     * legacy payments whose parent document belongs to $establishmentId (parents without an establishment cannot be
+     * attributed and stay visible) plus that establishment's treasury movements. The account initial_balance cannot
+     * be attributed to an establishment and is EXCLUDED from the scoped balance. Admin / default callers are unchanged.
+     *
      * @return array{currency_type_id: string, balance: float}
      */
     public function getBankAccountBalanceAsOf(
         int $accountId,
         ?string $dateEnd = null,
-        ?int $establishmentId = null
+        ?int $establishmentId = null,
+        bool $scopePaymentsToEstablishment = false
     ): array {
+        $scopeParent = ($scopePaymentsToEstablishment && $establishmentId !== null) ? $establishmentId : null;
+
         $account = BankAccount::query()->whereKey($accountId)->first();
         if (!$account) {
             throw new \InvalidArgumentException('Bank account not found: ' . $accountId);
@@ -542,7 +550,9 @@ class TreasuryBalanceService
             null,
             $dateEnd,
             [$accountId => $currency],
-            true
+            true,
+            null,
+            $scopeParent
         )[$accountId] ?? $this->emptyDestinationAggregate();
 
         $treasury = $this->loadTreasuryAggregatesByDestination(
@@ -553,13 +563,15 @@ class TreasuryBalanceService
             $establishmentId
         )[$accountId] ?? ['net_currency' => 0.0, 'net_pen' => 0.0];
 
+        $initialBalance = $scopeParent !== null ? 0.0 : (float) $account->initial_balance;
+
         if ($currency === 'PEN') {
             $entry = $agg['document_payment'] + $agg['sale_note_payment'] + $agg['quotation_payment']
                 + $agg['contract_payment'] + $agg['income_payment'] + $agg['technical_service_payment'];
             $egress = $agg['expense_payment'] + $agg['purchase_payment'];
-            $balance = (float) $account->initial_balance + $entry - $egress + $treasury['net_pen'];
+            $balance = $initialBalance + $entry - $egress + $treasury['net_pen'];
         } else {
-            $balance = (float) $account->initial_balance + $agg['native_net'] + $treasury['net_currency'];
+            $balance = $initialBalance + $agg['native_net'] + $treasury['net_currency'];
         }
 
         return ['currency_type_id' => $currency, 'balance' => round($balance, 2)];
@@ -575,7 +587,7 @@ class TreasuryBalanceService
      *
      * @return array<int, array{key: string, credit_note_document_id: int, document_id: int, date: string, amount: float, number: string, document_number: string, currency_type_id: string}>
      */
-    public function getBankAccountCreditNoteAdjustments(int $accountId, ?string $dateEnd = null): array
+    public function getBankAccountCreditNoteAdjustments(int $accountId, ?string $dateEnd = null, ?int $scopeParentEstablishmentId = null): array
     {
         if (!$this->hasTable('global_payments') || !$this->hasTable('document_payments')
             || !$this->hasTable('documents') || !$this->hasTable('notes')) {
@@ -596,6 +608,9 @@ class TreasuryBalanceService
             ->where('gp.payment_type', DocumentPayment::class)
             ->where('gp.destination_id', $accountId)
             ->whereIn('d.state_type_id', self::ACCEPTED_STATE_TYPES);
+        if ($scopeParentEstablishmentId !== null && $this->hasColumn('documents', 'establishment_id')) {
+            $this->applyParentEstablishmentScope($docQuery, 'd', $scopeParentEstablishmentId);
+        }
         if ($dateEnd) {
             $docQuery->where('p.date_of_payment', '<=', $dateEnd);
         }
@@ -663,8 +678,9 @@ class TreasuryBalanceService
      * $asOfDateTime ('Y-m-d H:i:s') tightens the bound of $dateEnd to an instant: payments dated on the same day as
      * the instant count only when their global_payments row was registered at or before it (payment tables only
      * store the payment DATE, so global_payments.created_at is the only reliable time). Payments dated on earlier
-     * days are unaffected. Limitation: treasury_movements only store a DATE, so same-day movements are included
-     * whole-day, and rows without created_at are treated as registered before the instant.
+     * days are unaffected. treasury_movements only store a DATE, so their created_at is used as the time cut the same
+     * way: movements dated before the instant's day count fully, same-day movements count only when created_at is at
+     * or before the instant. Rows without created_at are treated as registered before the instant.
      */
     public function getCashBalanceAsOf(
         ?string $dateEnd = null,
@@ -694,7 +710,8 @@ class TreasuryBalanceService
             $scopedCashIds ?? [],
             null,
             $dateEnd,
-            $cashId !== null ? null : $establishmentId
+            $cashId !== null ? null : $establishmentId,
+            $asOfDateTime
         );
 
         $totals = $this->emptyDestinationAggregate();
@@ -909,6 +926,18 @@ class TreasuryBalanceService
     }
 
     /**
+     * Keeps only parents attributable to the establishment (or not attributable at all, which stay visible),
+     * the same rule the cash flow and Format 1.2 use for shared bank accounts.
+     */
+    private function applyParentEstablishmentScope($query, string $parentAlias, int $establishmentId): void
+    {
+        $query->where(function ($w) use ($parentAlias, $establishmentId) {
+            $w->where($parentAlias . '.establishment_id', $establishmentId)
+                ->orWhereNull($parentAlias . '.establishment_id');
+        });
+    }
+
+    /**
      * Aggregates global_payments per destination_id directly in SQL across all 9 payment tables,
      * applying accepted state filtering, changed=false filtering, optional date bounds,
      * and per-document credit note deduplication without hydrating Eloquent graphs.
@@ -920,7 +949,8 @@ class TreasuryBalanceService
         ?string $dateEnd,
         array $accountCurrencyMap,
         bool $boundCreditNotesByIssueDate = false,
-        ?string $asOfDateTime = null
+        ?string $asOfDateTime = null,
+        ?int $scopeParentEstablishmentId = null
     ): array {
         if (!$this->hasTable('global_payments')) {
             return [];
@@ -969,6 +999,9 @@ class TreasuryBalanceService
 
             if (!empty($destinationIds)) {
                 $docQuery->whereIn('gp.destination_id', $destinationIds);
+            }
+            if ($scopeParentEstablishmentId !== null && $this->hasColumn('documents', 'establishment_id')) {
+                $this->applyParentEstablishmentScope($docQuery, 'd', $scopeParentEstablishmentId);
             }
             if ($dateStart) {
                 $docQuery->where('p.date_of_payment', '>=', $dateStart);
@@ -1096,6 +1129,9 @@ class TreasuryBalanceService
             if (!empty($destinationIds)) {
                 $q->whereIn('gp.destination_id', $destinationIds);
             }
+            if ($scopeParentEstablishmentId !== null && $this->hasColumn($spec['parent'], 'establishment_id')) {
+                $this->applyParentEstablishmentScope($q, 'par', $scopeParentEstablishmentId);
+            }
             if ($dateStart) {
                 $q->where('p.date_of_payment', '>=', $dateStart);
             }
@@ -1201,7 +1237,8 @@ class TreasuryBalanceService
         array $destinationIds,
         ?string $dateStart,
         ?string $dateEnd,
-        ?int $establishmentId
+        ?int $establishmentId,
+        ?string $asOfDateTime = null
     ): array {
         if (!$this->hasTable('treasury_movements')) {
             return [];
@@ -1232,6 +1269,15 @@ class TreasuryBalanceService
         }
         if ($dateEnd) {
             $query->whereDate('date', '<=', $dateEnd);
+        }
+        // Same-day time cut (arqueo): movements only store a date, so created_at orders them within the day.
+        if ($asOfDateTime !== null && $this->hasColumn('treasury_movements', 'created_at')) {
+            $day = substr($asOfDateTime, 0, 10);
+            $query->where(function ($w) use ($day, $asOfDateTime) {
+                $w->whereDate('date', '<', $day)
+                    ->orWhereNull('created_at')
+                    ->orWhere('created_at', '<=', $asOfDateTime);
+            });
         }
 
         $rows = $query->groupBy('destination_id')->get();
@@ -1312,14 +1358,14 @@ class TreasuryBalanceService
             return false;
         }
 
-        if (array_key_exists($table, $this->tableExistsCache)) {
-            return $this->tableExistsCache[$table];
+        if (array_key_exists(\Modules\Treasury\Support\TenantCacheKey::prefix() . $table, $this->tableExistsCache)) {
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table];
         }
 
         try {
-            return $this->tableExistsCache[$table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
-            return $this->tableExistsCache[$table] = false;
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table] = false;
         }
     }
 
@@ -1332,7 +1378,7 @@ class TreasuryBalanceService
             return false;
         }
 
-        $key = $table . '.' . $column;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . $table . '.' . $column;
         if (array_key_exists($key, $this->columnExistsCache)) {
             return $this->columnExistsCache[$key];
         }

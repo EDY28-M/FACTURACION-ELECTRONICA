@@ -1554,7 +1554,7 @@ class ReceivablePayableService
         array $payments,
         array $evidences
     ): array {
-        $cacheKey = $currency . '|' . $dateOfIssue . '|' . ($exchangeRateSale !== null ? (string) $exchangeRateSale : 'null');
+        $cacheKey = \Modules\Treasury\Support\TenantCacheKey::prefix() . $currency . '|' . $dateOfIssue . '|' . ($exchangeRateSale !== null ? (string) $exchangeRateSale : 'null');
         if (!array_key_exists($cacheKey, $this->thresholdCache)) {
             $this->thresholdCache[$cacheKey] = $this->taxRateRepository->getBancarizationThreshold(
                 $currency,
@@ -1996,7 +1996,7 @@ class ReceivablePayableService
 
     private function hasTable(string $table): bool
     {
-        $key = 't:' . $table;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table;
         if (array_key_exists($key, $this->schemaCache)) {
             return $this->schemaCache[$key];
         }
@@ -2014,7 +2014,7 @@ class ReceivablePayableService
 
     private function hasColumn(string $table, string $column): bool
     {
-        $key = 'c:' . $table . '.' . $column;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . 'c:' . $table . '.' . $column;
         if (array_key_exists($key, $this->schemaCache)) {
             return $this->schemaCache[$key];
         }

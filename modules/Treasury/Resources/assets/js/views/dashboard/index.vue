@@ -227,6 +227,50 @@
                     </ul>
                 </div>
 
+                <!-- Phase 7 cheques y letras -->
+                <div
+                    v-if="alerts.instruments && alerts.instruments.total > 0"
+                    class="alert alert-warning mb-3"
+                    role="alert"
+                >
+                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                        <div>
+                            <strong>Cheques y letras ({{ alerts.instruments.total }}):</strong>
+                            <span v-if="alerts.instruments.counts.cheque_presentation_expired > 0" class="badge badge-danger ml-2">
+                                {{ alerts.instruments.counts.cheque_presentation_expired }} cheque(s) con plazo de presentación vencido
+                            </span>
+                            <span v-if="alerts.instruments.counts.cheque_presentation_soon > 0" class="badge badge-warning ml-2">
+                                {{ alerts.instruments.counts.cheque_presentation_soon }} cheque(s) por vencer
+                            </span>
+                            <span v-if="alerts.instruments.counts.bill_overdue > 0" class="badge badge-danger ml-2">
+                                {{ alerts.instruments.counts.bill_overdue }} letra(s) vencida(s)
+                            </span>
+                            <span v-if="alerts.instruments.counts.bill_due_soon > 0" class="badge badge-warning ml-2">
+                                {{ alerts.instruments.counts.bill_due_soon }} letra(s) vencen en 7 días
+                            </span>
+                            <span v-if="alerts.instruments.counts.protest_deadline_soon > 0" class="badge badge-warning ml-2">
+                                {{ alerts.instruments.counts.protest_deadline_soon }} plazo(s) de protesto por vencer
+                            </span>
+                            <span v-if="alerts.instruments.counts.protest_deadline_expired > 0" class="badge badge-danger ml-2">
+                                {{ alerts.instruments.counts.protest_deadline_expired }} plazo(s) de protesto vencido(s)
+                            </span>
+                        </div>
+                        <a class="btn btn-sm btn-outline-dark mt-2 mt-md-0" href="/treasury/instruments">Ver cheques y letras</a>
+                    </div>
+                    <ul class="mb-0 mt-1 pl-3">
+                        <li v-for="item in alerts.instruments.items" :key="item.kind + '-' + item.id">
+                            {{ item.type_label }} {{ item.number }}<span v-if="item.counterparty_name"> ({{ item.counterparty_name }})</span>:
+                            {{ formatSignedCurrency(item.amount, item.currency_type_id) }},
+                            <template v-if="item.kind === 'cheque_presentation_soon'">presentar hasta el {{ item.presentation_deadline }}</template>
+                            <template v-else-if="item.kind === 'cheque_presentation_expired'">plazo de presentación vencido el {{ item.presentation_deadline }}</template>
+                            <template v-else-if="item.kind === 'bill_due_soon'">vence el {{ item.due_date }}</template>
+                            <template v-else-if="item.kind === 'bill_overdue'">venció el {{ item.due_date }}</template>
+                            <template v-else-if="item.kind === 'protest_deadline_soon'">protesto hasta el {{ item.protest_deadline }}</template>
+                            <template v-else>plazo de protesto vencido el {{ item.protest_deadline }}</template>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Phase 3 Receivables & Payables Alerts -->
                 <div
                     v-if="hasReceivablePayableAlerts"
@@ -376,6 +420,7 @@ export default {
                 due_soon_installments_count: 0,
                 unbancarized_payments_count: 0,
                 unbancarized_obligations_count: 0,
+                instruments: { counts: {}, total: 0, items: [] },
             },
         }
     },
@@ -433,6 +478,7 @@ export default {
                             due_soon_installments_count: 0,
                             unbancarized_payments_count: 0,
                             unbancarized_obligations_count: 0,
+                            instruments: { counts: {}, total: 0, items: [] },
                         },
                         data.alerts || {}
                     )

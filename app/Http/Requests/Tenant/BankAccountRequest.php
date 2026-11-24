@@ -54,6 +54,11 @@ class BankAccountRequest extends FormRequest
 				'string',
 				'max:20',
 			],
+			'sunat_financial_entity_code' => [
+				'nullable',
+				'string',
+				'regex:/^\d{2}$/',
+			],
 			'itf_exempt' => [
 				'nullable',
 				'boolean',
@@ -70,6 +75,7 @@ class BankAccountRequest extends FormRequest
 	{
 		return [
 			// 'initial_balance.gte' => 'El saldo inicial debe ser mayor o igual que 0.',
+			'sunat_financial_entity_code.regex' => 'El código de entidad financiera (Tabla 3 PLE) debe tener 2 dígitos.',
 		];
 	}
 }

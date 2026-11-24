@@ -863,8 +863,9 @@ class ReconciliationService
     /**
      * Re-verifies every active match of a statement against current data: the system item must still exist, be active
      * and belong to the account, and its amount and date must equal what was matched (the stored match values).
-     * A closed reconciliation is stale when a Finance payment was edited/deleted afterwards (legacy controllers are
-     * not guarded in this change: open item).
+     * Finance payments matched in a CLOSED statement are protected from delete/amount/date/destination changes by
+     * ClosedReconciliationGuard, so a closed reconciliation only goes stale through paths the guard cannot block
+     * (e.g. voiding a whole document through SUNAT, direct database edits).
      *
      * @return array<int, array{line_id: int, line_no: int, type: string, id: int, reason: string, expected_amount: float, current_amount: ?float, expected_date: ?string, current_date: ?string}>
      */

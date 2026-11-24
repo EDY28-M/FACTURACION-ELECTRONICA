@@ -48,7 +48,15 @@ class BankAccountController extends Controller
             ];
         })->values();
 
-        return compact('banks', 'currency_types', 'establishments', 'account_types');
+        // Referential PLE Tabla 3 suggestions (unconfirmed); the stored code is what the PLE export uses.
+        $financial_entity_codes = collect(config('treasury.ple.financial_entity_codes', []))->map(function ($label, $code) {
+            return [
+                'id' => (string) $code,
+                'description' => $code . ' - ' . $label,
+            ];
+        })->values();
+
+        return compact('banks', 'currency_types', 'establishments', 'account_types', 'financial_entity_codes');
     }
 
 

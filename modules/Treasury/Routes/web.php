@@ -67,6 +67,7 @@ if ($hostname) {
                 Route::get('withholdings/retention-offers/{purchase}', 'WithholdingController@retentionOffers');
                 Route::get('withholdings/perception-offers/{document}', 'WithholdingController@perceptionOffers');
                 Route::post('withholdings/received-retentions/{document}', 'WithholdingController@storeReceivedRetention');
+                Route::post('withholdings/issued-retentions', 'WithholdingController@linkRetentionPayments');
                 Route::post('withholdings/issued-retentions/{payment}', 'WithholdingController@linkRetention');
                 Route::post('withholdings/issued-perceptions/{payment}', 'WithholdingController@linkPerception');
                 Route::post('withholdings/settle', 'WithholdingController@settle');
@@ -106,6 +107,26 @@ if ($hostname) {
                 Route::get('cash-book/records', 'ReportController@cashBookRecords');
                 Route::get('cash-book/excel', 'ReportController@cashBookExportExcel');
                 Route::get('cash-book/pdf', 'ReportController@cashBookExportPdf');
+                Route::get('cash-book/ple/preview', 'ReportController@pleCashBookPreview');
+                Route::get('cash-book/ple/file', 'ReportController@pleCashBookFile');
+                Route::get('cash-book/ple/zip', 'ReportController@pleCashBookZip');
+
+                // Holidays (feriados) for the detraction deadline; writes are administrator-only (checked in the controller)
+                Route::get('holidays', 'HolidayController@index')->name('tenant.treasury.holidays.index');
+                Route::get('holidays/records', 'HolidayController@records');
+                Route::post('holidays', 'HolidayController@store');
+                Route::delete('holidays/{id}', 'HolidayController@destroy');
+
+                // Phase 7: Cheques y letras (cheques issued/received, bills payable/receivable)
+                Route::get('instruments', 'InstrumentController@index')->name('tenant.treasury.instruments.index');
+                Route::get('instruments/tables', 'InstrumentController@tables');
+                Route::get('instruments/records', 'InstrumentController@records');
+                Route::get('instruments/persons', 'InstrumentController@persons');
+                Route::get('instruments/sources', 'InstrumentController@sources');
+                Route::get('instruments/{id}/history', 'InstrumentController@history');
+                Route::post('instruments', 'InstrumentController@store');
+                Route::put('instruments/{id}', 'InstrumentController@update');
+                Route::post('instruments/{id}/transition', 'InstrumentController@transition');
 
                 Route::get('cash-counts', 'CashCountController@index')->name('tenant.treasury.cash_counts.index');
                 Route::get('cash-counts/tables', 'CashCountController@tables');

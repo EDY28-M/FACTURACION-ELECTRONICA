@@ -81,6 +81,7 @@ class TreasuryAccessTest extends TestCase
             ['GET', 'treasury/withholdings/retention-offers/1'],
             ['GET', 'treasury/withholdings/perception-offers/1'],
             ['POST', 'treasury/withholdings/received-retentions/1'],
+            ['POST', 'treasury/withholdings/issued-retentions'],
             ['POST', 'treasury/withholdings/issued-retentions/1'],
             ['POST', 'treasury/withholdings/issued-perceptions/1'],
             ['POST', 'treasury/withholdings/settle'],
@@ -120,6 +121,34 @@ class TreasuryAccessTest extends TestCase
             ['GET', 'treasury/cash-counts/system-balance/1'],
             ['POST', 'treasury/cash-counts'],
             ['GET', 'treasury/cash-counts/1/pdf'],
+        ];
+
+        foreach ($expected as [$method, $path]) {
+            $this->assertContains($method . ' ' . $path, $declared, "Route not declared: {$method} {$path}");
+            $rule = $map->resolve($path, $method);
+            $this->assertNotNull($rule, "Missing permission rule for {$method} {$path}");
+            $this->assertSame('treasury', $rule['module'], "Wrong module for {$method} {$path}");
+            $this->assertTrue($rule['ajax']);
+        }
+    }
+
+    public function test_phase_7_instrument_routes_exist_and_require_only_the_treasury_module(): void
+    {
+        $map = $this->map();
+        $declared = array_map(function ($route) {
+            return $route[1] . ' ' . $route[0];
+        }, $this->declaredTreasuryRoutes());
+
+        $expected = [
+            ['GET', 'treasury/instruments'],
+            ['GET', 'treasury/instruments/tables'],
+            ['GET', 'treasury/instruments/records'],
+            ['GET', 'treasury/instruments/persons'],
+            ['GET', 'treasury/instruments/sources'],
+            ['GET', 'treasury/instruments/1/history'],
+            ['POST', 'treasury/instruments'],
+            ['PUT', 'treasury/instruments/1'],
+            ['POST', 'treasury/instruments/1/transition'],
         ];
 
         foreach ($expected as [$method, $path]) {

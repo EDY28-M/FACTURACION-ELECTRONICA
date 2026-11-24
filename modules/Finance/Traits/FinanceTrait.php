@@ -40,7 +40,10 @@ trait FinanceTrait
 
     private static function getBankAccounts(){
 
-        return BankAccount::get()->transform(function($row) {
+        // Detraction (Banco de la Nación) accounts only receive SPOT deposits through Treasury's own flow.
+        return BankAccount::where(function ($query) {
+                $query->whereNull('account_type')->orWhere('account_type', '!=', 'detraction_bn');
+            })->get()->transform(function($row) {
             return [
                 'id' => $row->id,
                 'cash_id' => null,
@@ -91,9 +94,17 @@ trait FinanceTrait
 
     }
 
-    public function createGlobalPayment($model, $row){
+    public function createGlobalPayment($model, $row, $userId = null){
 
-        $destination = $this->getDestinationRecord($row); 
+        // The model lets the BN guard recognise a legacy payment that already sits on that account (unchanged).
+        $destination = $this->getDestinationRecord($row, $model);
+
+        // A payment matched in a closed bank reconciliation cannot change destination (refused); with the same
+        // destination its global payment is kept untouched so the closed match stays valid.
+        if (\Modules\Treasury\Support\ClosedReconciliationGuard::shouldKeepGlobalPayment($model, $destination['destination_id'], $destination['destination_type'])) {
+            return;
+        }
+
         $company = Company::active();
 
         // Editing a payment must move its global payment, not append another row.
@@ -102,7 +113,7 @@ trait FinanceTrait
             ->delete();
 
         $model->global_payment()->create([
-            'user_id' => auth()->id(),
+            'user_id' => $userId !== null ? $userId : auth()->id(),
             'soap_type_id' => $company->soap_type_id,
             'destination_id' => $destination['destination_id'],
             'destination_type' => $destination['destination_type'],
@@ -110,7 +121,7 @@ trait FinanceTrait
 
     }
 
-    public function getDestinationRecord($row){
+    public function getDestinationRecord($row, $model = null){
         
         if($row['payment_destination_id'] === 'cash'){
 
@@ -122,6 +133,8 @@ trait FinanceTrait
             $destination_id = $row['payment_destination_id'];
             $destination_type = BankAccount::class;
 
+            $this->assertDestinationAllowsLegacyPayments($destination_id, $model);
+
         }
 
         return [
@@ -130,8 +143,43 @@ trait FinanceTrait
         ];
     }
 
+    /**
+     * Detraction (Banco de la Nación) accounts cannot receive NEW legacy payments (or be the new destination of an
+     * existing one); deposits use Treasury's flow. A legacy payment whose current global payment already points to
+     * that same account keeps working (editing it does not change the destination), so old rows stay editable.
+     */
+    protected function assertDestinationAllowsLegacyPayments($bankAccountId, $model = null): void
+    {
+        if ($bankAccountId === null || $bankAccountId === '') {
+            return;
+        }
+
+        $accountType = BankAccount::whereKey($bankAccountId)->value('account_type');
+
+        if ($accountType === 'detraction_bn') {
+            if ($model !== null && $model->exists && $model->getKey() !== null
+                && \Modules\Finance\Models\GlobalPayment::where('payment_id', $model->getKey())
+                    ->where('payment_type', get_class($model))
+                    ->where('destination_type', BankAccount::class)
+                    ->where('destination_id', $bankAccountId)
+                    ->exists()) {
+                return;
+            }
+
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'payment_destination_id' => ['La cuenta de detracciones del Banco de la Nación no admite pagos; use el módulo de Tesorería para registrar depósitos de detracción.'],
+            ]);
+        }
+    }
+
     
     public function deleteAllPayments($payments){
+
+        // Check every payment first: nothing is deleted when any of them is matched in a closed reconciliation.
+        // This runs when a parent document is edited (its payments are deleted and recreated), hence the message.
+        foreach ($payments as $payment) {
+            \Modules\Treasury\Support\ClosedReconciliationGuard::assertPaymentDeletable($payment, true);
+        }
 
         foreach ($payments as $payment) {
             \Modules\Finance\Models\GlobalPayment::where('payment_id', $payment->getKey())
@@ -420,6 +468,8 @@ trait FinanceTrait
 
             $destination_id = $row['payment_destination_id'];
             $destination_type = BankAccount::class;
+
+            $this->assertDestinationAllowsLegacyPayments($destination_id);
 
         }
 

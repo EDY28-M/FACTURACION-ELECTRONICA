@@ -25,6 +25,7 @@ class BankAccountResource extends JsonResource
 			'show_in_documents' => $this->show_in_documents,
 			'account_type'      => $this->account_type ?: 'checking',
 			'pcge_account'      => $this->pcge_account,
+			'sunat_financial_entity_code' => $this->sunat_financial_entity_code,
 			'itf_exempt'        => (bool) $this->itf_exempt,
 			'establishment_id'  => $this->establishment_id,
 		];

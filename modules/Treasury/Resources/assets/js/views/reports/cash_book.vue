@@ -28,11 +28,75 @@
         </div>
 
         <div class="card-body">
-            <!-- PLE TXT notice -->
+            <!-- Normative note + PLE TXT export -->
             <div class="alert alert-info small mb-3" role="note">
                 <strong>Información normativa (SUNAT):</strong>
                 Estos reportes incluyen la información mínima oficial de los Formatos 1.1 (Efectivo) y 1.2 (Cuenta corriente) en Excel y PDF.
-                La exportación de archivos TXT PLE (códigos 010100 / 010200) permanece pendiente hasta confirmar el layout campo por campo del Anexo 2 de la RS 286-2009.
+                <template v-if="tables.is_admin">También puede generar los archivos TXT del PLE (códigos 010100 y 010200) de un mes completo.</template>
+                <template v-else>La exportación del PLE (libro completo de la empresa) solo está disponible para administradores.</template>
+                Los códigos de las Tablas 1 (medio de pago) y 3 (entidad financiera) deben validarse con el validador oficial del PLE antes de presentar el libro.
+            </div>
+
+            <div v-if="tables.is_admin" class="border rounded p-2 mb-3" role="region" aria-label="Exportar PLE">
+                <div class="d-flex align-items-end flex-wrap">
+                    <div class="mr-3 mb-2">
+                        <label for="cb-ple-period" class="control-label d-block">Periodo PLE (mes)</label>
+                        <el-date-picker
+                            id="cb-ple-period"
+                            v-model="ple.period"
+                            type="month"
+                            value-format="yyyy-MM"
+                            placeholder="AAAA-MM"
+                            :clearable="false"
+                            @change="loadPlePreview"
+                        />
+                    </div>
+                    <div class="mb-2">
+                        <el-button size="small" :loading="ple.loading" @click="loadPlePreview">
+                            <i class="fa fa-check-circle"></i> Verificar PLE
+                        </el-button>
+                        <a v-if="ple.preview && ple.preview.can_export" class="btn btn-custom btn-sm ml-2" :href="pleUrl('zip')">
+                            <i class="fa fa-file-archive"></i> Descargar ZIP (1.1 y 1.2)
+                        </a>
+                    </div>
+                </div>
+
+                <div v-if="ple.error" class="alert alert-danger small py-2 mb-2" role="alert">{{ ple.error }}</div>
+
+                <template v-if="ple.preview">
+                    <div v-for="blocker in ple.preview.blockers" :key="blocker.code" class="alert alert-danger small py-2 mb-2" role="alert">
+                        <div class="font-weight-bold">{{ blocker.message }}</div>
+                        <ul class="mb-0 pl-3">
+                            <li v-for="(item, idx) in blocker.items" :key="idx">{{ item }}</li>
+                        </ul>
+                    </div>
+                    <div v-for="(warning, idx) in ple.preview.warnings" :key="'w' + idx" class="alert alert-warning small py-2 mb-2">{{ warning }}</div>
+
+                    <table class="table table-sm table-bordered mb-0 small">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Archivo</th>
+                                <th class="text-center">Formato</th>
+                                <th class="text-center">Moneda</th>
+                                <th class="text-center">Con información</th>
+                                <th class="text-right">Registros</th>
+                                <th v-if="ple.preview.can_export" class="text-center">Descarga</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="file in ple.preview.files" :key="file.key">
+                                <td class="text-nowrap">{{ file.filename }}</td>
+                                <td class="text-center">{{ file.format }}</td>
+                                <td class="text-center">{{ file.currency }}</td>
+                                <td class="text-center">{{ file.has_info ? 'Sí' : 'No (archivo vacío)' }}</td>
+                                <td class="text-right">{{ file.line_count }}</td>
+                                <td v-if="ple.preview.can_export" class="text-center">
+                                    <a :href="pleUrl('file', file)">TXT</a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </template>
             </div>
 
             <el-tabs v-model="activeFormat" @tab-click="onFormatChange">
@@ -384,6 +448,13 @@ export default {
                 bank_account_id: null,
             },
             report: null,
+            ple: {
+                period: today().slice(0, 7),
+                loading: false,
+                error: null,
+                preview: null,
+                requestSeq: 0,
+            },
         }
     },
     computed: {
@@ -450,6 +521,37 @@ export default {
         exportUrl(type) {
             const qs = new URLSearchParams(this.buildQueryParams()).toString()
             return `/treasury/cash-book/${type}?${qs}`
+        },
+        pleParams(extra) {
+            const params = Object.assign({ period: this.ple.period }, extra || {})
+            if (this.tables.is_admin && this.filters.establishment_id) {
+                params.establishment_id = this.filters.establishment_id
+            }
+            return params
+        },
+        pleUrl(kind, file) {
+            const extra = kind === 'file' ? { format: file.format, currency: file.currency } : {}
+            const qs = new URLSearchParams(this.pleParams(extra)).toString()
+            return `/treasury/cash-book/ple/${kind}?${qs}`
+        },
+        async loadPlePreview() {
+            if (!this.ple.period) return
+            const seq = ++this.ple.requestSeq
+            this.ple.loading = true
+            this.ple.error = null
+            try {
+                const { data } = await this.$http.get('/treasury/cash-book/ple/preview', { params: this.pleParams() })
+                if (seq !== this.ple.requestSeq) return
+                this.ple.preview = data.data
+            } catch (error) {
+                if (seq !== this.ple.requestSeq) return
+                this.ple.preview = null
+                this.ple.error = parseError(error).general
+            } finally {
+                if (seq === this.ple.requestSeq) {
+                    this.ple.loading = false
+                }
+            }
         },
         async loadReport() {
             if (!this.canLoad) return

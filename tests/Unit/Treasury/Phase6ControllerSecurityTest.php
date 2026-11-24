@@ -19,6 +19,9 @@ use Modules\Treasury\Http\Requests\StoreCashCountRequest;
 use Modules\Treasury\Services\CashBookReport;
 use Modules\Treasury\Services\CashCountService;
 use Modules\Treasury\Services\CashFlowService;
+use Modules\Treasury\Services\PleCashBookExporter;
+use Modules\Treasury\Http\Controllers\HolidayController;
+use Modules\Treasury\Http\Requests\PleExportRequest;
 use Modules\Treasury\Support\TreasuryExcelValueBinder;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -79,7 +82,8 @@ class Phase6ControllerSecurityTest extends TestCase
 
         return new ReportController(
             new CashFlowService($balance, $this->makeReceivablePayableService()),
-            new CashBookReport($balance)
+            new CashBookReport($balance),
+            new PleCashBookExporter(new CashBookReport($balance))
         );
     }
 
@@ -157,6 +161,9 @@ class Phase6ControllerSecurityTest extends TestCase
             ['GET', 'treasury/cash-book/records'],
             ['GET', 'treasury/cash-book/excel'],
             ['GET', 'treasury/cash-book/pdf'],
+            ['GET', 'treasury/cash-book/ple/preview'],
+            ['GET', 'treasury/cash-book/ple/file'],
+            ['GET', 'treasury/cash-book/ple/zip'],
             ['GET', 'treasury/cash-counts'],
             ['GET', 'treasury/cash-counts/tables'],
             ['GET', 'treasury/cash-counts/records'],
@@ -456,5 +463,156 @@ class Phase6ControllerSecurityTest extends TestCase
         $migration->up();
         $migration->up();
         $this->assertTrue($this->db->getSchemaBuilder()->hasTable('treasury_cash_counts'));
+    }
+
+    public function test_holiday_routes_have_a_treasury_rule_and_only_admins_can_write(): void
+    {
+        $map = new AccessMap(require __DIR__ . '/../../../config/permissions.php');
+        foreach ([['GET', 'treasury/holidays'], ['GET', 'treasury/holidays/records'], ['POST', 'treasury/holidays'], ['DELETE', 'treasury/holidays/1']] as [$method, $path]) {
+            $rule = $map->resolve($path, $method);
+            $this->assertSame('treasury', $rule['module']);
+            $this->assertTrue($rule['ajax']);
+            $this->assertFalse($map->decide($path, false, ['dashboard', 'finance'], [], true, $method)['allowed']);
+        }
+
+        $this->app['validator']->setPresenceVerifier(new \Illuminate\Validation\DatabasePresenceVerifier($this->app['db']));
+        $controller = new HolidayController();
+        $payload = ['date' => '2028-01-01', 'name' => 'Año Nuevo', 'legal_reference' => 'DL 713 art. 6', 'source_url' => 'https://www.gob.pe/feriados'];
+
+        // Any treasury user can read; a seller cannot write.
+        $this->auth->currentUser = $this->user(2, 'seller', 1);
+        $records = $controller->records($this->validatedRequest([]))->getData(true);
+        $this->assertFalse($records['is_admin']);
+        $this->assertContains(2026, $records['years']);
+        $denied = $controller->store($this->validatedRequest($payload));
+        $this->assertSame(403, $denied->getStatusCode());
+        $this->assertSame(403, $controller->destroy(1)->getStatusCode());
+        $this->assertSame(0, $this->db->table('treasury_holidays')->where('date', '2028-01-01')->count());
+
+        // The admin adds 2028; the year is then covered by the calculator and the entry can be deleted.
+        $this->auth->currentUser = $this->user(1, 'admin', 1);
+        $created = $controller->store($this->validatedRequest($payload))->getData(true);
+        $this->assertTrue($created['success']);
+        $this->assertSame(1, $this->db->table('treasury_holidays')->where('date', '2028-01-01')->count());
+        $this->assertTrue((new \Modules\Treasury\Support\BusinessDayCalculator(new \Modules\Treasury\Support\HolidayProvider()))->hasHolidaysForYear(2028));
+
+        $this->assertTrue($controller->destroy($created['id'])->getData(true)['success']);
+        $this->assertSame(0, $this->db->table('treasury_holidays')->where('date', '2028-01-01')->count());
+    }
+
+    public function test_adding_or_removing_a_holiday_refreshes_the_protest_deadline_of_open_bills(): void
+    {
+        config(['treasury.allow_future_dates' => true]);
+        $this->app['validator']->setPresenceVerifier(new \Illuminate\Validation\DatabasePresenceVerifier($this->app['db']));
+        $this->app->bind(\Modules\Treasury\Services\InstrumentService::class, function () {
+            return new \Modules\Treasury\Services\InstrumentService(
+                $this->makeMovementService(),
+                new \Modules\Treasury\Support\InstrumentDeadlines(
+                    new \Modules\Treasury\Services\TaxRateRepository(),
+                    new \Modules\Treasury\Support\BusinessDayCalculator(new \Modules\Treasury\Support\HolidayProvider())
+                )
+            );
+        });
+
+        $this->auth->currentUser = $this->user(1, 'admin', 1);
+        $bill = $this->app->make(\Modules\Treasury\Services\InstrumentService::class)->create([
+            'type' => 'bill_receivable', 'number' => 'HOL-1', 'amount' => 500, 'currency_type_id' => 'PEN',
+            'issue_date' => '2027-12-01', 'due_date' => '2028-01-03', 'bank_id' => 1, 'person_id' => 1,
+        ], 1, ['is_admin' => true, 'user_id' => 1, 'establishment_id' => 1]);
+        // No holiday loaded for 2028 yet: the stored deadline is an estimate.
+        $this->assertTrue((bool) $bill->deadline_is_estimate);
+        $estimated = $bill->protest_deadline->format('Y-m-d');
+
+        $controller = new HolidayController();
+        $created = $controller->store($this->validatedRequest(['date' => '2028-01-06', 'name' => 'Feriado de prueba']))->getData(true);
+        $this->assertTrue($created['success']);
+
+        $afterAdd = $bill->fresh();
+        $this->assertFalse((bool) $afterAdd->deadline_is_estimate);
+        $this->assertGreaterThan($estimated, $afterAdd->protest_deadline->format('Y-m-d'));
+
+        // Removing it brings the previous count back (still flagged by the table, not by the estimate flag).
+        $controller->destroy($created['id']);
+        $this->assertSame($estimated, $bill->fresh()->protest_deadline->format('Y-m-d'));
+        $this->assertTrue((bool) $bill->fresh()->deadline_is_estimate);
+    }
+
+    public function test_ple_endpoints_preview_refuse_and_download_with_the_cash_book_scoping(): void
+    {
+        $this->db->statement('alter table companies add column number text null');
+        $this->db->statement('alter table companies add column name text null');
+        $this->db->table('companies')->where('id', 1)->update(['number' => '20555555551', 'name' => 'Empresa Demo SAC']);
+        $controller = $this->reportController();
+        $this->auth->currentUser = $this->user(1, 'admin', 1);
+
+        $request = function (array $params) {
+            return $this->makeFormRequest(PleExportRequest::class, $params);
+        };
+
+        // Empty month: preview is exportable and both files exist; the ZIP contains them.
+        $preview = $controller->pleCashBookPreview($request(['period' => '2026-12']))->getData(true)['data'];
+        $this->assertTrue($preview['can_export']);
+        $this->assertCount(2, $preview['files']);
+        $this->assertArrayNotHasKey('content', $preview['files'][0]);
+
+        $file = $controller->pleCashBookFile($request(['period' => '2026-12', 'format' => '1.1']));
+        $this->assertSame('attachment; filename="LE2055555555120261200010100001011.TXT"', $file->headers->get('Content-Disposition'));
+        $this->assertSame('text/plain; charset=UTF-8', $file->headers->get('Content-Type'));
+        $this->assertSame('', $file->getContent());
+
+        $zipResponse = $controller->pleCashBookZip($request(['period' => '2026-12']));
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($zipResponse->getFile()->getPathname()) === true);
+        $this->assertSame(2, $zip->numFiles);
+        $this->assertNotFalse($zip->locateName('LE2055555555120261200010200001011.TXT'));
+        $zip->close();
+
+        // A bank movement on an account without Tabla 3 code: preview lists the blocker, downloads answer 422.
+        \Modules\Treasury\Models\TreasuryMovement::create([
+            'establishment_id' => 1, 'date' => '2026-11-10', 'kind' => 'bank_fee', 'direction' => -1,
+            'destination_type' => \App\Models\Tenant\BankAccount::class, 'destination_id' => 1, 'currency_type_id' => 'PEN',
+            'amount' => 15.00, 'amount_pen' => 15.00, 'sunat_payment_code' => '003', 'operation_number' => 'F1',
+            'treasury_concept_id' => 2, 'description' => 'Comision', 'state' => 'active', 'user_id' => 1,
+        ]);
+        $blocked = $controller->pleCashBookPreview($request(['period' => '2026-11']))->getData(true)['data'];
+        $this->assertFalse($blocked['can_export']);
+        $this->assertSame('missing_financial_entity_code', $blocked['blockers'][0]['code']);
+
+        $refused = $controller->pleCashBookZip($request(['period' => '2026-11']));
+        $this->assertSame(422, $refused->getStatusCode());
+        $this->assertStringContainsString('Tabla 3', $refused->getData(true)['message']);
+        $this->assertSame(422, $controller->pleCashBookFile($request(['period' => '2026-11', 'format' => '1.2']))->getStatusCode());
+
+        // B-S7: the Tabla 3 blocker belongs to the 1.2 format only; the 1.1 (cash) file still downloads.
+        $cashFile = $controller->pleCashBookFile($request(['period' => '2026-11', 'format' => '1.1']));
+        $this->assertSame(200, $cashFile->getStatusCode());
+        $this->assertStringContainsString('010100', $cashFile->headers->get('Content-Disposition'));
+    }
+
+    public function test_ple_endpoints_are_admin_only_for_preview_file_and_zip(): void
+    {
+        // B-W3: the PLE is the company's whole book; a scoped non-admin must not obtain a partial one.
+        $controller = $this->reportController();
+        $request = function (array $params) {
+            return $this->makeFormRequest(PleExportRequest::class, $params);
+        };
+
+        foreach ([$this->user(3, 'seller', 1), $this->user(4, 'seller', null)] as $seller) {
+            $this->auth->currentUser = $seller;
+            foreach ([
+                $controller->pleCashBookPreview($request(['period' => '2026-11'])),
+                $controller->pleCashBookFile($request(['period' => '2026-11', 'format' => '1.1'])),
+                $controller->pleCashBookZip($request(['period' => '2026-11'])),
+            ] as $response) {
+                $this->assertSame(403, $response->getStatusCode());
+                $this->assertStringContainsString('administrador', $response->getData(true)['message']);
+            }
+        }
+    }
+
+    public function test_ple_request_validates_the_period(): void
+    {
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->makeFormRequest(PleExportRequest::class, ['period' => '2026-13']);
     }
 }

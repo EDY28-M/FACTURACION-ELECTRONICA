@@ -311,4 +311,38 @@ class CashCountServiceTest extends TestCase
         // Without counted_at the current balance includes everything.
         $this->assertEquals(650.00, $this->service()->getSystemBalance($cashId, ['is_admin' => true, 'user_id' => 1, 'establishment_id' => 1])['system_balance']);
     }
+
+    public function test_same_day_treasury_movements_are_cut_by_created_at_in_the_system_balance(): void
+    {
+        $cashId = $this->seedCash(1, 500.00);
+
+        $addMovement = function (string $date, int $direction, float $amount, ?string $createdAt) use ($cashId): void {
+            $this->db->table('treasury_movements')->insert([
+                'establishment_id' => 1, 'date' => $date, 'kind' => $direction > 0 ? 'income' : 'expense', 'direction' => $direction,
+                'destination_type' => Cash::class, 'destination_id' => $cashId, 'currency_type_id' => 'PEN',
+                'amount' => $amount, 'amount_pen' => $amount, 'description' => 'Movimiento', 'state' => 'active', 'user_id' => 1,
+                'created_at' => $createdAt,
+            ]);
+        };
+        $addMovement('2026-11-19', 1, 40.00, '2026-11-19 18:00:00');   // earlier day: counts fully
+        $addMovement('2026-11-19', 1, 10.00, '2026-11-20 15:00:00');   // dated earlier, registered after the count: counts fully
+        $addMovement('2026-11-20', 1, 25.00, '2026-11-20 09:30:00');   // same day, before the count
+        $addMovement('2026-11-20', -1, 5.00, '2026-11-20 10:00:00');   // same day, exactly at the count instant
+        $addMovement('2026-11-20', 1, 300.00, '2026-11-20 15:00:00');  // same day, after the count: not in the till yet
+        $addMovement('2026-11-20', -1, 7.00, null);                    // no registration time: treated as before
+        $addMovement('2026-11-21', 1, 900.00, '2026-11-20 09:00:00');  // dated after the count day: never counts
+
+        $scope = ['is_admin' => true, 'user_id' => 1, 'establishment_id' => 1];
+        $count = $this->service()->create([
+            'cash_id' => $cashId,
+            'counted_at' => '2026-11-20 10:00:00',
+            'denominations' => [['value' => 100, 'qty' => 5], ['value' => 50, 'qty' => 1], ['value' => 10, 'qty' => 1], ['value' => 5, 'qty' => 1]],
+        ], 1, $scope);
+
+        // 500 opening + 40 + 10 + 25 - 5 - 7 = 563 (the 300 registered at 15:00 and the 21st are excluded).
+        $this->assertEquals(563.00, (float) $count->system_balance);
+
+        // Without counted_at everything dated up to now counts.
+        $this->assertEquals(1763.00, $this->service()->getSystemBalance($cashId, $scope)['system_balance']);
+    }
 }

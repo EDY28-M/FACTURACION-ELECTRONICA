@@ -56,7 +56,11 @@ class SaleNoteController extends Controller
                 $data);
 
 
-            $this->sale_note->payments()->delete();
+            // Delete model by model (not a query delete): model events cascade the global payment and let
+            // ClosedReconciliationGuard refuse payments that sit in a closed bank reconciliation.
+            foreach ($this->sale_note->payments()->get() as $payment) {
+                $payment->delete();
+            }
 
 
             foreach($data['items'] as $row) {

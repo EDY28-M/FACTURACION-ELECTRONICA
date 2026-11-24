@@ -503,7 +503,7 @@ class RetentionPerceptionServiceTest extends TestCase
         $service = $this->makeRetentionService();
 
         $link = $service->linkIssuedRetention($first, ['series' => 'R001', 'number' => '80'], 1);
-        $this->assertSame('retention:' . $certificateId, $link->fresh()->active_link_key);
+        $this->assertSame('retention:' . $certificateId . ':' . $first, $link->fresh()->active_link_key);
 
         // Plain application path: second payment, same CRE.
         try {
@@ -513,11 +513,12 @@ class RetentionPerceptionServiceTest extends TestCase
             $this->assertArrayHasKey('number', $e->errors());
         }
 
-        // Simulated race: a concurrent transaction already holds the key but the row is invisible to the
-        // application-level check (retention_id not yet written). The UNIQUE index must stop it.
-        $this->db->table('treasury_withholdings')->where('id', $link->id)->update(['retention_id' => null]);
+        // Simulated race: a concurrent transaction already holds the (certificate, payment) key but the row is
+        // invisible to the application-level checks (retention_id / source_id not yet written). The UNIQUE index
+        // must stop it.
+        $this->db->table('treasury_withholdings')->where('id', $link->id)->update(['retention_id' => null, 'source_id' => 0]);
         try {
-            $service->linkIssuedRetention($second, ['series' => 'R001', 'number' => '80'], 1);
+            $service->linkIssuedRetention($first, ['series' => 'R001', 'number' => '80'], 1);
             $this->fail('Expected the unique active_link_key to reject the duplicate.');
         } catch (ValidationException $e) {
             $this->assertStringContainsString('ya está enlazado', $e->errors()['number'][0]);
@@ -525,7 +526,7 @@ class RetentionPerceptionServiceTest extends TestCase
         $this->assertSame(1, TreasuryWithholding::query()->count());
 
         // Voiding the link frees the key so the certificate can be linked again.
-        $this->db->table('treasury_withholdings')->where('id', $link->id)->update(['retention_id' => $certificateId]);
+        $this->db->table('treasury_withholdings')->where('id', $link->id)->update(['retention_id' => $certificateId, 'source_id' => $first]);
         $voided = $service->voidWithholding($link->id, 'Enlace erróneo', 1);
         $this->assertNull($voided->fresh()->active_link_key);
         $this->assertNotNull($service->linkIssuedRetention($second, ['series' => 'R001', 'number' => '80'], 1));
@@ -618,5 +619,236 @@ class RetentionPerceptionServiceTest extends TestCase
         config(['treasury.withholding_link_tolerance' => 0.10]);
         config(['treasury.withholding.retention_certificate_type' => '20']);
         $this->assertSame('20', $service->linkIssuedRetention($payment, ['series' => 'R001', 'number' => '90'], 1)->certificate_type);
+    }
+
+    // ---- Multi-payment CRE link -----------------------------------------------------------------------
+
+    private function insertCertificate(string $number, float $total, string $supplierNumber = '20200000010'): int
+    {
+        return (int) $this->db->table('retentions')->insertGetId([
+            'series' => 'R001', 'number' => $number, 'state_type_id' => '05', 'date_of_issue' => '2026-11-10',
+            'total_retention' => $total, 'supplier' => json_encode(['number' => $supplierNumber]),
+        ]);
+    }
+
+    /** Two purchases of the same supplier (id 10): payments of 400 (12.00 retention) and 600 (18.00 retention). */
+    private function twoSupplierPayments(): array
+    {
+        $this->setAgentFlags(true, false);
+        $purchaseA = $this->insertPurchase(['number' => '1001', 'total' => 1000.00]);
+        $purchaseB = $this->insertPurchase(['number' => '1002', 'total' => 1500.00]);
+
+        return [
+            $this->insertPurchasePayment($purchaseA, 400.00, '2026-11-02'),
+            $this->insertPurchasePayment($purchaseB, 600.00, '2026-11-03'),
+            $purchaseA,
+        ];
+    }
+
+    public function test_one_cre_can_be_linked_to_several_payments_of_the_same_supplier(): void
+    {
+        [$first, $second, $purchaseA] = $this->twoSupplierPayments();
+        $certificateId = $this->insertCertificate('100', 30.00);
+        $service = $this->makeRetentionService();
+
+        $rows = $service->linkIssuedRetentionPayments([$second, $first], ['series' => 'R001', 'number' => '100'], 1);
+
+        $this->assertCount(2, $rows);
+        $this->assertSame([$first, $second], array_map(function ($row) {
+            return (int) $row->source_id;
+        }, $rows));
+        $this->assertSame([12.00, 18.00], array_map(function ($row) {
+            return $row->amount;
+        }, $rows));
+        $this->assertSame(
+            ['retention:' . $certificateId . ':' . $first, 'retention:' . $certificateId . ':' . $second],
+            array_map(function ($row) {
+                return $row->fresh()->active_link_key;
+            }, $rows)
+        );
+        $this->assertSame(30.00, $service->listWithholdings([])['sunat_payable']['total_pen']);
+
+        $offers = $service->getRetentionOffers($purchaseA);
+        $this->assertTrue($offers['lines'][0]['linked']);
+        $this->assertSame('R001-100', $offers['lines'][0]['certificate']);
+    }
+
+    public function test_multi_link_is_rejected_when_the_total_does_not_match_or_the_set_is_invalid(): void
+    {
+        [$first, $second] = $this->twoSupplierPayments();
+        $this->insertCertificate('101', 29.00);
+        $service = $this->makeRetentionService();
+
+        try {
+            $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '101'], 1);
+            $this->fail('Expected a total mismatch.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('suma de las retenciones', $e->errors()['number'][0]);
+        }
+        $this->assertSame(0, TreasuryWithholding::query()->count());
+
+        // Payments of a different supplier cannot share a certificate.
+        $otherPurchase = $this->insertPurchase(['number' => '1003', 'total' => 1000.00, 'supplier_id' => 11]);
+        $other = $this->insertPurchasePayment($otherPurchase, 400.00, '2026-11-04');
+        $this->insertCertificate('102', 24.00);
+        try {
+            $service->linkIssuedRetentionPayments([$first, $other], ['series' => 'R001', 'number' => '102'], 1);
+            $this->fail('Expected a supplier mismatch.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('payment_ids', $e->errors());
+        }
+
+        // A payment that does not reach the threshold makes the whole set invalid.
+        $smallPurchase = $this->insertPurchase(['number' => '1004', 'total' => 500.00]);
+        $small = $this->insertPurchasePayment($smallPurchase, 100.00, '2026-11-05');
+        $this->insertCertificate('103', 15.00);
+        try {
+            $service->linkIssuedRetentionPayments([$first, $small], ['series' => 'R001', 'number' => '103'], 1);
+            $this->fail('Expected a non applicable payment.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('Pago #' . $small, $e->errors()['payment'][0]);
+        }
+
+        // Empty selection.
+        try {
+            $service->linkIssuedRetentionPayments([], ['series' => 'R001', 'number' => '103'], 1);
+            $this->fail('Expected an empty selection error.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('payment_ids', $e->errors());
+        }
+        $this->assertSame(0, TreasuryWithholding::query()->count());
+    }
+
+    public function test_a_linked_certificate_cannot_be_linked_to_a_different_set_or_the_same_pair_twice(): void
+    {
+        [$first, $second] = $this->twoSupplierPayments();
+        $third = $this->insertPurchasePayment($this->insertPurchase(['number' => '1005', 'total' => 1000.00]), 400.00, '2026-11-06');
+        $certificateId = $this->insertCertificate('104', 30.00);
+        $service = $this->makeRetentionService();
+        $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '104'], 1);
+
+        // Different set (and a subset) of the same certificate while it is active.
+        try {
+            $service->linkIssuedRetentionPayments([$third], ['series' => 'R001', 'number' => '104'], 1);
+            $this->fail('Expected the active certificate to be refused for a different set.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('number', $e->errors());
+        }
+        foreach ([[$first], [$second, $third]] as $set) {
+            try {
+                $service->linkIssuedRetentionPayments($set, ['series' => 'R001', 'number' => '104'], 1);
+                $this->fail('Expected the active certificate to be refused.');
+            } catch (ValidationException $e) {
+                // Either the certificate is already in use or one payment already carries a link.
+                $this->assertTrue(isset($e->errors()['number']) || isset($e->errors()['payment']));
+            }
+        }
+        $this->assertSame(2, TreasuryWithholding::query()->count());
+
+        // Simulated race on the same (certificate, payment) pair: the UNIQUE key still stops it.
+        $this->db->table('treasury_withholdings')->where('source_id', $first)->update(['retention_id' => null, 'source_id' => 0]);
+        $this->db->table('treasury_withholdings')->where('source_id', $second)->update(['retention_id' => null, 'source_id' => 0]);
+        try {
+            $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '104'], 1);
+            $this->fail('Expected the unique active_link_key to reject the duplicate.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('ya está enlazado', $e->errors()['number'][0]);
+        }
+        $this->assertSame(2, TreasuryWithholding::query()->count());
+        $this->assertNotNull($certificateId);
+    }
+
+    public function test_voiding_one_link_releases_every_row_of_the_certificate(): void
+    {
+        [$first, $second] = $this->twoSupplierPayments();
+        $this->insertCertificate('105', 30.00);
+        $service = $this->makeRetentionService();
+        $rows = $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '105'], 1);
+
+        $service->voidWithholding($rows[1]->id, 'Enlace erróneo', 1);
+
+        foreach ($rows as $row) {
+            $fresh = $row->fresh();
+            $this->assertSame(TreasuryWithholding::STATE_VOIDED, $fresh->state);
+            $this->assertNull($fresh->active_link_key);
+        }
+        $this->assertSame(0.0, $service->listWithholdings([])['sunat_payable']['total_pen']);
+
+        // The certificate can be linked again to a new set.
+        $this->assertCount(2, $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '105'], 1));
+    }
+
+    public function test_a_certificate_with_a_settled_link_cannot_be_voided_partially(): void
+    {
+        [$first, $second] = $this->twoSupplierPayments();
+        $this->insertCertificate('106', 30.00);
+        $service = $this->makeRetentionService();
+        $rows = $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '106'], 1);
+        $tax = $this->makeTaxPayment(12.00);
+        $service->settleWithTaxPayment([$rows[0]->id], $tax->id);
+
+        try {
+            $service->voidWithholding($rows[1]->id, 'Error', 1);
+            $this->fail('Expected the settled sibling to block the void.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('withholding', $e->errors());
+        }
+        $this->assertSame(TreasuryWithholding::STATE_ACTIVE, $rows[1]->fresh()->state);
+    }
+
+    public function test_offers_list_other_unlinked_payments_of_the_same_supplier_as_candidates(): void
+    {
+        [$first, $second, $purchaseA] = $this->twoSupplierPayments();
+        $service = $this->makeRetentionService();
+
+        $offers = $service->getRetentionOffers($purchaseA);
+        $this->assertSame([$second], array_column($offers['supplier_candidates'], 'payment_id'));
+        $this->assertSame(18.00, $offers['supplier_candidates'][0]['retention_amount']);
+
+        $this->insertCertificate('107', 18.00);
+        $service->linkIssuedRetention($second, ['series' => 'R001', 'number' => '107'], 1);
+        $this->assertSame([], $service->getRetentionOffers($purchaseA)['supplier_candidates']);
+    }
+
+    public function test_the_certificate_level_key_is_set_on_the_first_row_only_and_released_on_void(): void
+    {
+        [$first, $second] = $this->twoSupplierPayments();
+        $certificateId = $this->insertCertificate('108', 30.00);
+        $service = $this->makeRetentionService();
+
+        $rows = $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '108'], 1);
+
+        $this->assertSame('retention:' . $certificateId, $rows[0]->fresh()->cert_active_key);
+        $this->assertNull($rows[1]->fresh()->cert_active_key);
+
+        // Voiding any row releases the whole set, including the certificate key.
+        $service->voidWithholding($rows[1]->id, 'Enlace erróneo', 1);
+        $this->assertNull($rows[0]->fresh()->cert_active_key);
+        $this->assertNull($rows[1]->fresh()->cert_active_key);
+        $again = $service->linkIssuedRetentionPayments([$first, $second], ['series' => 'R001', 'number' => '108'], 1);
+        $this->assertSame('retention:' . $certificateId, $again[0]->fresh()->cert_active_key);
+    }
+
+    public function test_the_certificate_key_stops_two_different_payment_sets_even_if_the_application_checks_are_bypassed(): void
+    {
+        [$first, $second] = $this->twoSupplierPayments();
+        $certificateId = $this->insertCertificate('109', 18.00);
+        $service = $this->makeRetentionService();
+
+        $link = $service->linkIssuedRetention($second, ['series' => 'R001', 'number' => '109'], 1);
+        $this->assertSame('retention:' . $certificateId, $link->fresh()->cert_active_key);
+
+        // A concurrent request linked this certificate to ANOTHER payment: its row is invisible to the
+        // application-level checks (retention_id / source_id not written yet) and its (certificate, payment)
+        // key differs. Only the certificate-level unique key can stop the second set.
+        $this->db->table('treasury_withholdings')->where('id', $link->id)->update(['retention_id' => null, 'source_id' => 0]);
+
+        try {
+            $service->linkIssuedRetention($second, ['series' => 'R001', 'number' => '109'], 1);
+            $this->fail('Expected the certificate key to reject the second set.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('ya está enlazado', $e->errors()['number'][0]);
+        }
+        $this->assertSame(1, TreasuryWithholding::query()->count());
     }
 }

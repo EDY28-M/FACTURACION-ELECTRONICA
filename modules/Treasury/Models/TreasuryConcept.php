@@ -10,6 +10,7 @@ class TreasuryConcept extends ModelTenant
 
     protected $fillable = [
         'type',
+        'code',
         'description',
         'pcge_account',
         'active',

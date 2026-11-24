@@ -21,6 +21,7 @@ use Modules\Sale\Models\ContractPayment;
 use Modules\Sale\Models\QuotationPayment;
 use Modules\Sale\Models\TechnicalServicePayment;
 use Modules\Treasury\Models\DetractionRecord;
+use Modules\Treasury\Models\TreasuryInstrument;
 use Modules\Treasury\Models\TreasuryMovement;
 use Modules\Treasury\Support\Money;
 
@@ -33,6 +34,7 @@ use Modules\Treasury\Support\Money;
 class CashFlowService
 {
     public const CREDIT_NOTE_ADJUSTMENT_LABEL = 'Ajustes por notas de crédito';
+    public const SHARED_OPENING_NOTE = 'Saldo inicial de cuenta compartida no atribuible a la sede';
 
     public const MAX_WEEKLY_RANGE_DAYS = 731;
     public const MAX_MONTHLY_RANGE_DAYS = 1826;
@@ -134,21 +136,48 @@ class CashFlowService
         $dayBeforeStart = Carbon::parse($dateStart)->subDay()->format('Y-m-d');
         $openingRatePurchase = $this->resolveExchangeRatePurchase($dayBeforeStart);
         $openingBalance = 0.0;
+        $outOfScopeOpening = 0.0;
+
+        // Non-admins reading SHARED bank accounts (establishment_id IS NULL) only see payments whose parent document
+        // belongs to their establishment (parents without an establishment cannot be attributed and stay visible),
+        // the same way treasury movements are filtered. Admins and establishment-owned accounts are unchanged.
+        // The opening balance of those shared accounts is computed from the SAME scoped sources, so
+        // opening + period flows = scoped closing. The account initial_balance cannot be attributed to an
+        // establishment: it is excluded from the scoped opening and reported in `out_of_scope_opening`
+        // (together with the hidden payments dated before the period), mirroring Format 1.2's `out_of_scope_net`.
+        $sharedBankAccountIds = [];
+        $sharedScopeEstablishmentId = null;
+        if (!$resolvedScope['is_admin'] && $effectiveEstId !== null) {
+            $sharedScopeEstablishmentId = $effectiveEstId;
+            foreach ($bankAccounts as $acc) {
+                if ($acc->establishment_id === null) {
+                    $sharedBankAccountIds[] = (int) $acc->id;
+                }
+            }
+        }
 
         if ($includeBankAccounts && !empty($bankAccounts)) {
             foreach ($bankAccounts as $acc) {
                 // Pass $effectiveEstId so shared accounts (establishment_id IS NULL) apply the exact same
                 // establishment filter to opening treasury_movements as period treasury_movements.
-                $asOf = $this->balanceService->getBankAccountBalanceAsOf((int) $acc->id, $dayBeforeStart, $effectiveEstId);
+                $isScopedShared = in_array((int) $acc->id, $sharedBankAccountIds, true);
+                $asOf = $this->balanceService->getBankAccountBalanceAsOf((int) $acc->id, $dayBeforeStart, $effectiveEstId, $isScopedShared);
                 $bal = (float) $asOf['balance'];
                 $accCur = (string) $asOf['currency_type_id'];
+                $hiddenBal = 0.0;
+                if ($isScopedShared) {
+                    $full = $this->balanceService->getBankAccountBalanceAsOf((int) $acc->id, $dayBeforeStart, $effectiveEstId);
+                    $hiddenBal = (float) $full['balance'] - $bal;
+                }
 
                 if ($isConsolidated) {
                     if ($accCur === 'PEN') {
                         $openingBalance += $bal;
+                        $outOfScopeOpening += $hiddenBal;
                     } elseif ($accCur === 'USD') {
                         if ($openingRatePurchase > 0) {
                             $openingBalance += Money::round($bal * $openingRatePurchase);
+                            $outOfScopeOpening += Money::round($hiddenBal * $openingRatePurchase);
                         } else {
                             $missingExchangeRate = true;
                         }
@@ -157,9 +186,11 @@ class CashFlowService
                     }
                 } elseif ($accCur === $reportCurrency) {
                     $openingBalance += $bal;
+                    $outOfScopeOpening += $hiddenBal;
                 }
             }
         }
+        $outOfScopeOpening = Money::round($outOfScopeOpening);
 
         if ($includeCash && ($scopedCashIds === null || !empty($scopedCashIds))) {
             // Single scoped call (no per-cash loop): the balance service resolves the same cash scope
@@ -293,21 +324,7 @@ class CashFlowService
             }
         }
 
-        // 2. Accepted global_payments across all 9 payment tables.
-        // Non-admins reading SHARED bank accounts (establishment_id IS NULL) only see payments whose parent document
-        // belongs to their establishment (parents without an establishment cannot be attributed and stay visible),
-        // the same way treasury movements are filtered above. Admins and establishment-owned accounts are unchanged.
-        // Account-level opening balances still come from the balance service and include every establishment.
-        $sharedBankAccountIds = [];
-        $sharedScopeEstablishmentId = null;
-        if (!$resolvedScope['is_admin'] && $effectiveEstId !== null) {
-            $sharedScopeEstablishmentId = $effectiveEstId;
-            foreach ($bankAccounts as $acc) {
-                if ($acc->establishment_id === null) {
-                    $sharedBankAccountIds[] = (int) $acc->id;
-                }
-            }
-        }
+        // 2. Accepted global_payments across all 9 payment tables (shared-account scoping resolved above).
         $globalEntries = $this->loadGlobalPaymentEntries(
             $dateStart,
             $dateEnd,
@@ -355,7 +372,8 @@ class CashFlowService
             $includeBankAccounts ? $bankAccounts : [],
             $includeCash && ($scopedCashIds === null || !empty($scopedCashIds)),
             $effectiveEstId,
-            $resolvedScope['is_admin'] ? null : $resolvedScope['user_id']
+            $resolvedScope['is_admin'] ? null : $resolvedScope['user_id'],
+            $sharedBankAccountIds
         );
         foreach ($creditNoteAdjustments as $adj) {
             $periodKey = $this->resolvePeriodKey($adj['date'], $periods) ?? ($periods[0]['key'] ?? null);
@@ -452,12 +470,15 @@ class CashFlowService
             'missing_exchange_rate' => $missingExchangeRate,
             'periods' => $periods,
             'opening_balance' => $openingBalance,
+            'out_of_scope_opening' => $outOfScopeOpening,
+            'opening_notes' => !empty($sharedBankAccountIds) ? [self::SHARED_OPENING_NOTE] : [],
             'inflow_rows' => $inflowRows,
             'outflow_rows' => $outflowRows,
             'transfer_rows' => $transferRows,
             'period_summary' => $periodSummary,
             'totals' => [
                 'opening_balance' => $openingBalance,
+                'out_of_scope_opening' => $outOfScopeOpening,
                 'inflows' => $totalInflows,
                 'outflows' => $totalOutflows,
                 'transfers_net' => $totalTransfersNet,
@@ -604,6 +625,11 @@ class CashFlowService
             $resolvedScope['user_id']
         );
 
+        // Phase 7: cheques and bills. Rows are loaded once; the ones linked to a document/purchase "cover" part of that
+        // document's pending installments so the same money is never projected twice (see instrumentCoverage()).
+        $instrumentRows = $this->loadInstrumentRows($filterCurrency, $resolvedScope['is_admin'], $effectiveEstId, $resolvedScope['user_id']);
+        $instrumentCover = $this->instrumentCoverage($instrumentRows);
+
         // 2. Receivables & Payables from ReceivablePayableService (NO date_start/date_end filter;
         //    admins pass user_id = null so they see obligations created by all users in scope).
         $rpFilters = [
@@ -648,6 +674,9 @@ class CashFlowService
                 ? 0.0
                 : Money::round($effectiveRetention + $alreadyReceivedDetraction);
             $remainingPendingBn = $pendingBnDetraction;
+            $rowCover = $rowType === 'document'
+                ? (float) ($instrumentCover['document'][(int) ($row['id'] ?? 0)][$rowCurrency] ?? 0.0)
+                : 0.0;
 
             foreach ($row['installments'] as $inst) {
                 $pending = Money::round((float) ($inst['pending_amount'] ?? 0.0));
@@ -658,6 +687,10 @@ class CashFlowService
                 $dueDate = substr((string) ($inst['date'] ?? $asOf), 0, 10);
                 $periodKey = $bucketForDueDate($dueDate);
                 if ($periodKey === null) {
+                    // Outside the window: the linked instrument still covers installments in order.
+                    if ($rowCover > 0.0 && (string) ($inst['source'] ?? 'due_date') !== 'detraction_retention') {
+                        $rowCover = Money::round(max(0.0, $rowCover - $pending));
+                    }
                     continue;
                 }
 
@@ -717,6 +750,16 @@ class CashFlowService
                     }
                 }
 
+                // A cheque/bill linked to this document is projected on its own date below: remove it here.
+                if ($rowCover > 0.0) {
+                    $cut = min($pending, $rowCover);
+                    $pending = Money::round($pending - $cut);
+                    $rowCover = Money::round($rowCover - $cut);
+                    if ($pending <= 0.0) {
+                        continue;
+                    }
+                }
+
                 $converted = $this->convertLegacyPaymentAmount(
                     $pending,
                     $rowCurrency,
@@ -764,6 +807,10 @@ class CashFlowService
                 }
             }
 
+            $rowCover = $rowType === 'purchase'
+                ? (float) ($instrumentCover['purchase'][(int) ($row['id'] ?? 0)][$rowCurrency] ?? 0.0)
+                : 0.0;
+
             foreach ($row['installments'] as $inst) {
                 $source = (string) ($inst['source'] ?? 'due_date');
                 // Exclude synthetic detraction_retention rows so they are never double-counted against detraction_records
@@ -780,6 +827,17 @@ class CashFlowService
                     $deduct = min($pending, $remainingDetractionToDeduct);
                     $pending = Money::round($pending - $deduct);
                     $remainingDetractionToDeduct = Money::round($remainingDetractionToDeduct - $deduct);
+                    if ($pending <= 0.0) {
+                        continue;
+                    }
+                }
+
+                // A cheque/bill linked to this purchase is projected on its own date below: remove it here
+                // (before the window check so out-of-window installments consume the cover in order).
+                if ($rowCover > 0.0) {
+                    $cut = min($pending, $rowCover);
+                    $pending = Money::round($pending - $cut);
+                    $rowCover = Money::round($rowCover - $cut);
                     if ($pending <= 0.0) {
                         continue;
                     }
@@ -809,9 +867,20 @@ class CashFlowService
             }
         }
 
-        // 3. Optional Phase 7 instruments (cheques / bills) — guarded with hasTable and user/establishment scope
-        foreach ($this->loadPendingInstruments($filterCurrency, $resolvedScope['is_admin'], $effectiveEstId, $resolvedScope['user_id']) as $inst) {
-            $dueDate = substr((string) ($inst->due_date ?? $asOf), 0, 10);
+        // 3. Phase 7 instruments still to be settled. Collected ones already moved real money (they only cover).
+        foreach ($instrumentRows as $inst) {
+            if (!in_array((string) $inst->status, InstrumentService::PROJECTED_STATUSES[$inst->type] ?? [], true)) {
+                continue;
+            }
+
+            // A cheque at sight is expected at the bank now (never "overdue"); a deferred cheque and a bill use their date.
+            $dueDate = substr((string) $inst->due_date, 0, 10);
+            if (in_array($inst->type, [TreasuryInstrument::TYPE_CHEQUE_ISSUED, TreasuryInstrument::TYPE_CHEQUE_RECEIVED], true)
+                && empty($inst->is_deferred)
+                && $dueDate < $asOf) {
+                $dueDate = $asOf;
+            }
+
             $periodKey = $bucketForDueDate($dueDate);
             if ($periodKey === null) {
                 continue;
@@ -829,8 +898,7 @@ class CashFlowService
                 continue;
             }
 
-            $type = (string) $inst->type;
-            if (in_array($type, ['cheque_received', 'bill_receivable'], true)) {
+            if (in_array($inst->type, [TreasuryInstrument::TYPE_CHEQUE_RECEIVED, TreasuryInstrument::TYPE_BILL_RECEIVABLE], true)) {
                 $addAmount($inflowsByCategory, 'Cheques y letras por cobrar', $periodKey, $converted);
             } else {
                 $addAmount($outflowsByCategory, 'Cheques y letras por pagar', $periodKey, $converted);
@@ -1269,7 +1337,8 @@ class CashFlowService
         array $bankAccounts,
         bool $includeCash,
         ?int $establishmentId,
-        ?int $userId
+        ?int $userId,
+        array $scopedSharedAccountIds = []
     ): array {
         $items = [];
 
@@ -1285,11 +1354,12 @@ class CashFlowService
         };
 
         foreach ($bankAccounts as $acc) {
-            $atEnd = $this->balanceService->getBankAccountCreditNoteAdjustments((int) $acc->id, $dateEnd);
+            $scopeEst = in_array((int) $acc->id, $scopedSharedAccountIds, true) ? $establishmentId : null;
+            $atEnd = $this->balanceService->getBankAccountCreditNoteAdjustments((int) $acc->id, $dateEnd, $scopeEst);
             if (empty($atEnd)) {
                 continue;
             }
-            $atOpening = $this->balanceService->getBankAccountCreditNoteAdjustments((int) $acc->id, $dayBeforeStart);
+            $atOpening = $this->balanceService->getBankAccountCreditNoteAdjustments((int) $acc->id, $dayBeforeStart, $scopeEst);
             foreach ($diff($atEnd, $atOpening) as $row) {
                 $items[] = [
                     'date' => (string) $row['date'],
@@ -1400,36 +1470,89 @@ class CashFlowService
         return 0.0;
     }
 
-    private function loadPendingInstruments(?string $filterCurrency, bool $isAdmin, ?int $establishmentId, ?int $userId): array
+    /**
+     * Cheques and bills that can affect the projection: still to be settled (InstrumentService::PROJECTED_STATUSES).
+     * A collected one is real money already (a movement, or the legacy payment of its linked document).
+     * Non-admins only see their own instruments in their establishment; without both they see nothing.
+     *
+     * @return array<int, object>
+     */
+    private function loadInstrumentRows(?string $filterCurrency, bool $isAdmin, ?int $establishmentId, ?int $userId): array
     {
         if (!$this->hasTable('treasury_instruments')) {
             return [];
         }
 
-        $schema = DB::connection('tenant')->getSchemaBuilder();
-        $hasEstCol = $schema->hasColumn('treasury_instruments', 'establishment_id');
-        $hasUserCol = $schema->hasColumn('treasury_instruments', 'user_id');
-
-        // Fail closed for non-admins if the future table lacks ownership/establishment scoping columns.
-        if (!$isAdmin && !$hasEstCol && !$hasUserCol) {
+        if (!$isAdmin && ($userId === null || $establishmentId === null || $establishmentId <= 0)) {
             return [];
         }
 
         $q = DB::connection('tenant')
             ->table('treasury_instruments')
-            ->whereIn('status', ['issued', 'delivered', 'deposited']);
+            ->whereIn('status', ['issued', 'delivered', 'deposited', 'protested']);
 
         if ($filterCurrency !== null) {
             $q->where('currency_type_id', $filterCurrency);
         }
-        if ($establishmentId !== null && $hasEstCol) {
+        if ($establishmentId !== null) {
             $q->where('establishment_id', $establishmentId);
         }
-        if (!$isAdmin && $hasUserCol && $userId !== null) {
+        if (!$isAdmin) {
             $q->where('user_id', $userId);
         }
 
-        return $q->get(['type', 'due_date', 'amount', 'currency_type_id'])->all();
+        return $q->get([
+            'id',
+            'type',
+            'status',
+            'due_date',
+            'is_deferred',
+            'amount',
+            'currency_type_id',
+            'source_type',
+            'source_id',
+            'movement_id',
+        ])->all();
+    }
+
+    /**
+     * No-double-count rule: a cheque/bill linked to a Document (receivable) or Purchase (payable) takes over part of
+     * that obligation. While the instrument is PENDING (a collected one closed the document through the real payment),
+     * the same amount is removed from the document's pending installments, in installment order
+     * and in the document's currency (the link requires equal currencies). The instrument is then projected on its
+     * own date. A bounced, voided or (receivable) protested instrument covers nothing, so the document's installments
+     * come back. The amount removed never exceeds what is pending on the document.
+     *
+     * @param array<int, object> $rows
+     *
+     * @return array{document: array<int, array<string, float>>, purchase: array<int, array<string, float>>}
+     */
+    private function instrumentCoverage(array $rows): array
+    {
+        $cover = ['document' => [], 'purchase' => []];
+
+        foreach ($rows as $inst) {
+            if (empty($inst->source_id) || empty($inst->source_type)) {
+                continue;
+            }
+
+            // Only PENDING instruments cover. A collected linked instrument already closed its document through the
+            // real payment (D4), so the document's own balance reflects it and covering again would hide money.
+            if (!in_array((string) $inst->status, InstrumentService::PROJECTED_STATUSES[$inst->type] ?? [], true)) {
+                continue;
+            }
+
+            $key = $inst->source_type === Document::class ? 'document' : ($inst->source_type === Purchase::class ? 'purchase' : null);
+            if ($key === null) {
+                continue;
+            }
+
+            $currency = strtoupper((string) ($inst->currency_type_id ?: 'PEN'));
+            $current = $cover[$key][(int) $inst->source_id][$currency] ?? 0.0;
+            $cover[$key][(int) $inst->source_id][$currency] = Money::round($current + (float) $inst->amount);
+        }
+
+        return $cover;
     }
 
     private function convertMovementAmount(
@@ -1603,14 +1726,14 @@ class CashFlowService
         if (!Model::getConnectionResolver()) {
             return false;
         }
-        if (array_key_exists($table, $this->tableExistsCache)) {
-            return $this->tableExistsCache[$table];
+        if (array_key_exists(\Modules\Treasury\Support\TenantCacheKey::prefix() . $table, $this->tableExistsCache)) {
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table];
         }
 
         try {
-            return $this->tableExistsCache[$table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
-            return $this->tableExistsCache[$table] = false;
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table] = false;
         }
     }
 
@@ -1622,7 +1745,7 @@ class CashFlowService
         if (!$this->hasTable($table)) {
             return false;
         }
-        $key = $table . '.' . $column;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . $table . '.' . $column;
         if (array_key_exists($key, $this->columnExistsCache)) {
             return $this->columnExistsCache[$key];
         }
@@ -1671,12 +1794,15 @@ class CashFlowService
             'missing_exchange_rate' => false,
             'periods' => $periods,
             'opening_balance' => 0.0,
+            'out_of_scope_opening' => 0.0,
+            'opening_notes' => [],
             'inflow_rows' => [],
             'outflow_rows' => [],
             'transfer_rows' => [],
             'period_summary' => $summary,
             'totals' => [
                 'opening_balance' => 0.0,
+                'out_of_scope_opening' => 0.0,
                 'inflows' => 0.0,
                 'outflows' => 0.0,
                 'transfers_net' => 0.0,

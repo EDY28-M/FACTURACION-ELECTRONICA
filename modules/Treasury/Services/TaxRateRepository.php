@@ -121,6 +121,24 @@ class TaxRateRepository
         return (int) $record->amount;
     }
 
+    public const TAX_CHEQUE_PRESENTATION_DAYS = 'cheque_presentation_days';
+    public const TAX_CHEQUE_DEFERRED_MAX_DAYS = 'cheque_deferred_max_days';
+    public const TAX_BILL_PROTEST_DAYS = 'bill_protest_days';
+
+    /**
+     * Legal period (in days) of a cheque/bill rule effective on a date (Ley 27287). Null when the row is not
+     * loaded; the caller falls back to config('treasury.instruments.*_fallback').
+     */
+    public function getInstrumentDays(string $tax, string $date): ?int
+    {
+        $record = $this->getEffective($tax, $date);
+        if (!$record || $record->amount === null || (int) $record->amount < 1) {
+            return null;
+        }
+
+        return (int) $record->amount;
+    }
+
     /**
      * Lists the perception rate classes effective on a date (code => rate).
      *

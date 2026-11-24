@@ -341,13 +341,32 @@ Objetivo: congelar el comportamiento actual de los saldos para detectar cualquie
   - **proyectado**: cuotas por cobrar y por pagar, detracciones por depositar y cheques diferidos.
 - **Libro Caja y Bancos** (investigación, §6):
   - Formato 1.1 (efectivo) y 1.2 (cuenta corriente) en Excel y PDF con la "información mínima" oficial: correlativo, fecha, medio de pago (Tabla 1), descripción, girador o beneficiario, n.º de transacción o documento, cuenta contable, debe y haber, y totales.
-  - La exportación **TXT PLE** (códigos 010100 / 010200) queda **pendiente** hasta confirmar el layout campo por campo (anexo 2 de la RS 286-2009, no se pudo recuperar). No implementarla sin ese anexo.
+  - La exportación **TXT PLE** (códigos 010100 / 010200) está implementada (`PleCashBookExporter`) con el layout oficial del Anexo 2 de la RS 286-2009; ver «PLE layout confirmado» en `tesoreria-investigacion-sunat.md` para las decisiones y los puntos sin confirmar (Tabla 1 y Tabla 3).
 - **Arqueo de caja** (`treasury_cash_counts`): conteo por denominaciones, saldo según sistema (del `TreasuryBalanceService`) y diferencia, con PDF.
 - Exportaciones con los patrones existentes (Maatwebsite y DomPDF).
 
-### Fase 7 (opcional): Cheques y letras
+### Fase 7: Cheques y letras (implementada)
 
-- Ciclo de vida de los cheques emitidos y recibidos (30 días de presentación) y de las letras (aceptada, protestada; protesto dentro de los 15 días), según la Ley 27287. Al cobrar o pagar, cada uno genera su `treasury_movement`.
+- **Tablas:** `treasury_instruments` (cheques y letras) y `treasury_instrument_events` (historial de estados); migración `2026_11_23_000016`. Los plazos legales se cargan en `treasury_tax_rates` (`cheque_presentation_days` = 30, `cheque_deferred_max_days` = 30, `bill_protest_days` = 15), con respaldo en `config('treasury.instruments.*_fallback')`. Los tres vienen de una fuente secundaria (Ley 27287 según la investigación) y están marcados **[REVISAR]**.
+- **Máquina de estados** (`InstrumentService::TRANSITIONS`; cualquier otra transición se rechaza con un mensaje en español):
+
+| Tipo | Estado inicial | Transiciones permitidas |
+|---|---|---|
+| Cheque recibido | recibido (`delivered`) | recibido → depositado, anulado; depositado → cobrado, rechazado; cobrado → rechazado |
+| Cheque emitido | emitido (`issued`) | emitido → entregado, anulado; entregado → cobrado, rechazado, anulado; cobrado → rechazado |
+| Letra por cobrar | girada (`issued`) | girada → aceptada (`delivered`), anulada; aceptada → en banco (`deposited`), cobrada, protestada, anulada; en banco → cobrada, protestada; protestada → cobrada |
+| Letra por pagar | girada (`issued`) | girada → aceptada, anulada; aceptada → pagada (`collected`), protestada, anulada; protestada → pagada |
+
+- **Efectos de dinero** (solo por `MovementService::createInstrumentMovement`; nunca se toca `global_payments`):
+  - cobrado/cobrada de cheque recibido o letra por cobrar → ingreso en la cuenta bancaria;
+  - cobrado de cheque emitido o pagada de letra por pagar → egreso de la cuenta bancaria;
+  - rechazado después de cobrado → se anula el movimiento (`MovementService::void`, que respeta la conciliación cerrada); depositar y protestar no mueven dinero;
+  - el movimiento pertenece al documento (`source_type = TreasuryInstrument`) y solo puede anularse desde Cheques y letras.
+- **Plazos:**
+  - presentación del cheque = emisión + 30 días calendario (cheque de pago diferido: fecha de pago + 30; la fecha de pago no puede superar 30 días desde la emisión);
+  - protesto de la letra = vencimiento + 15 días **hábiles** (`BusinessDayCalculator::addBusinessDays` con la tabla de feriados; `config('treasury.instruments.protest_day_type')` permite pasarlos a calendario). Si el año no tiene feriados cargados el plazo se marca como estimado.
+- **Flujo de caja proyectado:** los documentos pendientes se proyectan en su fecha (el cheque al día se espera hoy, no como vencido). Un documento vinculado a un comprobante o compra descuenta su importe de las cuotas pendientes de ese comprobante (en orden, sin pasar de lo pendiente), tanto mientras está pendiente como una vez cobrado; si rebota, se anula, o es una letra por cobrar protestada, deja de cubrir y la cuota vuelve.
+- **Alertas del Resumen:** cheques por vencer el plazo de presentación (7 días) o vencido, letras que vencen en 7 días o vencidas, plazo de protesto por vencer (3 días) o vencido.
 
 ---
 

@@ -33,6 +33,7 @@ class BankAccount extends ModelTenant
         'show_in_documents',
         'account_type',
         'pcge_account',
+        'sunat_financial_entity_code',
         'itf_exempt',
         'establishment_id',
     ];

@@ -5,6 +5,7 @@ namespace Modules\Treasury\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Treasury\Http\Requests\LinkRetentionPaymentsRequest;
 use Modules\Treasury\Http\Requests\StoreWithholdingRequest;
 use Modules\Treasury\Models\TreasuryWithholding;
 use Modules\Treasury\Services\RetentionPerceptionService;
@@ -117,6 +118,25 @@ class WithholdingController extends Controller
             'success' => true,
             'message' => 'Comprobante de retención enlazado al pago. El monto retenido quedó pendiente de pago a SUNAT.',
             'data' => ['id' => (int) $row->id],
+        ], 201);
+    }
+
+    /**
+     * Links ONE issued CRE to several payments of the same supplier (their computed retentions must add up to
+     * the certificate total).
+     */
+    public function linkRetentionPayments(LinkRetentionPaymentsRequest $request): JsonResponse
+    {
+        $user = auth()->user();
+        $validated = $request->validated();
+        $rows = $this->service->linkIssuedRetentionPayments($validated['payment_ids'], $validated, (int) $user->id, $this->scope($user));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Comprobante de retención enlazado a ' . count($rows) . ' pago(s). El monto retenido quedó pendiente de pago a SUNAT.',
+            'data' => ['ids' => array_map(function ($row) {
+                return (int) $row->id;
+            }, $rows)],
         ], 201);
     }
 

@@ -35,6 +35,9 @@ class RetentionPerceptionService
     // Tolerance, certificate type codes and applicable document types are SUNAT/parameter data kept in
     // config('treasury.withholding_link_tolerance') and config('treasury.withholding.*') (single maintenance point).
 
+    /** Upper bound of payments one issued CRE can be linked to in a single operation. */
+    public const MAX_LINKED_PAYMENTS = 50;
+
     private $taxRateRepository;
 
     /** @var array<string, bool> */
@@ -197,6 +200,7 @@ class RetentionPerceptionService
             'purchase_id' => $purchaseId,
             'emit_url' => null,
             'lines' => [],
+            'supplier_candidates' => [],
             'warnings' => [],
         ];
 
@@ -246,7 +250,75 @@ class RetentionPerceptionService
             ];
         }
 
+        $result['supplier_candidates'] = $this->loadSupplierRetentionCandidates($purchase, $scope);
+
         return $result;
+    }
+
+    /**
+     * Other unlinked, retention-applicable payments of the SAME supplier (same currency) from other purchases the
+     * caller may manage. They let one issued CRE be linked to several payments (see linkIssuedRetentionPayments()).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadSupplierRetentionCandidates(object $purchase, array $scope): array
+    {
+        if (empty($purchase->supplier_id)) {
+            return [];
+        }
+
+        $currency = strtoupper(trim((string) ($purchase->currency_type_id ?: 'PEN')));
+        $isAdmin = array_key_exists('is_admin', $scope) ? (bool) $scope['is_admin'] : true;
+
+        $query = DB::connection('tenant')->table('purchase_payments as pp')
+            ->join('purchases as pu', 'pu.id', '=', 'pp.purchase_id')
+            ->where('pu.supplier_id', $purchase->supplier_id)
+            ->where('pu.id', '!=', $purchase->id)
+            ->whereIn('pu.document_type_id', $this->retentionDocumentTypes())
+            ->whereIn('pu.state_type_id', TreasuryBalanceService::ACCEPTED_STATE_TYPES)
+            ->whereRaw("COALESCE(pu.currency_type_id, 'PEN') = ?", [$currency]);
+
+        if (!$isAdmin) {
+            $userId = (int) ($scope['user_id'] ?? 0);
+            $establishmentId = (int) ($scope['establishment_id'] ?? 0);
+            if ($userId <= 0 || $establishmentId <= 0) {
+                return [];
+            }
+            $query->where('pu.user_id', $userId)->where('pu.establishment_id', $establishmentId);
+        }
+
+        $rows = $query->orderBy('pp.date_of_payment', 'desc')->orderBy('pp.id', 'desc')
+            ->limit(self::MAX_LINKED_PAYMENTS * 2)
+            ->get(['pp.id as payment_id', 'pp.payment', 'pp.date_of_payment', 'pu.id as purchase_id', 'pu.series', 'pu.number',
+                'pu.total', 'pu.currency_type_id', 'pu.exchange_rate_sale']);
+
+        $linked = $this->loadActiveLinks(PurchasePayment::class, $rows->pluck('payment_id')->all());
+
+        $candidates = [];
+        foreach ($rows as $row) {
+            if (isset($linked[(int) $row->payment_id])) {
+                continue;
+            }
+            $date = $this->normalizeDate($row->date_of_payment) ?? date('Y-m-d');
+            $calc = $this->computeRetention((float) $row->payment, (float) $row->total, $currency, $this->positiveOrNull($row->exchange_rate_sale ?? null), $date);
+            if (!$calc['applicable']) {
+                continue;
+            }
+            $candidates[] = [
+                'payment_id' => (int) $row->payment_id,
+                'purchase_id' => (int) $row->purchase_id,
+                'document' => trim((string) $row->series) . '-' . trim((string) $row->number),
+                'date' => $date,
+                'payment' => Money::round((float) $row->payment),
+                'currency_type_id' => $currency,
+                'retention_amount' => $calc['retention_amount'],
+            ];
+            if (count($candidates) >= self::MAX_LINKED_PAYMENTS) {
+                break;
+            }
+        }
+
+        return $candidates;
     }
 
     /**
@@ -439,6 +511,30 @@ class RetentionPerceptionService
      */
     public function linkIssuedRetention(int $purchasePaymentId, array $payload, int $userId, array $scope = []): TreasuryWithholding
     {
+        return $this->linkIssuedRetentionPayments([$purchasePaymentId], $payload, $userId, $scope)[0];
+    }
+
+    /**
+     * Links ONE issued CRE to one or several payments of the SAME supplier (a certificate may cover several
+     * payments). The per-payment retentions computed with the versioned rate must add up to the certificate total
+     * within `treasury.withholding_link_tolerance`. One `treasury_withholdings` row is created per payment, all
+     * sharing the certificate.
+     *
+     * Concurrency: payment rows are locked in id order, then the certificate row (BEFORE any usage check), then the
+     * existing active links, so two requests serialize on the certificate. Two UNIQUE DB guards back it:
+     * `active_link_key` ("retention:{certificate}:{payment}") per (certificate, payment) and `cert_active_key`
+     * ("retention:{certificate}", set on the FIRST row of the active set only, NULL on the rest and after voiding) per
+     * certificate, so even without the row lock two requests cannot link the same certificate to different payment
+     * sets. A certificate already linked to ANY active set is refused: the link set is atomic and can only change by
+     * voiding it (which releases every row of the certificate).
+     *
+     * @param array<int, int|string> $purchasePaymentIds
+     * @param array{series: string, number: string} $payload
+     *
+     * @return array<int, TreasuryWithholding> rows in ascending payment id order
+     */
+    public function linkIssuedRetentionPayments(array $purchasePaymentIds, array $payload, int $userId, array $scope = []): array
+    {
         $flags = $this->getAgentFlags();
         if (!$flags['is_retention_agent']) {
             throw ValidationException::withMessages([
@@ -449,42 +545,100 @@ class RetentionPerceptionService
         $series = $this->requiredString($payload['series'] ?? null, 'series', 'La serie del comprobante de retención es obligatoria.', 10);
         $number = $this->requiredString($payload['number'] ?? null, 'number', 'El número del comprobante de retención es obligatorio.', 20);
 
-        return DB::connection('tenant')->transaction(function () use ($purchasePaymentId, $series, $number, $userId, $scope) {
-            $payment = DB::connection('tenant')->table('purchase_payments')->where('id', $purchasePaymentId)->lockForUpdate()->first();
-            if (!$payment) {
-                throw (new \Illuminate\Database\Eloquent\ModelNotFoundException())->setModel(PurchasePayment::class, [$purchasePaymentId]);
+        $ids = array_values(array_unique(array_filter(array_map('intval', $purchasePaymentIds), function ($id) {
+            return $id > 0;
+        })));
+        sort($ids);
+        if (empty($ids)) {
+            throw ValidationException::withMessages([
+                'payment_ids' => ['Seleccione al menos un pago para enlazar el comprobante.'],
+            ]);
+        }
+        if (count($ids) > self::MAX_LINKED_PAYMENTS) {
+            throw ValidationException::withMessages([
+                'payment_ids' => ['Un comprobante no puede enlazarse a más de ' . self::MAX_LINKED_PAYMENTS . ' pagos.'],
+            ]);
+        }
+        $multiple = count($ids) > 1;
+
+        return DB::connection('tenant')->transaction(function () use ($ids, $multiple, $series, $number, $userId, $scope) {
+            $payments = DB::connection('tenant')->table('purchase_payments')
+                ->whereIn('id', $ids)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            foreach ($ids as $id) {
+                if (!$payments->has($id)) {
+                    throw (new \Illuminate\Database\Eloquent\ModelNotFoundException())->setModel(PurchasePayment::class, [$id]);
+                }
             }
 
-            $purchase = DB::connection('tenant')->table('purchases')->where('id', $payment->purchase_id)->first();
-            if (!$purchase) {
-                throw (new \Illuminate\Database\Eloquent\ModelNotFoundException())->setModel(Purchase::class, [$payment->purchase_id]);
-            }
-            $this->assertSourceAccess($purchase, $scope);
+            $purchases = DB::connection('tenant')->table('purchases')
+                ->whereIn('id', $payments->pluck('purchase_id')->unique()->values()->all())
+                ->get()
+                ->keyBy('id');
 
-            if (!in_array((string) $purchase->document_type_id, $this->retentionDocumentTypes(), true)) {
-                throw ValidationException::withMessages([
-                    'payment' => ['La retención solo aplica a facturas.'],
-                ]);
+            $context = [];
+            foreach ($ids as $id) {
+                $payment = $payments->get($id);
+                $purchase = $purchases->get($payment->purchase_id);
+                if (!$purchase) {
+                    throw (new \Illuminate\Database\Eloquent\ModelNotFoundException())->setModel(Purchase::class, [$payment->purchase_id]);
+                }
+                $this->assertSourceAccess($purchase, $scope);
+
+                if (!in_array((string) $purchase->document_type_id, $this->retentionDocumentTypes(), true)) {
+                    throw ValidationException::withMessages([
+                        'payment' => ['La retención solo aplica a facturas.'],
+                    ]);
+                }
+                $context[$id] = [$payment, $purchase];
             }
+
+            if ($multiple) {
+                $suppliers = array_unique(array_map(function ($row) {
+                    return (int) ($row[1]->supplier_id ?? 0);
+                }, $context));
+                if (count($suppliers) !== 1 || reset($suppliers) <= 0) {
+                    throw ValidationException::withMessages([
+                        'payment_ids' => ['Todos los pagos enlazados a un mismo comprobante deben ser del mismo proveedor.'],
+                    ]);
+                }
+
+                $currencies = array_unique(array_map(function ($row) {
+                    return strtoupper(trim((string) ($row[1]->currency_type_id ?: 'PEN')));
+                }, $context));
+                if (count($currencies) !== 1) {
+                    throw ValidationException::withMessages([
+                        'payment_ids' => ['Todos los pagos enlazados a un mismo comprobante deben estar en la misma moneda.'],
+                    ]);
+                }
+            }
+
+            // Lock the certificate row FIRST: every usage check below must run after the requests serialize on it.
+            $certificate = $this->findCertificate('retentions', $series, $number, 'supplier');
 
             $duplicatePayment = TreasuryWithholding::query()
                 ->where('kind', TreasuryWithholding::KIND_RETENTION_EMITTED)
                 ->where('state', TreasuryWithholding::STATE_ACTIVE)
                 ->where('source_type', PurchasePayment::class)
-                ->where('source_id', $purchasePaymentId)
+                ->whereIn('source_id', $ids)
+                ->lockForUpdate()
                 ->exists();
             if ($duplicatePayment) {
                 throw ValidationException::withMessages([
-                    'payment' => ['Este pago ya tiene un comprobante de retención enlazado.'],
+                    'payment' => [$multiple
+                        ? 'Alguno de los pagos seleccionados ya tiene un comprobante de retención enlazado.'
+                        : 'Este pago ya tiene un comprobante de retención enlazado.'],
                 ]);
             }
-
-            $certificate = $this->findCertificate('retentions', $series, $number, 'supplier');
 
             $alreadyUsed = TreasuryWithholding::query()
                 ->where('kind', TreasuryWithholding::KIND_RETENTION_EMITTED)
                 ->where('state', TreasuryWithholding::STATE_ACTIVE)
                 ->where('retention_id', $certificate->id)
+                ->lockForUpdate()
                 ->exists();
             if ($alreadyUsed) {
                 throw ValidationException::withMessages([
@@ -492,58 +646,80 @@ class RetentionPerceptionService
                 ]);
             }
 
-            $date = $this->normalizeDate($payment->date_of_payment) ?? date('Y-m-d');
-            $currency = strtoupper(trim((string) ($purchase->currency_type_id ?: 'PEN')));
-            $rateSale = $this->positiveOrNull($purchase->exchange_rate_sale ?? null);
-            $calc = $this->computeRetention((float) $payment->payment, (float) $purchase->total, $currency, $rateSale, $date);
-            if (!$calc['applicable']) {
-                throw ValidationException::withMessages([
-                    'payment' => [$calc['reason'] ?: 'Este pago no está afecto a retención.'],
-                ]);
+            $calcs = [];
+            $computedTotal = 0.0;
+            foreach ($context as $id => [$payment, $purchase]) {
+                $date = $this->normalizeDate($payment->date_of_payment) ?? date('Y-m-d');
+                $currency = strtoupper(trim((string) ($purchase->currency_type_id ?: 'PEN')));
+                $rateSale = $this->positiveOrNull($purchase->exchange_rate_sale ?? null);
+                $calc = $this->computeRetention((float) $payment->payment, (float) $purchase->total, $currency, $rateSale, $date);
+                if (!$calc['applicable']) {
+                    $reason = $calc['reason'] ?: 'Este pago no está afecto a retención.';
+                    throw ValidationException::withMessages([
+                        'payment' => [$multiple ? 'Pago #' . $id . ': ' . $reason : $reason],
+                    ]);
+                }
+                $calcs[$id] = [$calc, $date, $currency, $rateSale];
+                $computedTotal = Money::round($computedTotal + $calc['retention_amount']);
             }
 
             $certificateAmount = Money::round((float) ($certificate->total_retention ?? 0));
-            if (abs($certificateAmount - $calc['retention_amount']) > $this->linkTolerance()) {
+            if (abs($certificateAmount - $computedTotal) > $this->linkTolerance()) {
                 throw ValidationException::withMessages([
                     'number' => [
-                        'El monto del comprobante de retención (' . Money::format($certificateAmount)
-                        . ') no coincide con la retención calculada para el pago (' . Money::format($calc['retention_amount']) . ').',
+                        $multiple
+                            ? 'El monto del comprobante de retención (' . Money::format($certificateAmount)
+                                . ') no coincide con la suma de las retenciones calculadas para los pagos seleccionados (' . Money::format($computedTotal) . ').'
+                            : 'El monto del comprobante de retención (' . Money::format($certificateAmount)
+                                . ') no coincide con la retención calculada para el pago (' . Money::format($computedTotal) . ').',
                     ],
                 ]);
             }
 
-            $this->assertCounterpartyMatches($certificate->supplier ?? null, $purchase->supplier_id ?? null, 'number');
+            $firstPurchase = reset($context)[1];
+            $this->assertCounterpartyMatches($certificate->supplier ?? null, $firstPurchase->supplier_id ?? null, 'number');
 
-            $amountPen = $this->toPen($calc['retention_amount'], $currency, $rateSale) ?? $calc['retention_amount'];
-            $person = !empty($purchase->supplier_id) && $this->hasTable('persons')
-                ? DB::connection('tenant')->table('persons')->where('id', $purchase->supplier_id)->first(['id', 'name', 'number'])
+            $person = !empty($firstPurchase->supplier_id) && $this->hasTable('persons')
+                ? DB::connection('tenant')->table('persons')->where('id', $firstPurchase->supplier_id)->first(['id', 'name', 'number'])
                 : null;
 
-            return $this->createLink([
-                'kind' => TreasuryWithholding::KIND_RETENTION_EMITTED,
-                'certificate_type' => $this->retentionCertificateType(),
-                'series' => $series,
-                'number' => $number,
-                'date' => $this->normalizeDate($certificate->date_of_issue) ?? $date,
-                'establishment_id' => $purchase->establishment_id ? (int) $purchase->establishment_id : null,
-                'user_id' => $purchase->user_id ? (int) $purchase->user_id : $userId,
-                'source_type' => PurchasePayment::class,
-                'source_id' => $purchasePaymentId,
-                'parent_type' => Purchase::class,
-                'parent_id' => (int) $purchase->id,
-                'retention_id' => (int) $certificate->id,
-                'active_link_key' => 'retention:' . (int) $certificate->id,
-                'person_id' => $person ? (int) $person->id : null,
-                'counterparty_document' => $person ? $person->number : null,
-                'counterparty_name' => $person ? $person->name : null,
-                'currency_type_id' => $currency,
-                'base_amount' => Money::round((float) $payment->payment),
-                'rate' => $calc['rate'],
-                'amount' => $calc['retention_amount'],
-                'amount_pen' => $amountPen,
-                'payable_to_sunat' => true,
-                'state' => TreasuryWithholding::STATE_ACTIVE,
-            ]);
+            $links = [];
+            $isFirstLink = true;
+            foreach ($context as $id => [$payment, $purchase]) {
+                [$calc, $date, $currency, $rateSale] = $calcs[$id];
+                $amountPen = $this->toPen($calc['retention_amount'], $currency, $rateSale) ?? $calc['retention_amount'];
+
+                $links[] = $this->createLink([
+                    'kind' => TreasuryWithholding::KIND_RETENTION_EMITTED,
+                    'certificate_type' => $this->retentionCertificateType(),
+                    'series' => $series,
+                    'number' => $number,
+                    'date' => $this->normalizeDate($certificate->date_of_issue) ?? $date,
+                    'establishment_id' => $purchase->establishment_id ? (int) $purchase->establishment_id : null,
+                    'user_id' => $purchase->user_id ? (int) $purchase->user_id : $userId,
+                    'source_type' => PurchasePayment::class,
+                    'source_id' => (int) $id,
+                    'parent_type' => Purchase::class,
+                    'parent_id' => (int) $purchase->id,
+                    'retention_id' => (int) $certificate->id,
+                    'active_link_key' => 'retention:' . (int) $certificate->id . ':' . (int) $id,
+                    // Certificate-level guard: only the first row of the set carries it.
+                    'cert_active_key' => $isFirstLink ? 'retention:' . (int) $certificate->id : null,
+                    'person_id' => $person ? (int) $person->id : null,
+                    'counterparty_document' => $person ? $person->number : null,
+                    'counterparty_name' => $person ? $person->name : null,
+                    'currency_type_id' => $currency,
+                    'base_amount' => Money::round((float) $payment->payment),
+                    'rate' => $calc['rate'],
+                    'amount' => $calc['retention_amount'],
+                    'amount_pen' => $amountPen,
+                    'payable_to_sunat' => true,
+                    'state' => TreasuryWithholding::STATE_ACTIVE,
+                ]);
+                $isFirstLink = false;
+            }
+
+            return $links;
         });
     }
 
@@ -711,19 +887,41 @@ class RetentionPerceptionService
                     'withholding' => ['El registro ya se encuentra anulado.'],
                 ]);
             }
-            if ($row->settled_movement_id) {
-                throw ValidationException::withMessages([
-                    'withholding' => ['El monto ya fue pagado a SUNAT; anule primero el pago de tributos.'],
-                ]);
+            // A certificate linked to several payments is one unit: voiding any of its links releases ALL of them.
+            $group = collect([$row]);
+            if ($row->kind === TreasuryWithholding::KIND_RETENTION_EMITTED && $row->retention_id) {
+                $siblings = TreasuryWithholding::query()
+                    ->where('kind', TreasuryWithholding::KIND_RETENTION_EMITTED)
+                    ->where('state', TreasuryWithholding::STATE_ACTIVE)
+                    ->where('retention_id', $row->retention_id)
+                    ->where('id', '!=', $row->id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+                foreach ($siblings as $sibling) {
+                    $this->assertWithholdingAccess($sibling, $scope);
+                }
+                $group = $group->concat($siblings);
             }
 
-            $row->state = TreasuryWithholding::STATE_VOIDED;
-            // Free the certificate so it can be linked again.
-            $row->active_link_key = null;
-            $row->voided_at = now();
-            $row->voided_by = $userId;
-            $row->void_reason = $reason;
-            $row->save();
+            foreach ($group as $member) {
+                if ($member->settled_movement_id) {
+                    throw ValidationException::withMessages([
+                        'withholding' => ['El monto ya fue pagado a SUNAT; anule primero el pago de tributos.'],
+                    ]);
+                }
+            }
+
+            foreach ($group as $member) {
+                $member->state = TreasuryWithholding::STATE_VOIDED;
+                // Free the certificate so it can be linked again.
+                $member->active_link_key = null;
+                $member->cert_active_key = null;
+                $member->voided_at = now();
+                $member->voided_by = $userId;
+                $member->void_reason = $reason;
+                $member->save();
+            }
 
             return $row;
         });
@@ -1148,14 +1346,14 @@ class RetentionPerceptionService
 
     private function hasTable(string $table): bool
     {
-        if (isset($this->schemaCache['t:' . $table])) {
-            return $this->schemaCache['t:' . $table];
+        if (isset($this->schemaCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table])) {
+            return $this->schemaCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table];
         }
         if (!Model::getConnectionResolver()) {
             return false;
         }
         try {
-            return $this->schemaCache['t:' . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
+            return $this->schemaCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . 't:' . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
             return false;
         }
@@ -1163,7 +1361,7 @@ class RetentionPerceptionService
 
     private function hasColumn(string $table, string $column): bool
     {
-        $key = 'c:' . $table . '.' . $column;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . 'c:' . $table . '.' . $column;
         if (isset($this->schemaCache[$key])) {
             return $this->schemaCache[$key];
         }

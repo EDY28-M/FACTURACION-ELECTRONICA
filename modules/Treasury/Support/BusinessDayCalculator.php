@@ -90,6 +90,26 @@ class BusinessDayCalculator
         return $cursor->format('Y-m-d');
     }
 
+    /**
+     * Returns the date reached after counting $n business days AFTER $date ($date itself is never counted).
+     * With $n = 0 the same date is returned. Used by the bill protest deadline (days after maturity).
+     */
+    public function addBusinessDays(string $date, int $n): string
+    {
+        $cursor = new DateTimeImmutable($date);
+        $remaining = max(0, $n);
+
+        // Bounded: even a long run of holidays cannot loop forever.
+        for ($i = 0; $remaining > 0 && $i < 3660; $i++) {
+            $cursor = $cursor->modify('+1 day');
+            if ($this->isBusinessDay($cursor->format('Y-m-d'))) {
+                $remaining--;
+            }
+        }
+
+        return $cursor->format('Y-m-d');
+    }
+
     private function holidays(): array
     {
         if ($this->holidayCache !== null) {

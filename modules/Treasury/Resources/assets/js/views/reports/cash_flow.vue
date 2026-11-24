@@ -162,6 +162,14 @@
                     <strong>Tipo de cambio incompleto:</strong> Algunas operaciones en dólares (USD) no pudieron convertirse a soles (PEN) por falta de tipo de cambio registrado.
                 </div>
 
+                <!-- Shared account opening note (non-admin scoped view) -->
+                <div v-if="report.opening_notes && report.opening_notes.length" class="alert alert-secondary mb-3" role="alert">
+                    <div v-for="note in report.opening_notes" :key="note">{{ note }}.</div>
+                    <div v-if="Number(report.out_of_scope_opening) !== 0" class="small mt-1">
+                        Saldo anterior fuera de su sede: {{ signedMoney(report.out_of_scope_opening, report.currency_type_id) }}
+                    </div>
+                </div>
+
                 <!-- Negative projection alert -->
                 <div v-if="activeMode === 'projected' && report.has_negative_projection" class="alert alert-danger mb-3" role="alert">
                     <strong>Alerta de liquidez negativa proyectada:</strong>

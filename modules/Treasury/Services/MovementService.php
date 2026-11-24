@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Treasury\Models\DetractionRecord;
 use Modules\Treasury\Models\TreasuryConcept;
+use Modules\Treasury\Models\TreasuryInstrument;
 use Modules\Treasury\Models\TreasuryMovement;
 use Modules\Treasury\Models\TreasuryWithholding;
 use Modules\Treasury\Support\Money;
@@ -398,7 +399,7 @@ class MovementService
     /**
      * Atomically voids a movement (or full transfer group) and all active linked ITF/bank_fee children (D6, D10).
      */
-    public function void(int $movementId, string $reason, int $userId, bool $allowDetractionLinked = false): array
+    public function void(int $movementId, string $reason, int $userId, bool $allowDetractionLinked = false, bool $allowInstrumentLinked = false): array
     {
         $cleanReason = trim($reason);
         if (mb_strlen($cleanReason) < 3) {
@@ -413,7 +414,7 @@ class MovementService
             ]);
         }
 
-        return DB::connection('tenant')->transaction(function () use ($movementId, $cleanReason, $userId, $allowDetractionLinked) {
+        return DB::connection('tenant')->transaction(function () use ($movementId, $cleanReason, $userId, $allowDetractionLinked, $allowInstrumentLinked) {
             // Global lock order (shared with the bank reconciliation): destination account/cash FIRST (sorted), then
             // the movement rows. Learn the destinations with an unlocked read, lock them, then lock the movements
             // and verify the destinations did not change in between.
@@ -437,6 +438,14 @@ class MovementService
             if (!$allowDetractionLinked && $target->source_type === DetractionRecord::class) {
                 throw ValidationException::withMessages([
                     'movement' => ['Este movimiento pertenece al control de detracciones. Revierta el depósito desde Detracciones.'],
+                ]);
+            }
+
+            // Cheque / bill movements are owned by their instrument: the state and the money must change together,
+            // so they can only be voided from the instrument flow (which passes the flag).
+            if (!$allowInstrumentLinked && $target->source_type === TreasuryInstrument::class) {
+                throw ValidationException::withMessages([
+                    'movement' => ['Este movimiento pertenece a un cheque o letra. Revierta la operación desde Cheques y letras.'],
                 ]);
             }
 
@@ -791,6 +800,138 @@ class MovementService
 
             return ['out' => $out, 'in' => $in, 'transfer_group' => $group];
         });
+    }
+
+    /**
+     * Registers the money effect of a cheque / bill (Phase 7) as a plain `income` / `expense` movement on a bank
+     * account, owned by the instrument (source_type = TreasuryInstrument). Only InstrumentService calls this, inside
+     * its own transaction; the movement can only be voided through the instrument flow (see void()).
+     *
+     * @param array{instrument_id: int, direction: int, bank_account_id: int, date: string, amount: float|string,
+     *     currency_type_id?: ?string, establishment_id?: int, operation_number?: ?string, sunat_payment_code?: ?string,
+     *     counterparty_person_id?: ?int, counterparty_document?: ?string, counterparty_name?: ?string,
+     *     description?: ?string, concept_code?: ?string} $payload
+     */
+    public function createInstrumentMovement(array $payload, int $userId): TreasuryMovement
+    {
+        if ($userId <= 0) {
+            throw ValidationException::withMessages([
+                'user_id' => ['El usuario que registra el movimiento es obligatorio.'],
+            ]);
+        }
+
+        $direction = (int) ($payload['direction'] ?? 0);
+        if (!in_array($direction, [TreasuryMovement::DIRECTION_INFLOW, TreasuryMovement::DIRECTION_OUTFLOW], true)) {
+            throw ValidationException::withMessages([
+                'direction' => ['La dirección del movimiento no es válida.'],
+            ]);
+        }
+
+        $date = $this->validateDate((string) ($payload['date'] ?? ''));
+        $amount = $this->validateAmount($payload['amount'] ?? null, 'amount');
+        $accountId = (int) ($payload['bank_account_id'] ?? 0);
+        if ($accountId <= 0) {
+            throw ValidationException::withMessages([
+                'bank_account_id' => ['Seleccione la cuenta bancaria del cobro o pago.'],
+            ]);
+        }
+
+        /** @var BankAccount $account */
+        $account = $this->lockAndValidateDestination(BankAccount::class, $accountId, 'bank_account_id', $date);
+
+        // SPOT funds can only pay SUNAT taxes: never a cheque or bill.
+        if (($account->account_type ?? null) === 'detraction_bn') {
+            throw ValidationException::withMessages([
+                'bank_account_id' => ['La cuenta de detracciones del Banco de la Nación no puede usarse para cheques ni letras.'],
+            ]);
+        }
+
+        $currency = strtoupper(trim((string) ($payload['currency_type_id'] ?? $account->currency_type_id)));
+        if ($currency !== strtoupper((string) $account->currency_type_id)) {
+            throw ValidationException::withMessages([
+                'bank_account_id' => [
+                    "La moneda del documento ({$currency}) debe coincidir con la moneda de la cuenta ({$account->currency_type_id}).",
+                ],
+            ]);
+        }
+
+        $establishmentId = !empty($account->establishment_id)
+            ? (int) $account->establishment_id
+            : (int) ($payload['establishment_id'] ?? 0);
+        if ($establishmentId <= 0) {
+            throw ValidationException::withMessages([
+                'establishment_id' => ['La sede es obligatoria para registrar un movimiento de tesorería.'],
+            ]);
+        }
+
+        $fx = $this->resolveExchangeRate($currency, $date, $direction, $payload);
+        $amountPen = $currency === 'PEN' ? $amount : Money::round($amount * $fx['used']);
+
+        // The concept is resolved by its stable `code` (never by the editable description) and its absence is an
+        // error: silently dropping it would leave the movement without concept in the books.
+        $conceptCode = $this->nullableTrim($payload['concept_code'] ?? null);
+        $concept = null;
+        if ($conceptCode !== null) {
+            $concept = TreasuryConcept::query()
+                ->where('type', $direction === TreasuryMovement::DIRECTION_INFLOW ? 'income' : 'expense')
+                ->where('code', $conceptCode)
+                ->where('active', true)
+                ->first();
+            if (!$concept) {
+                throw ValidationException::withMessages([
+                    'concept' => ["No se encontró el concepto de tesorería activo «{$conceptCode}». Ejecute las migraciones de Tesorería o reactive el concepto."],
+                ]);
+            }
+        }
+
+        $sunatCode = $this->nullableTrim($payload['sunat_payment_code'] ?? null);
+        if ($sunatCode !== null && !array_key_exists($sunatCode, BancarizationChecker::SUNAT_PAYMENT_CODES)) {
+            $sunatCode = null;
+        }
+
+        $operationNumber = $this->operationNumber($payload['operation_number'] ?? null);
+        $description = $this->nullableTrim($payload['description'] ?? null)
+            ?: ($direction === TreasuryMovement::DIRECTION_INFLOW ? 'Cobro de cheque o letra' : 'Pago de cheque o letra');
+
+        $movement = TreasuryMovement::create([
+            'establishment_id' => $establishmentId,
+            'date' => $date,
+            'kind' => $direction === TreasuryMovement::DIRECTION_INFLOW ? 'income' : 'expense',
+            'direction' => $direction,
+            'destination_type' => BankAccount::class,
+            'destination_id' => $account->getKey(),
+            'currency_type_id' => $currency,
+            'amount' => $amount,
+            'exchange_rate_purchase' => $fx['purchase'],
+            'exchange_rate_sale' => $fx['sale'],
+            'exchange_rate_used' => $fx['used'],
+            'amount_pen' => $amountPen,
+            'sunat_payment_code' => $sunatCode,
+            'operation_number' => $operationNumber,
+            'counterparty_person_id' => !empty($payload['counterparty_person_id']) ? (int) $payload['counterparty_person_id'] : null,
+            'counterparty_document' => $this->nullableTrim($payload['counterparty_document'] ?? null),
+            'counterparty_name' => $this->nullableTrim($payload['counterparty_name'] ?? null),
+            'treasury_concept_id' => $concept ? $concept->id : null,
+            'description' => mb_substr($description, 0, 500),
+            'source_type' => TreasuryInstrument::class,
+            'source_id' => (int) ($payload['instrument_id'] ?? 0) ?: null,
+            'state' => TreasuryMovement::STATE_ACTIVE,
+            'user_id' => $userId,
+        ]);
+
+        if ($sunatCode !== null && $operationNumber !== null) {
+            $this->paymentEvidenceService->upsertForModel($movement, [
+                'sunat_payment_code' => $sunatCode,
+                'operation_number' => $operationNumber,
+                'bank_id' => $account->bank_id,
+                'bank_account_id' => $account->id,
+                'operation_date' => $date,
+                'payer_or_beneficiary_document' => $movement->counterparty_document,
+                'payer_or_beneficiary_name' => $movement->counterparty_name,
+            ]);
+        }
+
+        return $movement;
     }
 
     /**

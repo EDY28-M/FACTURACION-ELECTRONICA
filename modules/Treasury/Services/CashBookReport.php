@@ -26,11 +26,11 @@ use Modules\Treasury\Support\Money;
  * - Formato 1.1: Detalle de los movimientos del efectivo (Cash / PEN)
  * - Formato 1.2: Detalle de los movimientos de la cuenta corriente (BankAccount / account currency)
  *
- * PLE TXT (010100/010200) export is intentionally NOT implemented here (deferred pending RS 286-2009 Anexo 2).
+ * The PLE TXT export (010100/010200) lives in PleCashBookExporter and consumes these rows.
  *
  * The `correlative` column is a per-report sequence (000001..N, ordered by date/origin/id) generated each time the
  * report is built. It is NOT a stable CUO: re-running the report after new movements are recorded can renumber
- * rows, and it must not be used as a persistent accounting key until the PLE export defines real CUOs.
+ * rows. The PLE export derives its persistent CUO from `source_type` + `source_id` instead.
  * Never calls auth() internally; callers must pass explicit $scope.
  */
 class CashBookReport
@@ -153,6 +153,14 @@ class CashBookReport
                 'credit' => $credit,
                 'running_balance' => $running,
                 'origin' => $entry['origin'],
+                // Stable identity of the source row (used by the PLE export to derive a persistent CUO) and the
+                // structured supporting document (PLE 1.1 fields 8-10).
+                'source_type' => $entry['payable_type'] ?? null,
+                'source_id' => $entry['payable_id'] ?? null,
+                'doc_type_code' => $entry['doc_type_code'] ?? null,
+                'doc_series' => $entry['doc_series'] ?? null,
+                'doc_number' => $entry['doc_number'] ?? null,
+                'document_number' => $entry['document_number'] ?? null,
             ];
         }
 
@@ -267,6 +275,7 @@ class CashBookReport
         // Batch-load PaymentEvidence and PaymentMethodType sunat_codes (zero N+1)
         $evidenceMap = $this->loadEvidenceBatch($rawEntries);
         $paymentMethodSunatMap = $this->loadPaymentMethodSunatMap();
+        $identityMap = $this->loadPersonIdentityMap(array_values(array_filter(array_unique(array_column($rawEntries, 'person_id')))));
 
         $rows = [];
         $running = $openingBalance;
@@ -331,6 +340,11 @@ class CashBookReport
                 'credit' => $credit,
                 'running_balance' => $running,
                 'origin' => $entry['origin'],
+                // Stable identity of the source row (PLE CUO) and counterparty identity document (PLE 1.2 fields 9-10).
+                'source_type' => $entry['payable_type'] ?? null,
+                'source_id' => $entry['payable_id'] ?? null,
+                'counterparty_doc_type' => !empty($entry['person_id']) ? ($identityMap[(int) $entry['person_id']]['type'] ?? null) : null,
+                'counterparty_doc_number' => !empty($entry['person_id']) ? ($identityMap[(int) $entry['person_id']]['number'] ?? null) : null,
             ];
         }
 
@@ -439,7 +453,7 @@ class CashBookReport
             [
                 'class' => DocumentPayment::class, 'pay' => 'document_payments', 'fk' => 'document_id',
                 'parent' => 'documents', 'direction' => 1, 'has_state' => true, 'has_changed' => false,
-                'has_currency' => true, 'person_col' => 'customer_id', 'number_mode' => 'series_number',
+                'has_currency' => true, 'person_col' => 'customer_id', 'number_mode' => 'series_number', 'doc_type_col' => 'document_type_id',
                 'label' => 'Cobro comprobante', 'pcge' => '1212',
             ],
             [
@@ -475,7 +489,7 @@ class CashBookReport
             [
                 'class' => PurchasePayment::class, 'pay' => 'purchase_payments', 'fk' => 'purchase_id',
                 'parent' => 'purchases', 'direction' => -1, 'has_state' => true, 'has_changed' => false,
-                'has_currency' => true, 'person_col' => 'supplier_id', 'number_mode' => 'series_number',
+                'has_currency' => true, 'person_col' => 'supplier_id', 'number_mode' => 'series_number', 'doc_type_col' => 'document_type_id',
                 'label' => 'Pago compra', 'pcge' => '4212',
             ],
             [
@@ -555,6 +569,10 @@ class CashBookReport
                 $select[] = 'par.' . $spec['customer_text_col'] . ' as counterparty_text';
             }
 
+            if (!empty($spec['doc_type_col']) && $this->hasColumn($spec['parent'], $spec['doc_type_col'])) {
+                $select[] = 'par.' . $spec['doc_type_col'] . ' as doc_type_code';
+            }
+
             if ($spec['number_mode'] === 'series_number') {
                 $select[] = 'par.series';
                 $select[] = 'par.number';
@@ -612,6 +630,13 @@ class CashBookReport
                     'document_number' => $docNumber !== '' ? $docNumber : null,
                     'person_id' => $personId,
                     'counterparty' => isset($row->counterparty_text) ? (string) $row->counterparty_text : null,
+                    'doc_type_code' => isset($row->doc_type_code) && $row->doc_type_code !== '' ? (string) $row->doc_type_code : null,
+                    'doc_series' => in_array($spec['number_mode'], ['series_number', 'sale_note'], true) && isset($row->series) && $row->series !== ''
+                        ? (string) $row->series
+                        : null,
+                    'doc_number' => in_array($spec['number_mode'], ['series_number', 'sale_note', 'number'], true) && isset($row->number) && $row->number !== ''
+                        ? (string) $row->number
+                        : null,
                     'origin' => 'global_payment',
                 ];
             }
@@ -1066,6 +1091,30 @@ class CashBookReport
         return $map;
     }
 
+    /**
+     * Identity document (SUNAT catalog 06 type + number) of the given persons, in batches.
+     *
+     * @return array<int, array{type: ?string, number: ?string}>
+     */
+    private function loadPersonIdentityMap(array $ids): array
+    {
+        if (empty($ids) || !$this->hasTable('persons') || !$this->hasColumn('persons', 'identity_document_type_id') || !$this->hasColumn('persons', 'number')) {
+            return [];
+        }
+
+        $map = [];
+        foreach (array_chunk(array_values(array_unique($ids)), 500) as $chunk) {
+            foreach (DB::connection('tenant')->table('persons')->whereIn('id', $chunk)->get(['id', 'identity_document_type_id', 'number']) as $row) {
+                $map[(int) $row->id] = [
+                    'type' => $row->identity_document_type_id !== null ? (string) $row->identity_document_type_id : null,
+                    'number' => $row->number !== null ? (string) $row->number : null,
+                ];
+            }
+        }
+
+        return $map;
+    }
+
     private function loadCompanyMeta(): array
     {
         if (!$this->hasTable('companies')) {
@@ -1180,20 +1229,20 @@ class CashBookReport
         if (!Model::getConnectionResolver()) {
             return false;
         }
-        if (array_key_exists($table, $this->tableExistsCache)) {
-            return $this->tableExistsCache[$table];
+        if (array_key_exists(\Modules\Treasury\Support\TenantCacheKey::prefix() . $table, $this->tableExistsCache)) {
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table];
         }
 
         try {
-            return $this->tableExistsCache[$table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table] = DB::connection('tenant')->getSchemaBuilder()->hasTable($table);
         } catch (\Throwable $e) {
-            return $this->tableExistsCache[$table] = false;
+            return $this->tableExistsCache[\Modules\Treasury\Support\TenantCacheKey::prefix() . $table] = false;
         }
     }
 
     private function hasColumn(string $table, string $column): bool
     {
-        $key = $table . '.' . $column;
+        $key = \Modules\Treasury\Support\TenantCacheKey::prefix() . $table . '.' . $column;
         if (array_key_exists($key, $this->columnExistsCache)) {
             return $this->columnExistsCache[$key];
         }

@@ -83,4 +83,20 @@ class BusinessDayCalculatorTest extends TestCase
         // A payment in the same month as the entry is earlier than the deadline.
         $this->assertSame('2026-10-25', $service->computePayableDueDate('2026-10-20', '2026-10-25'));
     }
+
+    public function test_add_business_days_counts_after_the_start_date_skipping_weekends_and_holidays(): void
+    {
+        $calc = new BusinessDayCalculator(['2026-12-08']);
+
+        // Friday + 1 business day = Monday; the start date itself is never counted.
+        $this->assertSame('2026-11-30', $calc->addBusinessDays('2026-11-27', 1));
+        $this->assertSame('2026-11-27', $calc->addBusinessDays('2026-11-27', 0));
+        // A Saturday start still counts from the next business day.
+        $this->assertSame('2026-11-30', $calc->addBusinessDays('2026-11-28', 1));
+        // 15 business days after 2026-11-27: 18 Dec without holidays, 21 Dec with the 8 Dec holiday.
+        $this->assertSame('2026-12-21', $calc->addBusinessDays('2026-11-27', 15));
+        $this->assertSame('2026-12-18', (new BusinessDayCalculator([]))->addBusinessDays('2026-11-27', 15));
+        // Year rollover.
+        $this->assertSame('2027-01-04', (new BusinessDayCalculator([]))->addBusinessDays('2026-12-30', 3));
+    }
 }
