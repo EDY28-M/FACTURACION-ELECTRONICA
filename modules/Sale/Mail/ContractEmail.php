@@ -31,7 +31,8 @@ class ContractEmail extends Mailable
     {
         $pdf = $this->getStorage($this->contract->filename, 'contract');
         return $this->subject('Envio de contrato')
-                    ->from(config('mail.username'), 'Contrato')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Contrato'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('sale::contracts.templates.email')
                     ->attachData($pdf, $this->contract->filename.'.pdf');
     }

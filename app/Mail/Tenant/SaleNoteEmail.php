@@ -32,7 +32,8 @@ class SaleNoteEmail extends Mailable
         $pdf = $this->getStorage($this->document->filename, 'sale_note');
 
         return $this->subject('Envio de Nota de Venta')
-                    ->from(config('mail.username'), 'Nota de Venta')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Nota de Venta'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('tenant.templates.email.sale_note')
                     ->attachData($pdf, $this->document->filename.'.pdf');
     }

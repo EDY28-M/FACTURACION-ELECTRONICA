@@ -29,7 +29,8 @@ class PurchaseOrderEmail extends Mailable
     {
         $pdf = $this->getStorage($this->purchase_order->filename, 'purchase_order');
         return $this->subject('Envio de Orden de compra')
-                    ->from(config('mail.username'), 'Orden de compra')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Orden de compra'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('purchase::email.purchase_order')
                     ->attachData($pdf, $this->purchase_order->filename.'.pdf');
     }

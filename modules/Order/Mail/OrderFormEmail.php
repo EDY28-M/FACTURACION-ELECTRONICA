@@ -31,7 +31,8 @@ class OrderFormEmail extends Mailable
     {
         $pdf = $this->getStorage($this->order_form->filename, 'order_form');
         return $this->subject('Envio de orden de pedido')
-                    ->from(config('mail.username'), 'Orden de pedido')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Orden de pedido'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('order::order_forms.templates.email')
                     ->attachData($pdf, $this->order_form->filename.'.pdf');
     }

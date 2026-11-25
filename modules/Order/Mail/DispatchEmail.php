@@ -29,7 +29,8 @@ class DispatchEmail extends Mailable
     {
         $pdf = $this->getStorage($this->dispatch->filename, 'pdf');
         return $this->subject('Envio de guía')
-                    ->from(config('mail.username'), 'Guía')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Guía'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('order::dispatches.templates.email')
                     ->attachData($pdf, $this->dispatch->filename.'.pdf');
     }

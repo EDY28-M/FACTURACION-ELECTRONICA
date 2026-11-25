@@ -30,7 +30,8 @@ class CashEmail extends Mailable
         // $pdf = $this->getStorage($this->document->filename, 'sale_note');
 
         return $this->subject('Envio de Reporte de caja')
-                    ->from(config('mail.username'), 'Reporte de caja')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Reporte de caja'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('pos::cash.email')
                     ->attachData($this->pdf, 'reporte_caja'.'.pdf');
     }

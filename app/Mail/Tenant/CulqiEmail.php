@@ -33,12 +33,14 @@ class CulqiEmail extends Mailable
                 : 'Recibimos su pedido '.($this->document->order_number ?? '');
 
             return $this->subject(trim($subject))
-                        ->from(config('mail.username'), 'Tienda virtual')
+                        ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Tienda virtual'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                         ->view('tenant.templates.email.store_order');
         }
 
         return $this->subject('Constancia - Nuevo pago desde Ecommerce')
-                    ->from(config('mail.username'), 'Constancia de Pago')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Constancia de Pago'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('tenant.templates.email.culqui_payment');
     }
 }

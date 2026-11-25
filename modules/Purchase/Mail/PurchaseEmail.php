@@ -32,7 +32,8 @@ class PurchaseEmail extends Mailable
         $pdf = $this->getStorage($this->purchase->filename, 'purchase');
 
         return $this->subject('Envio de Compra')
-                    ->from(config('mail.username'), 'Compra')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Compra'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('purchase::email.purchase')
                     ->attachData($pdf, $this->purchase->filename.'.pdf');
     }

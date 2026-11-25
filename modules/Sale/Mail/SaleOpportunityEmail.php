@@ -31,7 +31,8 @@ class SaleOpportunityEmail extends Mailable
     {
         $pdf = $this->getStorage($this->sale_opportunity->filename, 'sale_opportunity');
         return $this->subject('Envio de oportudinad de venta')
-                    ->from(config('mail.username'), 'O. Venta')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('O. Venta'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('sale::sale_opportunities.templates.email')
                     ->attachData($pdf, $this->sale_opportunity->filename.'.pdf');
     }

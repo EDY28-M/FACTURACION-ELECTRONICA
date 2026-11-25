@@ -31,7 +31,8 @@ class PurchaseQuotationEmail extends Mailable
     {
         $pdf = $this->getStorage($this->purchase_quotation->filename, 'purchase_quotation');
         return $this->subject('Envio de Cotización de compra')
-                    ->from(config('mail.username'), 'Cotización de compra')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Cotización de compra'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('purchase::email.purchase_quotation')
                     ->attachData($pdf, $this->purchase_quotation->filename.'.pdf');
     }

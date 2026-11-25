@@ -31,7 +31,8 @@ class OrderNoteEmail extends Mailable
     {
         $pdf = $this->getStorage($this->order_note->filename, 'order_note');
         return $this->subject('Envio de pedido')
-                    ->from(config('mail.username'), 'Pedido')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Pedido'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('order::order_notes.templates.email')
                     ->attachData($pdf, $this->order_note->filename.'.pdf');
     }

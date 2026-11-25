@@ -31,7 +31,8 @@ class QuotationEmail extends Mailable
     {
         $pdf = $this->getStorage($this->quotation->filename, 'quotation');
         return $this->subject('Envio de Cotización')
-                    ->from(config('mail.username'), 'Cotización')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Cotización'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('tenant.templates.email.quotation')
                     ->attachData($pdf, $this->quotation->filename.'.pdf');
     }

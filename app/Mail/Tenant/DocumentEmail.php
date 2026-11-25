@@ -36,7 +36,8 @@ class DocumentEmail extends Mailable
         $image_detraction = ($this->document->detraction) ? (($this->document->detraction->image_pay_constancy) ? storage_path('app'.DIRECTORY_SEPARATOR.'public'.DIRECTORY_SEPARATOR.'uploads'.DIRECTORY_SEPARATOR.'image_detractions'.DIRECTORY_SEPARATOR.$this->document->detraction->image_pay_constancy):false):false;
         
         $email = $this->subject('Envio de Comprobante de Pago Electrónico')
-                    ->from(config('mail.username'), 'Comprobante electrónico')
+                    ->from(\App\Support\MailBrand::address(), \App\Support\MailBrand::name('Comprobante electrónico'))
+                    ->when(\App\Support\MailBrand::replyTo(), function ($mail, $reply) { $mail->replyTo($reply); })
                     ->view('tenant.templates.email.document')
                     ->attachData($pdf, $this->document->filename.'.pdf')
                     ->attachData($xml, $this->document->filename.'.xml');
