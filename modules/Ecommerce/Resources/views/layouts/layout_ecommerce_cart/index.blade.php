@@ -7,17 +7,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ $storeName ?? 'Tienda virtual' }} — Carrito</title>
+    <title>{{ $storeName ?? 'Tienda virtual' }}</title>
 
-    <meta name="description" content="{{ ($storeName ?? 'Tienda virtual').' - carrito de compras' }}">
+    <meta name="description" content="{{ ($storeName ?? 'Tienda virtual').' - tienda virtual' }}">
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ asset('porto-ecommerce/assets/images/icons/favicon.ico') }}">
-
-    <!-- Clean Modern Typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Plugins CSS File -->
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/bootstrap.min.css') }}">
@@ -25,7 +20,6 @@
     <!-- Main CSS File -->
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/style.min.css') }}">
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/custom.css') }}">
-    <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/storefront-modern.css') }}?v=20261125">
 
     <!-- Fontawesome -->
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/font-awesome/css/fontawesome-all.min.css') }}">
@@ -34,35 +28,41 @@
         <link rel="stylesheet" href="{{ asset('theme/custom_styles_ecommerce.css') }}" />
     @endif
 </head>
-<body class="sf-body">
+<body>
     <div class="page-wrapper">
         @include('ecommerce::layouts.partials_ecommerce.header')
-
-        <main class="main sf-cart-shell">
-            <div class="sf-container">
-                <nav aria-label="Breadcrumb">
-                    <ol class="sf-breadcrumb">
-                        <li><a href="{{ route('tenant.ecommerce.index') }}">Inicio</a></li>
-                        <li class="sf-breadcrumb-sep">&rsaquo;</li>
-                        <li class="sf-breadcrumb-current">Carrito de compras</li>
+        @include('ecommerce::layouts.partials_ecommerce.header_bottom_sticky')
+        <main class="main">
+            <nav aria-label="breadcrumb" class="breadcrumb-nav">
+                <div class="container">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{url('ecommerce')}}"><i class="icon-home"></i></a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Carrito de compras</li>
                     </ol>
-                </nav>
+                </div><!-- End .container -->
+            </nav>
 
-                @yield('content')
-            </div>
-        </main>
+            <div class="container">
+                 @yield('content')
+            </div><!-- End .container -->
 
-        <footer class="footer sf-footer" id="contacto-tienda">
+            <div class="mb-6"></div><!-- margin -->
+        </main><!-- End .main -->
+
+        <footer class="footer">
             @include('ecommerce::layouts.partials_ecommerce.footer')
-        </footer>
-    </div>
+        </footer><!-- End .footer -->
+    </div><!-- End .page-wrapper -->
 
-    <div class="mobile-menu-overlay"></div>
+    <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
+
     <div class="mobile-menu-container">
         @include('ecommerce::layouts.partials_ecommerce.mobile_menu')
-    </div>
+    </div><!-- End .mobile-menu-container -->
 
-    <a id="scroll-top" href="#top" title="Subir" role="button"><i class="icon-angle-up"></i></a>
+
+
+    <a id="scroll-top" href="#top" title="Top" role="button"><i class="icon-angle-up"></i></a>
 
      <!-- Plugins JS File -->
     <script src="{{ asset('porto-ecommerce/assets/js/jquery.min.js') }}"></script>

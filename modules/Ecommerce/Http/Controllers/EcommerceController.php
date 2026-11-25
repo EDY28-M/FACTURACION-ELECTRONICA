@@ -26,10 +26,7 @@ use App\Services\Ecommerce\StoreItemPresenter;
 use App\Services\Ecommerce\CheckoutRules;
 use App\Services\Ecommerce\SafeMail;
 use Exception;
-use Illuminate\Support\Facades\DB;
 use Modules\Inventory\Models\InventoryConfiguration;
-use Modules\Item\Models\Brand;
-use Modules\Item\Models\Category;
 
 class EcommerceController extends Controller
 {
@@ -54,7 +51,7 @@ class EcommerceController extends Controller
     }
 
     /**
-     * Narrows a storefront query by a free-text term (name, description, internal code, category or brand).
+     * Narrows a storefront query by a free-text term (name, description or internal code).
      */
     private function applySearch($query, ?string $term)
     {
@@ -65,205 +62,44 @@ class EcommerceController extends Controller
         $like = '%'.addcslashes($term, '\\%_').'%';
 
         return $query->where(function ($q) use ($like) {
-            $q->where('items.description', 'like', $like)
-              ->orWhere('items.name', 'like', $like)
-              ->orWhere('items.internal_id', 'like', $like)
-              ->orWhereHas('brand', function ($b) use ($like) {
-                  $b->where('name', 'like', $like);
-              })
-              ->orWhereHas('category', function ($c) use ($like) {
-                  $c->where('name', 'like', $like);
-              });
+            $q->where('description', 'like', $like)
+              ->orWhere('name', 'like', $like)
+              ->orWhere('internal_id', 'like', $like);
         });
     }
 
     public function index(Request $request)
     {
-        return $this->renderCatalog($request, null);
+      $dataPaginate = $this->applySearch($this->storeItems()->where('internal_id', '!=', null), $request->query('search'))
+        ->paginate(15)
+        ->appends($request->filled('search') ? ['search' => mb_substr((string) $request->query('search'), 0, 100)] : []);
+      $configuration = InventoryConfiguration::first();
+      return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => optional($configuration)->stock_control]);
     }
 
     public function category(Request $request)
     {
-        // Unknown or deleted categories do not exist for the buyer (Tag hides status = 0).
-        abort_unless(is_numeric($request->category) && Tag::where('id', $request->category)->exists(), 404);
+      // Unknown or deleted categories do not exist for the buyer (Tag hides status = 0).
+      abort_unless(is_numeric($request->category) && Tag::where('id', $request->category)->exists(), 404);
 
-        return $this->renderCatalog($request, (int) $request->category);
-    }
-
-    private function renderCatalog(Request $request, ?int $activeTagId)
-    {
-        $search = trim(mb_substr((string) $request->query('search', ''), 0, 100));
-        $activeCategoryId = $request->filled('cat') && is_numeric($request->query('cat'))
-            ? (int) $request->query('cat')
-            : null;
-
-        $rawBrands = $request->query('brand', []);
-        if (!is_array($rawBrands)) {
-            $rawBrands = [$rawBrands];
-        }
-        $activeBrands = array_values(array_unique(array_filter(array_map(function ($v) {
-            return is_numeric($v) ? (int) $v : null;
-        }, $rawBrands))));
-
-        $allowedSorts = ['relevance', 'newest', 'price_asc', 'price_desc', 'name_asc'];
-        $activeSort = in_array((string) $request->query('sort', 'relevance'), $allowedSorts, true)
-            ? (string) $request->query('sort', 'relevance')
-            : 'relevance';
-
-        $baseFilter = function ($q) {
-            $q->where('items.apply_store', 1)
-              ->where('items.active', 1)
-              ->whereNotNull('items.internal_id');
-        };
-
-        $query = Item::without(['item_type', 'unit_type', 'item_unit_types'])
-            ->with(['brand:id,name', 'category:id,name', 'currency_type', 'warehouses', 'tags'])
-            ->where($baseFilter);
-
-        if ($activeTagId !== null) {
-            $query->whereExists(function ($sub) use ($activeTagId) {
-                $sub->select(DB::raw(1))
-                    ->from('item_tags as it')
-                    ->whereColumn('it.item_id', 'items.id')
-                    ->where('it.tag_id', $activeTagId);
-            });
-        }
-
-        if ($activeCategoryId !== null) {
-            $query->where('items.category_id', $activeCategoryId);
-        }
-
-        if (!empty($activeBrands)) {
-            $query->whereIn('items.brand_id', $activeBrands);
-        }
-
-        $this->applySearch($query, $search);
-
-        switch ($activeSort) {
-            case 'price_asc':
-                $query->orderBy('items.sale_unit_price', 'asc')->orderBy('items.id', 'desc');
-                break;
-            case 'price_desc':
-                $query->orderBy('items.sale_unit_price', 'desc')->orderBy('items.id', 'desc');
-                break;
-            case 'name_asc':
-                $query->orderBy('items.description', 'asc');
-                break;
-            case 'newest':
-                $query->orderBy('items.id', 'desc');
-                break;
-            default:
-                $query->orderBy('items.id', 'desc');
-                break;
-        }
-
-        $appendParams = [];
-        if ($search !== '') {
-            $appendParams['search'] = $search;
-        }
-        if ($activeCategoryId !== null) {
-            $appendParams['cat'] = $activeCategoryId;
-        }
-        if (!empty($activeBrands)) {
-            $appendParams['brand'] = $activeBrands;
-        }
-        if ($activeSort !== 'relevance') {
-            $appendParams['sort'] = $activeSort;
-        }
-
-        $dataPaginate = $query->paginate(12)->appends($appendParams);
-
-        $db = DB::connection('tenant');
-
-        $totalCatalogCount = (int) $db->table('items')
-            ->where('apply_store', 1)
-            ->where('active', 1)
-            ->whereNotNull('internal_id')
-            ->count();
-
-        $filterCategories = $db->table('categories as c')
-            ->join('items as i', 'i.category_id', '=', 'c.id')
-            ->where('i.apply_store', 1)
-            ->where('i.active', 1)
-            ->whereNotNull('i.internal_id')
-            ->select('c.id', 'c.name', DB::raw('COUNT(i.id) as products_count'))
-            ->groupBy('c.id', 'c.name')
-            ->orderBy('c.name')
-            ->get();
-
-        $filterBrands = $db->table('brands as b')
-            ->join('items as i', 'i.brand_id', '=', 'b.id')
-            ->where('i.apply_store', 1)
-            ->where('i.active', 1)
-            ->whereNotNull('i.internal_id')
-            ->select('b.id', 'b.name', DB::raw('COUNT(i.id) as products_count'))
-            ->groupBy('b.id', 'b.name')
-            ->orderBy('b.name')
-            ->get();
-
-        $filterTags = $db->table('tags as t')
-            ->join('item_tags as it', 'it.tag_id', '=', 't.id')
-            ->join('items as i', 'i.id', '=', 'it.item_id')
-            ->where('t.status', 1)
-            ->where('i.apply_store', 1)
-            ->where('i.active', 1)
-            ->whereNotNull('i.internal_id')
-            ->select('t.id', 't.name', DB::raw('COUNT(DISTINCT i.id) as products_count'))
-            ->groupBy('t.id', 't.name')
-            ->orderBy('t.name')
-            ->get();
-
-        $activeCategoryName = null;
-        if ($activeCategoryId !== null) {
-            $matchedCat = $filterCategories->firstWhere('id', $activeCategoryId);
-            $activeCategoryName = $matchedCat ? $matchedCat->name : optional(Category::find($activeCategoryId))->name;
-        } elseif ($activeTagId !== null) {
-            $matchedTag = $filterTags->firstWhere('id', $activeTagId);
-            $activeCategoryName = $matchedTag ? $matchedTag->name : optional(Tag::find($activeTagId))->name;
-        }
-
+      $dataPaginate = Item::select('i.*')
+        ->where([['i.apply_store', 1], ['i.active', 1], ['i.internal_id','!=', null], ['it.tag_id', $request->category]])
+        ->from('items as i')
+        ->join('item_tags as it', 'it.item_id','i.id')->paginate(15);
         $configuration = InventoryConfiguration::first();
-
-        return view('ecommerce::index', [
-            'dataPaginate' => $dataPaginate,
-            'configuration' => optional($configuration)->stock_control,
-            'totalCatalogCount' => $totalCatalogCount,
-            'filterCategories' => $filterCategories,
-            'filterBrands' => $filterBrands,
-            'filterTags' => $filterTags,
-            'activeCategoryId' => $activeCategoryId,
-            'activeTagId' => $activeTagId,
-            'activeCategoryName' => $activeCategoryName,
-            'activeBrands' => $activeBrands,
-            'activeSort' => $activeSort,
-            'activeSearch' => $search,
-        ]);
+      return view('ecommerce::index', ['dataPaginate' => $dataPaginate, 'configuration' => optional($configuration)->stock_control]);
     }
 
     public function item($id)
     {
-        $row = $this->storeItems()->with(['brand:id,name', 'category:id,name'])->findOrFail($id);
+        $row = $this->storeItems()->findOrFail($id);
         $price = StoreItemPresenter::price($row);
-        $stockControl = (bool) optional(InventoryConfiguration::first())->stock_control;
-        $outOfStock = false;
-        if ($stockControl) {
-            $totalStock = 0;
-            foreach ($row->warehouses as $w) {
-                $totalStock += (float) $w->stock;
-            }
-            $outOfStock = $totalStock <= 0;
-        }
 
         $record = (object) array_merge(StoreItemPresenter::present($row), [
             'technical_specifications' => $row->technical_specifications,
             'images' => $row->images,
             'attributes' => $row->attributes ? $row->attributes : [],
             'tags' => $row->tags->pluck('tag_id')->toArray(),
-            'category_id' => $row->category_id,
-            'category_name' => optional($row->category)->name,
-            'brand_id' => $row->brand_id,
-            'brand_name' => optional($row->brand)->name,
-            'out_of_stock' => $outOfStock,
         ]);
         // Only the whitelisted fields are ever serialized into the page (data-product).
         $record->cart = StoreItemPresenter::present($row);

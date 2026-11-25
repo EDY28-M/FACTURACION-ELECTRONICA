@@ -22,24 +22,6 @@ class InformationContactViewComposer
         $view->cardEnabled = (bool) $information->token_public_culqui && (bool) $information->token_private_culqui;
         $view->storeName = $this->storeName($company);
         $view->storeLogoUrl = $this->storeLogoUrl($information, $company);
-        $view->whatsappNumber = self::normalizeWhatsappNumber($information->information_contact_phone);
-        $view->whatsappUrl = $view->whatsappNumber ? 'https://wa.me/'.$view->whatsappNumber : null;
-    }
-
-    /**
-     * Normalizes a store contact phone into digits suitable for wa.me links (Peru +51 default for 9-digit mobiles).
-     */
-    public static function normalizeWhatsappNumber($value): ?string
-    {
-        $digits = preg_replace('/\D+/', '', (string) $value);
-        if ($digits === '' || strlen($digits) < 7 || strlen($digits) > 15) {
-            return null;
-        }
-        if (strlen($digits) === 9 && $digits[0] === '9') {
-            return '51'.$digits;
-        }
-
-        return $digits;
     }
 
     /**
