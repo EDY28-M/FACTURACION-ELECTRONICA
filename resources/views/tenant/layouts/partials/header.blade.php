@@ -89,7 +89,18 @@
         <div class="tn-spacer"></div>
 
         @if($tnHasQuickMenu)
-        <div class="tn-new">
+        @php
+            // Accesos rápidos siempre visibles junto al botón principal (en celular vuelven al menú desplegable).
+            // Mismo orden de prioridad que el botón principal de abajo: no se repite en la fila.
+            $tnPrimary = $tnCanNewDoc ? 'doc' : ($tnCanPos ? 'pos' : ($tnCanListDoc ? 'list' : ($tnCanEstablishments ? 'est' : 'company')));
+            $tnQuick = [];
+            if ($tnCanNewDoc) $tnQuick[] = ['href' => route('tenant.documents.create'), 'icon' => 'receipt', 'label' => 'Boleta', 'title' => 'Nueva boleta'];
+            if ($tnCanListDoc) $tnQuick[] = ['href' => route('tenant.documents.index'), 'icon' => 'file-minus-2', 'label' => 'Nota de crédito', 'title' => 'Nota de crédito (se emite desde el listado de comprobantes)'];
+            if ($tnCanPos && $tnPrimary !== 'pos') $tnQuick[] = ['href' => route('tenant.pos.index'), 'icon' => 'monitor', 'label' => 'Punto de venta', 'title' => 'Punto de venta'];
+            if ($tnCanEstablishments && $tnPrimary !== 'est') $tnQuick[] = ['href' => route('tenant.establishments.index'), 'icon' => 'building-2', 'label' => 'Establecimiento', 'title' => 'Nuevo establecimiento', 'minor' => true];
+            if ($tnCanConfig && $tnPrimary !== 'company') $tnQuick[] = ['href' => route('tenant.companies.create'), 'icon' => 'briefcase', 'label' => 'Mi empresa', 'title' => 'Mi empresa', 'minor' => true];
+        @endphp
+        <div class="tn-new {{ count($tnQuick) ? 'has-quick' : '' }}">
             @if($tnCanNewDoc)
                 <a class="tn-btn tn-btn--p" href="{{ route('tenant.documents.create') }}" aria-label="Nueva factura">
                     @include('tenant.layouts.partials.icon', ['name' => 'plus'])
@@ -115,6 +126,16 @@
                     @include('tenant.layouts.partials.icon', ['name' => 'briefcase'])
                     <span>Mi empresa</span>
                 </a>
+            @endif
+            @if(count($tnQuick))
+                <nav class="tn-quick" aria-label="Accesos rápidos">
+                    @foreach($tnQuick as $q)
+                        <a class="tn-qa{{ ($q['minor'] ?? false) ? ' tn-qa--minor' : '' }}" href="{{ $q['href'] }}" title="{{ $q['title'] }}" aria-label="{{ $q['title'] }}">
+                            @include('tenant.layouts.partials.icon', ['name' => $q['icon']])
+                            <span>{{ $q['label'] }}</span>
+                        </a>
+                    @endforeach
+                </nav>
             @endif
             <button class="tn-btn tn-btn--p tn-caret" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Más accesos rápidos">
                 @include('tenant.layouts.partials.icon', ['name' => 'chevron-down'])

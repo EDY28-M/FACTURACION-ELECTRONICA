@@ -2909,3 +2909,145 @@ html:not(.dashboard-system) .card-reports .card-report-links li {
 html:not(.dashboard-system) .card-reports .card-report-links a {
     font-size: inherit;
 }
+
+/* ------------------------------------------------------------------
+   Accesos rápidos siempre visibles junto a "Nueva factura" (2026-11-25).
+   Una barra agrupada y neutra (misma superficie que el buscador); el azul solo al pasar el mouse.
+   Pantallas muy anchas: icono + texto. Resto: solo icono, con el nombre al pasar el mouse.
+   Celular: no cabe y vuelve la flecha con el menú desplegable.
+   ------------------------------------------------------------------ */
+html .tn-top .tn-new.has-quick {
+    align-items: center;
+    gap: 10px;
+}
+
+html .tn-top .tn-new.has-quick > .tn-btn--p:first-child {
+    border-radius: 11px;
+}
+
+html .tn-top .tn-new.has-quick > .tn-caret,
+html .tn-top .tn-new.has-quick > .tn-caret + .tn-menu {
+    display: none;
+}
+
+html .tn-top .tn-quick {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 40px;
+    padding: 3px;
+    border-radius: 11px;
+    background: var(--tenant-surface);
+    box-shadow: 0 0 0 1px var(--tn-divider), 0 1px 2px rgba(14, 27, 46, 0.05);
+}
+
+html .tn-top .tn-qa {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0 9px;
+    border-radius: 8px;
+    color: var(--tenant-ink-secondary);
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background-color 0.14s var(--tn-ease), color 0.14s var(--tn-ease);
+}
+
+html .tn-top .tn-qa .tn-icon {
+    width: 17px;
+    height: 17px;
+    color: var(--tn-icon);
+    stroke-width: 2;
+    transition: color 0.14s var(--tn-ease);
+}
+
+html .tn-top .tn-qa:hover {
+    background: var(--tn-sky-wash);
+    color: var(--tenant-ink);
+}
+
+html .tn-top .tn-qa:hover .tn-icon {
+    color: var(--tn-sky);
+}
+
+html .tn-top .tn-qa:focus-visible {
+    outline: 2px solid var(--tn-sky);
+    outline-offset: 1px;
+}
+
+html .tn-top .tn-qa span {
+    display: none;
+}
+
+@media only screen and (min-width: 1800px) {
+    html .tn-top .tn-qa {
+        padding: 0 11px;
+    }
+
+    html .tn-top .tn-qa span {
+        display: inline;
+    }
+}
+
+/* Accesos de poco uso (establecimiento, empresa): solo icono salvo en pantallas muy anchas, para no quitarle espacio al buscador. */
+@media only screen and (min-width: 1800px) and (max-width: 2199px) {
+    html .tn-top .tn-qa--minor {
+        padding: 0 9px;
+    }
+
+    html .tn-top .tn-qa--minor span {
+        display: none;
+    }
+}
+
+@media only screen and (max-width: 760px) {
+    html .tn-top .tn-new.has-quick {
+        gap: 2px;
+    }
+
+    html .tn-top .tn-quick {
+        display: none;
+    }
+
+    html .tn-top .tn-new.has-quick > .tn-caret {
+        display: inline-flex;
+    }
+
+    html .tn-top .tn-new.has-quick > .tn-caret + .tn-menu {
+        display: block;
+    }
+
+    html .tn-top .tn-new.has-quick > .tn-btn--p:first-child {
+        border-radius: 11px 4px 4px 11px;
+    }
+}
+
+@media only screen and (max-width: 520px) {
+    html .tn-top .tn-new.has-quick > .tn-caret {
+        display: none;
+    }
+
+    html .tn-top .tn-new.has-quick > .tn-btn--p:first-child {
+        border-radius: 11px;
+    }
+}
+
+/* Con la barra de accesos, el buscador conserva un ancho usable (en celular sigue siendo solo el icono). */
+@media only screen and (min-width: 761px) {
+    html .tn-top .tn-search-wrap {
+        min-width: 170px;
+    }
+}
+
+/* Laptops pequeñas: el usuario queda solo con su avatar para que quepa la barra de accesos. */
+@media only screen and (min-width: 761px) and (max-width: 1340px) {
+    html .tn-top .tn-who,
+    html .tn-top .tn-user-btn > .tn-icon {
+        display: none;
+    }
+}
