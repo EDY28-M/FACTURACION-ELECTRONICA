@@ -1,5 +1,5 @@
 <template>
-    <el-dialog   :visible="showDialog"  @open="create" @opened="opened" width="60%" :close-on-click-modal="false" :close-on-press-escape="false" :show-close="false">
+    <el-dialog   :visible="showDialog"  @open="create" @opened="opened" width="60%" :close-on-click-modal="false" :close-on-press-escape="true" :show-close="true" :before-close="clickClose">
         <Keypress key-event="keyup" :key-code="13" @success="someMethod" />
         <span slot="title">
             <div class="widget-summary widget-summary-xs pl-3 p-2">
@@ -85,6 +85,7 @@
                 company: {},
                 configuration: {},
                 activeName: 'first',
+                closing: false,
 
             }
         },
@@ -154,6 +155,14 @@
                 await this.initForm()
                 await this.$eventHub.$emit('cancelSale')
 
+            },
+            // X button / ESC key: clear the finished sale (and its POS draft) and go back to a clean /pos.
+            async clickClose(){
+                if (this.closing) return
+                this.closing = true
+                await this.clickNewSale()
+                this.$emit('update:showDialog', false)
+                window.location.href = '/pos'
             },
             initForm() {
                 this.errors = {};
