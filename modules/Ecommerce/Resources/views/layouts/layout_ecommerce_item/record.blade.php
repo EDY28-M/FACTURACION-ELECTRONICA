@@ -13,6 +13,10 @@
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ asset('porto-ecommerce/assets/images/icons/favicon.ico') }}">
 
+    <!-- Clean Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Plugins CSS File -->
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/bootstrap.min.css') }}">
@@ -20,8 +24,8 @@
     <!-- Main CSS File -->
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/style.min.css') }}">
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/custom.css') }}">
-
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/rating.css') }}">
+    <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/css/storefront-modern.css') }}?v=20261125">
 
     <!-- Fontawesome -->
     <link rel="stylesheet" href="{{ asset('porto-ecommerce/assets/font-awesome/css/fontawesome-all.min.css') }}">
@@ -31,61 +35,37 @@
     @endif
 </head>
 
-<body>
+<body class="sf-body">
     <div class="page-wrapper">
 
         @include('ecommerce::layouts.partials_ecommerce.header')
-        @include('ecommerce::layouts.partials_ecommerce.header_bottom_sticky')
 
+        <main class="main sf-detail-shell">
+            <div class="sf-container">
+                @yield('content')
+            </div>
 
-        <main class="main">
-            <nav aria-label="breadcrumb" class="breadcrumb-nav">
-                <div class="container">
-                    <ol class="breadcrumb">
-                        <!--<li class="breadcrumb-item"><a href="index-2.html"><i class="icon-home"></i></a></li>
-                        <li class="breadcrumb-item"><a href="#">Electronics</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Headsets</li>-->
-                    </ol>
-                </div><!-- End .container -->
-            </nav>
-            <div class="container">
-                <div class="row">
-                    <div class="col-lg-9">
+            <div class="featured-section mt-5">
+                @include('ecommerce::layouts.partials_ecommerce.featured_products_bottom')
+            </div>
+        </main>
 
-                        @yield('content')
-
-                    </div><!-- End .col-lg-9 -->
-
-                    <div class="sidebar-overlay"></div>
-                    <div class="sidebar-toggle"><i class="icon-sliders"></i></div>
-                    @include('ecommerce::layouts.partials_ecommerce.sidebar_product_right')
-                </div><!-- End .row -->
-            </div><!-- End .container -->
-
-            <div class="featured-section">
-                @include('ecommerce::layouts.partials_ecommerce.featured_products_bottom' )
-            </div><!-- End .featured-section -->
-        </main><!-- End .main -->
-
-        <footer class="footer">
+        <footer class="footer sf-footer" id="contacto-tienda">
             @include('ecommerce::layouts.partials_ecommerce.footer')
-        </footer><!-- End .footer -->
-    </div><!-- End .page-wrapper -->
+        </footer>
+    </div>
 
-    <div class="mobile-menu-overlay"></div><!-- End .mobil-menu-overlay -->
-
+    <div class="mobile-menu-overlay"></div>
     <div class="mobile-menu-container">
         @include('ecommerce::layouts.partials_ecommerce.mobile_menu')
-    </div><!-- End .mobile-menu-container -->
+    </div>
 
-
-
-    <a id="scroll-top" href="#top" title="Top" role="button"><i class="icon-angle-up"></i></a>
+    <a id="scroll-top" href="#top" title="Subir" role="button"><i class="icon-angle-up"></i></a>
 
     <!-- Plugins JS File -->
     <script src="{{ asset('porto-ecommerce/assets/js/jquery.min.js') }}"></script>
     <script src="{{ asset('porto-ecommerce/assets/js/bootstrap.bundle.min.js') }}"></script>
-    <script src="{{ asset( 'porto-ecommerce/assets/js/plugins.min.js') }}"></script>
+    <script src="{{ asset('porto-ecommerce/assets/js/plugins.min.js') }}"></script>
 
     <!-- Main JS File -->
     <script src="{{ asset('porto-ecommerce/assets/js/main.min.js') }}"></script>
@@ -93,9 +73,6 @@
     <script src="{{ asset('porto-ecommerce/assets/js/rating.js') }}"></script>
 
     @stack('scripts')
-
-    <!-- www.addthis.com share plugin -->
-    <!--<script src="../../../../s7.addthis.com/js/300/addthis_widget.js#pubid=ra-5b927288a03dbde6"></script> -->
 </body>
 
 </html>

@@ -1,208 +1,164 @@
- <style>
-#header_bar .header-menu {
-    max-height: 300px !important;
-    overflow:auto;
-    overflow-y: auto;
-}
-#header_bar .header-menu::-webkit-scrollbar-track
-{
-	-webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.1);
-	background-color: #fdfdfd;
-}
+@php
+    $contactAddress = trim((string) ($information->information_contact_address ?? ''));
+    $contactPhone = trim((string) ($information->information_contact_phone ?? ''));
+    $shippingTag = trim((string) ($information->tag_shipping ?? ''));
+    $isCatalogActive = request()->is('ecommerce') || request()->is('ecommerce/category/*');
+@endphp
 
-#header_bar .header-menu::-webkit-scrollbar
-{
-	width: 6px;
-	background-color: #fdfdfd;
-}
+<div class="sf-topbar">
+    <div class="sf-container sf-topbar-inner">
+        <div class="sf-topbar-left">
+            <span class="sf-topbar-badge">
+                <i class="fas fa-shipping-fast"></i>
+                {{ $shippingTag !== '' ? $shippingTag : 'ATENCIÓN Y DESPACHO' }}
+            </span>
+            @if($contactAddress !== '')
+                <span class="sf-topbar-sep">|</span>
+                <span class="sf-topbar-address">{{ $contactAddress }}</span>
+            @endif
+        </div>
+        <div class="sf-topbar-right">
+            @if($contactPhone !== '')
+                <span class="sf-topbar-contact-label">Contáctanos &rarr;</span>
+                <a href="{{ $whatsappUrl ?? ('tel:'.preg_replace('/[^0-9+]/', '', $contactPhone)) }}"
+                   class="sf-topbar-phone"
+                   @if(!empty($whatsappUrl)) target="_blank" rel="noopener noreferrer" @endif>
+                    <i class="fab fa-whatsapp"></i>
+                    <span>{{ $contactPhone }}</span>
+                </a>
+            @endif
+        </div>
+    </div>
+</div>
 
-#header_bar .header-menu::-webkit-scrollbar-thumb
-{
-	background-color: #0187cc;
-}
-.header-dropdown a img {
-    border-radius: 8px;
-    padding: 4px;
-}
+<header class="sf-header">
+    <div class="sf-container sf-navbar">
+        <div class="sf-nav-left">
+            <a href="{{ route('tenant.ecommerce.index') }}" class="sf-brand" aria-label="{{ $storeName }}">
+                @if($storeLogoUrl)
+                    <img src="{{ $storeLogoUrl }}" alt="{{ $storeName }}" />
+                @else
+                    <span class="sf-brand-text">{{ $storeName }}</span>
+                @endif
+            </a>
 
-@media (max-width: 768px) {
-    .header-dropdown {
-        min-width: 100px !important;
-    }
-}
+            <ul class="sf-nav-links">
+                <li>
+                    <a href="{{ route('tenant.ecommerce.index') }}" class="sf-nav-link">Inicio</a>
+                </li>
+                <li>
+                    <a href="{{ route('tenant.ecommerce.index') }}#catalogo"
+                       class="sf-nav-link {{ $isCatalogActive ? 'sf-nav-pill-active' : '' }}">
+                        Catálogo
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ route('tenant_detail_cart') }}"
+                       class="sf-nav-link {{ request()->is('ecommerce/detail_cart') ? 'sf-nav-pill-active' : '' }}">
+                        Carrito
+                    </a>
+                </li>
+            </ul>
+        </div>
 
+        <div id="header_bar" class="sf-search-wrap">
+            <div class="header-dropdown">
+                <div class="sf-search-box">
+                    <input placeholder="Buscar por nombre, código o marca..."
+                           type="text"
+                           class="search_input sf-search-input form-control"
+                           v-model="value"
+                           aria-label="Buscar productos"
+                           v-on:keyup="autoComplete"
+                           v-on:keyup.enter="goSearch" />
+                    <button type="button" class="sf-search-btn" v-on:click="goSearch" aria-label="Buscar">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div class="sf-search-dropdown" v-if="results.length > 0" v-cloak>
+                    <ul>
+                        <li v-for="result in results" :key="result.id">
+                            <a :href="'/ecommerce/item/' + result.id">
+                                <div class="sf-search-item-info">
+                                    <img :src="result.image_url_small" :alt="result.description">
+                                    <span class="sf-search-title">@{{ result.description }}</span>
+                                </div>
+                                <span class="sf-search-price">@{{ result.sale_unit_price }}</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
 
-.header-menu ul a {
-    padding: 3px 6px;
-}
+        <div class="sf-nav-right">
+            @if(!empty($whatsappUrl))
+                <a href="{{ $whatsappUrl }}"
+                   class="sf-icon-btn sf-icon-btn--wa d-none d-md-inline-flex"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   title="Consultar por WhatsApp"
+                   aria-label="WhatsApp">
+                    <i class="fab fa-whatsapp"></i>
+                </a>
+            @endif
 
-.header-menu {
-    box-shadow: 0 0 2px rgba(0,0,0,0.1);
-    padding: 0 !important;
-    border: none;
-    /*border-radius:10px;*/
- }
+            @include('ecommerce::layouts.partials_ecommerce.cart_dropdown')
 
- .header-menu a:hover, .header-menu a:focus {
-    color: #0187cc;
-    background-color: #f4f4f4;
-}
+            @include('ecommerce::partials.headers.session')
 
-.header-menu ul a {
-    text-transform: capitalize !important;
-}
+            <button class="mobile-menu-toggler" type="button" aria-label="Abrir menú">
+                <i class="icon-menu"></i>
+            </button>
+        </div>
+    </div>
+</header>
 
-.search_input {
-    margin-bottom: 0.1rem;
-    border-radius: 20px !important;
-}
-
-.store-logo-text {
-    display: inline-block;
-    max-width: 180px;
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1.1;
-    color: #222529;
-    /* One line: long names end in an ellipsis instead of breaking mid-word. */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle;
-}
-.search_title{
-
-}
-.search_price{
-
-}
-.search_btn{
-
-}
-
-.search_input:focus {
-    background-color: #fff;
-    border-color: #fff;
-    box-shadow: none;
-
-}
-
-.header-contact span {
-    font-weight: normal;
-}
-
-
- </style>
-
- <header class="header">
-
-     <div class="header-middle">
-         <div   class="container">
-             <div class="header-left">
-                 <a href="{{ route("tenant.ecommerce.index") }}" class="logo store-logo" style="max-width: 180px">
-                    @if($storeLogoUrl)
-                        <img src="{{ $storeLogoUrl }}" alt="{{ $storeName }}" />
-                    @else
-                        <span class="store-logo-text">{{ $storeName }}</span>
-                    @endif
-                 </a>
-             </div><!-- End .header-left -->
-
-             <div id="header_bar" class="header-center header-dropdowns">
-
-                 <div class="header-dropdown" style="min-width:400px;">
-
-                    <input placeholder="Buscar..." type="text" class="search_input form-control form-control-lg" v-model="value" aria-label="Buscar productos" v-on:keyup="autoComplete" v-on:keyup.enter="goSearch" />
-                     <div class="header-menu">
-                         <ul v-if="results.length > 0">
-                            <li v-for="result in results">
-                                <a :href="'/ecommerce/item/' + result.id" class="d-flex">
-                                    <div class="flex-grow-1"><img style="max-width: 80px" :src="result.image_url_small" alt="">
-                                    <span class="search_title" style="font-size: 1.0em;"> @{{ result.description }} </span>
-                                    </div>
-                                    <span class="search_price">@{{result.sale_unit_price}}</span>
-                                    {{-- <div class="search_btn btn btn-default">@{{result.sale_unit_price}}</div> --}}
-                                </a>
-                            </li>
-                         </ul>
-                     </div><!-- End .header-menu -->
-                 </div><!-- End .header-dropown -->
-
-
-             </div><!-- End .headeer-center -->
-
-             <div class="header-right">
-                 <button class="mobile-menu-toggler" type="button">
-                     <i class="icon-menu"></i>
-                 </button>
-                 <div class="header-contact">
-                     <span> Atención al</span>
-                     <i class="fab fa-whatsapp"></i> <a href="#"><strong>{{$information->information_contact_phone}}</strong></a>
-                 </div><!-- End .header-contact -->
-
-                @include('ecommerce::layouts.partials_ecommerce.cart_dropdown')
-
-                @include('ecommerce::partials.headers.session')
-
-             </div><!-- End .header-right -->
-         </div><!-- End .container -->
-     </div><!-- End .header-middle -->
-
-     <div class="header-bottom sticky-header">
-        <div class="container d-flex">
-            <nav class="main-nav flex-grow-1">
-
-             </nav>
-         </div><!-- End .header-bottom -->
-     </div><!-- End .header-bottom -->
- </header><!-- End .header -->
-
- @push('scripts')
-
- <script type="text/javascript">
-     var app = new Vue({
-         el: '#header_bar',
-         data: {
-             value: new URLSearchParams(window.location.search).get('search') || '',
-             suggestions: [],
-             timer: null,
-             resource: 'ecommerce',
-             results: [],
-         },
-         methods: {
-             // Debounced server-side lookup (the catalogue is not downloaded in advance).
-             autoComplete(event) {
-                 if (event && event.key === 'Enter') return
-                 clearTimeout(this.timer)
-                 const term = (this.value || '').trim()
-                 if (term.length < 2) {
-                     this.results = []
-                     return
-                 }
-                 this.timer = setTimeout(() => this.getItems(term), 250)
-             },
-             goSearch() {
-                 const term = (this.value || '').trim()
-                 if (term) {
-                     window.location.href = '/ecommerce?search=' + encodeURIComponent(term)
-                 }
-             },
-             getItems(term) {
-                 let contex = this
-                 fetch(`/${this.resource}/items_bar?q=` + encodeURIComponent(term))
-                     .then(function (response) {
-                         return response.json();
-                     })
-                     .then(function (myJson) {
-                         contex.results = myJson.data || []
-                     })
-                     .catch(function () {
-                         contex.results = []
-                     });
-             }
-         }
-     })
-
- </script>
-
- @endpush
+@push('scripts')
+<script type="text/javascript">
+    var app = new Vue({
+        el: '#header_bar',
+        data: {
+            value: new URLSearchParams(window.location.search).get('search') || '',
+            suggestions: [],
+            timer: null,
+            resource: 'ecommerce',
+            results: [],
+        },
+        methods: {
+            // Debounced server-side lookup (the catalogue is not downloaded in advance).
+            autoComplete(event) {
+                if (event && event.key === 'Enter') return
+                clearTimeout(this.timer)
+                const term = (this.value || '').trim()
+                if (term.length < 2) {
+                    this.results = []
+                    return
+                }
+                this.timer = setTimeout(() => this.getItems(term), 250)
+            },
+            goSearch() {
+                const term = (this.value || '').trim()
+                if (term) {
+                    window.location.href = '/ecommerce?search=' + encodeURIComponent(term)
+                } else {
+                    window.location.href = '/ecommerce'
+                }
+            },
+            getItems(term) {
+                let contex = this
+                fetch(`/${this.resource}/items_bar?q=` + encodeURIComponent(term))
+                    .then(function (response) {
+                        return response.json();
+                    })
+                    .then(function (myJson) {
+                        contex.results = myJson.data || []
+                    })
+                    .catch(function () {
+                        contex.results = []
+                    });
+            }
+        }
+    })
+</script>
+@endpush
