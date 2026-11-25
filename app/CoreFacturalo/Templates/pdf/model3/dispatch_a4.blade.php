@@ -30,16 +30,20 @@
         {{--</td>--}}
         {{--@endif--}}
         <td width="70%">
+            @if($company->logo)
             <div class="company_logo_box">
                 <img src="data:{{mime_content_type(public_path("storage/uploads/logos/{$company->logo}"))}};base64, {{base64_encode(file_get_contents(public_path("storage/uploads/logos/{$company->logo}")))}}" alt="{{$company->name}}" class="company_logo" style="max-width: 150px;">
             </div>
+            @else
+            <h4>{{ $company->name }}</h4>
+            @endif
         </td>
         {{--<td width="50%" class="pl-3">--}}
         {{--<div class="text-left">--}}
         {{--<h4 class="">{{ $company->name }}</h4>--}}
         {{--<h5>{{ 'RUC '.$company->number }}</h5>--}}
         {{--<h6>{{ ($establishment->address !== '-')? $establishment->address : '' }}</h6>--}}
-        {{--<h6>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h6>--}}
+        {{--<h6></h6>--}}
         {{--<h6>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h6>--}}
         {{--</div>--}}
         {{--</td>--}}
@@ -88,8 +92,8 @@
     </thead>
     <tbody>
     <tr>
-        <td>Fecha Emisión: {{ $document->date_of_issue->format('Y-m-d') }}</td>
-        <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('Y-m-d') }}</td>
+        <td>Fecha Emisión: {{ $document->date_of_issue->format('d/m/Y') }}</td>
+        <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('d/m/Y') }}</td>
     </tr>
     <tr>
         <td>Motivo Traslado: {{ $document->transfer_reason_type->description }}</td>

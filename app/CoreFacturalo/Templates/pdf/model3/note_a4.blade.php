@@ -13,9 +13,13 @@
 <table class="full-width">
     <tr>
         <td width="70%">
+            @if($company->logo)
             <div class="company_logo_box">
                 <img src="data:{{mime_content_type(public_path("storage/uploads/logos/{$company->logo}"))}};base64, {{base64_encode(file_get_contents(public_path("storage/uploads/logos/{$company->logo}")))}}" alt="{{$company->name}}" class="company_logo" style="max-width: 150px;">
             </div>
+            @else
+            <h4>{{ $company->name }}</h4>
+            @endif
         </td>
         <td width="30%" class="py-4 px-2 text-center" style="border: thin solid #ccc;">
             <h4>{{ 'RUC '.$company->number }}</h4>
@@ -39,7 +43,7 @@
         <td>{{ $customer->name }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}:</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
         <td>:</td>
         <td>{{ $customer->number }}</td>
     </tr>

@@ -37,7 +37,9 @@
     </div>
 @else
     <div class="company_logo_box" style="position: absolute; text-align: center; top:40%;width: 100%">
+        @if($company->logo)
         <img src="data:{{mime_content_type(public_path("storage/uploads/logos/{$company->logo}"))}};base64, {{base64_encode(file_get_contents(public_path("storage/uploads/logos/{$company->logo}")))}}" alt="logo" class="" style="opacity: 0.1;">
+        @endif
     </div>
 @endif
 <table class="full-width">
@@ -64,7 +66,7 @@
 
             <h6>{{ ($establishment->telephone !== '-')? 'Telf. '.$establishment->telephone : '' }}</h6>
 
-            <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+            <h6></h6>
 
             @isset($establishment->web_address)
                 <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -97,10 +99,7 @@
                         <strong>DIRECCIÓN: </strong>
                         @if ($customer->address !== '')
                             <span style="text-transform: uppercase;">
-                                {{ $customer->address }}
-                                {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                                {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                                {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                                {{ \App\Support\PdfFormat::address($customer) }}
                             </span>
                         @endif
                     </td>
@@ -120,12 +119,12 @@
                 <tr>
                     <td  class="font-xlg">
                         <strong>FECHA: </strong>
-                        {{$document->date_of_issue->format('Y-m-d')}}
+                        {{$document->date_of_issue->format('d/m/Y')}}
                     </td>
                     <td  class="font-xlg">
                         @if($invoice)
                             <strong>FECHA VENC.:</strong>
-                            {{$invoice->date_of_due->format('Y-m-d')}}
+                            {{$invoice->date_of_due->format('d/m/Y')}}
                         @endif
                     </td>
                 </tr>
@@ -164,7 +163,7 @@
                 @endforeach
             @endif
 
-            @if ($document->reference_guides)
+            @if ($document->reference_guides && count($document->reference_guides))
                 @foreach($document->reference_guides as $guide)
                     {{ $guide->number }}
                 @endforeach
@@ -311,7 +310,7 @@
             @endphp
             @foreach($payments as $row)
                 <tr>
-                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ $row->payment + $row->change }}</td>
+                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ number_format($row->payment + $row->change, 2) }}</td>
                 </tr>
             @endforeach
         </tr>
@@ -517,7 +516,7 @@
 
     @endif
     <tr>
-        <td>CLIENTE:</td>
+        <td>CLIENTE</td>
         <td>:</td>
         <td></td>
 
@@ -529,7 +528,7 @@
 
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
         <td>:</td>
         <td></td>
 

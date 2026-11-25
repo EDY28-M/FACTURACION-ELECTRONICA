@@ -29,17 +29,14 @@
                 <h4 class="">{{ $company->name }}</h4>
                 <h5>{{ 'RUC '.$company->number }}</h5>
                 <h6 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h6>
                 @isset($establishment->trade_address)
                     <h6>{{ ($establishment->trade_address !== '-')? 'D. Comercial: '.$establishment->trade_address : '' }}</h6>
                 @endisset
                 <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-                <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <h6></h6>
 
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -61,25 +58,22 @@
         <td width="15%">Cliente:</td>
         <td width="45%">{{ $customer->name }}</td>
         <td width="25%">Fecha de emisión:</td>
-        <td width="15%">{{ $document->date_of_issue->format('Y-m-d') }} {{substr($document->time_of_issue, 0, -3)}}</td>
+        <td width="15%">{{ $document->date_of_issue->format('d/m/Y') }} {{substr($document->time_of_issue, 0, -3)}}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}:</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
         <td>{{ $customer->number }}</td>
 
         @if($document->date_of_due)
             <td width="25%">Fecha de vencimiento:</td>
-            <td width="15%">{{ $document->date_of_due->format('Y-m-d') }}</td>
+            <td width="15%">{{ \App\Support\PdfFormat::date($document->date_of_due) }}</td>
         @endif
     </tr>
     @if ($customer->address !== '')
     <tr>
         <td class="align-top">Dirección:</td>
         <td colspan="3">
-            {{ $customer->address }}
-            {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-            {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-            {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($customer) }}
         </td>
     </tr>
     @endif

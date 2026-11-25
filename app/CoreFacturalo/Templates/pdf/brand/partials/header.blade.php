@@ -51,7 +51,7 @@
 
             <h6>{{ ($establishment->telephone !== '-')? 'Telf. '.$establishment->telephone : '' }}</h6>
 
-            <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+            <h6></h6>
 
             @isset($establishment->web_address)
                 <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -84,10 +84,7 @@
                         <strong>DIRECCIÓN: </strong>
                         @if ($customer->address !== '')
                             <span style="text-transform: uppercase;">
-                                {{ $customer->address }}
-                                {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                                {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                                {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                                {{ \App\Support\PdfFormat::address($customer) }}
                             </span>
                         @endif
                     </td>
@@ -115,12 +112,12 @@
                 <tr>
                     <td  class="font-lg">
                         <strong>FECHA: </strong>
-                        {{$document->date_of_issue->format('Y-m-d')}}
+                        {{$document->date_of_issue->format('d/m/Y')}}
                     </td>
                     <td  class="font-lg">
                         @if($invoice)
                             <strong>FECHA VENC.:</strong>
-                            {{$invoice->date_of_due->format('Y-m-d')}}
+                            {{$invoice->date_of_due->format('d/m/Y')}}
                         @endif
                     </td>
                 </tr>
@@ -159,7 +156,7 @@
                 @endforeach
             @endif
 
-            @if ($document->reference_guides)
+            @if ($document->reference_guides && count($document->reference_guides))
                 @foreach($document->reference_guides as $guide)
                     {{ $guide->number }}
                 @endforeach

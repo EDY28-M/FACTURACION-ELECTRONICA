@@ -45,7 +45,7 @@
     <tr>
         <td>
             <p>Fecha de emisión:</p>
-            <p>{{ $document->date_of_issue->format('Y-m-d') }}</p>
+            <p>{{ $document->date_of_issue->format('d/m/Y') }}</p>
         </td>
     </tr>
 </table>
@@ -77,7 +77,7 @@
             <br><br>
         </td>
         <td width="40%" class="align-top pt-3">
-            {{ $document->date_of_shipping->format('Y-m-d') }}
+            {{ $document->date_of_shipping->format('d/m/Y') }}
         </td>
         <td width="35%" colspan="2" class="align-top pt-2">
             <br>

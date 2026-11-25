@@ -37,7 +37,7 @@
 
             <h6>{{ ($establishment->telephone !== '-')? 'Telf. '.$establishment->telephone : '' }}</h6>
 
-            <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+            <h6></h6>
 
             @isset($establishment->web_address)
                 <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -75,10 +75,7 @@
                         <strong>DIRECCIÓN: </strong>
                         @if ($customer->address !== '')
                             <span style="text-transform: uppercase;">
-                                {{ $customer->address }}
-                                {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                                {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                                {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                                {{ \App\Support\PdfFormat::address($customer) }}
                             </span>
                         @endif
                     </td>
@@ -94,7 +91,7 @@
                 <tr>
                     <td  class="">
                         <strong>FECHA: </strong>
-                        {{$document->date_of_issue->format('Y-m-d')}}
+                        {{$document->date_of_issue->format('d/m/Y')}}
                     </td>
                     <td  class="">
                         <strong>MONEDA: </strong>
@@ -167,7 +164,7 @@
     <tbody class="">
         @foreach($document->items as $row)
             <tr>
-                <td class="p-1 text-center align-top desc">{{ $row->relation_item->internal_id }}</div></td>
+                <td class="p-1 text-center align-top desc">{{ optional($row->relation_item)->internal_id }}</div></td>
                 <td class="p-1 text-center align-top desc">{{ $row->relation_item->brand != null ? $row->relation_item->brand->name : '' }}</div></td>
                 <td class="p-1 text-left align-top desc text-upp">
                     @if($row->name_product_pdf)

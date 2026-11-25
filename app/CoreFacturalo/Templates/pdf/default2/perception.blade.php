@@ -162,7 +162,7 @@
                 <tr><td class="text-left font-xl font-bold">{{ 'RUC '.$company->number }}</td></tr>
                 @if($establishment)
                     <tr><td class="text-left font-lg">{{ $establishment->address }}</td></tr>
-                    <tr><td class="text-left font-lg">{{ ($establishment->email != '-')? $establishment->email : '' }}</td></tr>
+                    <tr><td class="text-left font-lg"></td></tr>
                     <tr><td class="text-left font-lg font-bold">{{ ($establishment->telephone != '-')? $establishment->telephone : '' }}</td></tr>
                 @endif
                 </tbody>
@@ -198,7 +198,7 @@
                     <td width="80%">{{ $customer->name }}</td>
                 </tr>
                 <tr>
-                    <td width="20%">{{ $customer->identity_document_type->description }}:</td>
+                    <td width="20%">{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
                     <td width="80%">{{ $customer->number }}</td>
                 </tr>
                 @if ($customer->address !== '')

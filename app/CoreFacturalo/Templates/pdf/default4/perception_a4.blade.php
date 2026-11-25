@@ -23,7 +23,7 @@
                 <h3 class="">{{ $company->trade_name }}</h3>
                 <h4>{{ 'RUC '.$company->number }}</h4>
                 <h5>{{ ($establishment->address !== '-')? $establishment->address : '' }}</h5>
-                <h5>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h5>
+                <h5></h5>
                 <h5>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h5>
             </div>
         </td>
@@ -41,7 +41,7 @@
         <td width="15%">{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}:</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
         <td>{{ $customer->number }}</td>
         <td>Moneda:</td>
         <td>{{ $document->currency_type_id }}</td>

@@ -44,7 +44,7 @@
                 <h4 class="">{{ $company->name }}</h4>
                 <h5>{{ 'RUC '.$company->number }}</h5>
                 <h6>{{ ($establishment->address !== '-')? $establishment->address : '' }}</h6>
-                <h6>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h6>
+                <h6></h6>
                 <h6>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h6>
             </div>
         </td>
@@ -60,15 +60,15 @@
         <td width="15%">Cliente:</td>
         <td width="45%">{{ $customer->name }}</td>
         <td width="25%">Fecha de emisión:</td>
-        <td width="15%">{{ $document->date_of_issue->format('Y-m-d') }}</td>
+        <td width="15%">{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}:</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
         <td>{{ $customer->number }}</td>
 
         @isset($document->date_of_due)
             <td>Fecha de vencimiento:</td>
-            <td>{{ $document->date_of_due->format('Y-m-d') }}</td>
+            <td>{{ \App\Support\PdfFormat::date($document->date_of_due) }}</td>
         @endisset
 
     </tr>

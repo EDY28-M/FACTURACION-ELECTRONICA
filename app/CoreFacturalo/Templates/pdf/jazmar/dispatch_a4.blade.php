@@ -30,12 +30,9 @@
                 <h3 class="">{{ $company->name }}</h3>
                 <h4>{{ 'RUC '.$company->number }}</h4>
                 <h5 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h5>
-                <h5>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h5>
+                <h5></h5>
                 <h5>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h5>
             </div>
         </td>
@@ -75,8 +72,8 @@
     </thead>
     <tbody>
     <tr>
-        <td>Fecha Emisión: {{ $document->date_of_issue->format('Y-m-d') }}</td>
-        <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('Y-m-d') }}</td>
+        <td>Fecha Emisión: {{ $document->date_of_issue->format('d/m/Y') }}</td>
+        <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('d/m/Y') }}</td>
     </tr>
     <tr>
         <td>Motivo Traslado: {{ $document->transfer_reason_type->description }}</td>

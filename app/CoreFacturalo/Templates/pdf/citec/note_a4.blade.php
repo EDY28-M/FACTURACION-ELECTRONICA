@@ -45,12 +45,9 @@
                 <h4 class="">Domicilio Fiscal: Jr. Diego de Almagro N 256 - Int. 101 <br> Centro Trujillo - La Libertad - Trujillo Trujillo <br> Telf: 044-693614 - 948836100 </h4>
                 <h4>Sucursal: {{ $establishment->address}} <br> 076-283327 - 9769824444  </h4>
                 {{-- <h6>
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h6>
-                <h6>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h6>
+                <h6></h6>
                 <h6>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h6> --}}
             </div>
         </td>
@@ -81,7 +78,7 @@
     <tr>
         <td width="120px">FECHA DE EMISIÓN</td>
         <td width="5px">:</td>
-        <td>{{ $document->date_of_issue->format('Y-m-d') }}</td>
+        <td>{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
     <tr>
         <td>CLIENTE</td>
@@ -89,7 +86,7 @@
         <td>{{ $customer->name }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
         <td>:</td>
         <td>{{ $customer->number }}</td>
         {{--@isset($document->date_of_due)--}}
@@ -102,10 +99,7 @@
         <td class="align-top">DIRECCIÓN</td>
         <td>:</td>
         <td>
-            {{ $customer->address }}
-            {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-            {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-            {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($customer) }}
         </td>
     </tr>
     @endif

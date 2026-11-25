@@ -45,10 +45,7 @@
     </tr>
     <tr>
         <td class="text-center" style="text-transform: uppercase;">
-            {{ ($establishment->address !== '-')? $establishment->address : '' }}
-            {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-            {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-            {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($establishment) }}
         </td>
     </tr>
 
@@ -61,7 +58,7 @@
         <td class="text-center ">{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</td>
     </tr>
     <tr>
-        <td class="text-center">{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</td>
+        <td class="text-center"></td>
     </tr>
     @isset($establishment->web_address)
         <tr>
@@ -85,7 +82,7 @@
 <table class="full-width">
     <tr >
         <td width="" class="pt-3"><p class="desc">F. Emisión:</p></td>
-        <td width="" class="pt-3"><p class="desc">{{ $document->date_of_issue->format('Y-m-d') }}</p></td>
+        <td width="" class="pt-3"><p class="desc">{{ $document->date_of_issue->format('d/m/Y') }}</p></td>
     </tr>
     <tr>
         <td width="" ><p class="desc">H. Emisión:</p></td>
@@ -94,7 +91,7 @@
     @isset($invoice->date_of_due)
     <tr>
         <td><p class="desc">F. Vencimiento:</p></td>
-        <td><p class="desc">{{ $invoice->date_of_due->format('Y-m-d') }}</p></td>
+        <td><p class="desc">{{ $invoice->date_of_due->format('d/m/Y') }}</p></td>
     </tr>
     @endisset
 
@@ -103,7 +100,7 @@
         <td><p class="desc">{{ $customer->name }}</p></td>
     </tr>
     <tr>
-        <td><p class="desc">{{ $customer->identity_document_type->description }}:</p></td>
+        <td><p class="desc">{{ \App\Support\PdfFormat::identityLabel($customer) }}:</p></td>
         <td><p class="desc">{{ $customer->number }}</p></td>
     </tr>
     @if ($customer->address !== '')
@@ -111,10 +108,7 @@
             <td class="align-top"><p class="desc">Dirección:</p></td>
             <td>
                 <p class="desc">
-                    {{ $customer->address }}
-                    {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                    {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                    {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($customer) }}
                 </p>
             </td>
         </tr>

@@ -14,9 +14,13 @@
     <tr>
         @if($company->logo)
             <td width="20%">
+                @if($company->logo)
                 <div class="company_logo_box">
                     <img src="data:{{mime_content_type(public_path("storage/uploads/logos/{$company->logo}"))}};base64, {{base64_encode(file_get_contents(public_path("storage/uploads/logos/{$company->logo}")))}}" alt="{{$company->name}}" class="company_logo" style="max-width: 150px;">
                 </div>
+                @else
+                <h4>{{ $company->name }}</h4>
+                @endif
             </td>
         @else
             <td width="20%">
@@ -28,10 +32,7 @@
                 <h4 class="">{{ $company->name }}</h4>
                 <h5>{{ 'RUC '.$company->number }}</h5>
                 <h6 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h6>
 
                 @isset($establishment->trade_address)
@@ -39,7 +40,7 @@
                 @endisset
                 <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-                <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <h6></h6>
 
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -61,24 +62,21 @@
         <td width="15%">Proveedor:</td>
         <td width="45%">{{ $supplier->name }}</td>
         <td width="25%">Fecha de emisión:</td>
-        <td width="15%">{{ $document->date_of_issue->format('Y-m-d') }}</td>
+        <td width="15%">{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
     <tr>
-        <td>{{ $supplier->identity_document_type->description }}:</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($supplier) }}:</td>
         <td>{{ $supplier->number }}</td>
         @if($document->date_of_due)
             <td width="25%">Fecha de vencimiento:</td>
-            <td width="15%">{{ $document->date_of_due->format('Y-m-d') }}</td>
+            <td width="15%">{{ \App\Support\PdfFormat::date($document->date_of_due) }}</td>
         @endif
     </tr>
     @if ($supplier->address !== '')
     <tr>
         <td class="align-top">Dirección:</td>
         <td colspan="3">
-            {{ $supplier->address }}
-            {{ ($supplier->district_id !== '-')? ', '.$supplier->district->description : '' }}
-            {{ ($supplier->province_id !== '-')? ', '.$supplier->province->description : '' }}
-            {{ ($supplier->department_id !== '-')? '- '.$supplier->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($supplier) }}
         </td>
     </tr>
     @endif 
@@ -220,7 +218,7 @@
             @endphp
             @foreach($payments as $row)
                 <tr>
-                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ $row->payment + $row->change }}</td>
+                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ number_format($row->payment + $row->change, 2) }}</td>
                 </tr>
             @endforeach
         </tr>

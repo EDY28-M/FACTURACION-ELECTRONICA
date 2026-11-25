@@ -63,7 +63,7 @@
 
                 <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-                <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <h6></h6>
 
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -90,11 +90,11 @@
                             <tr>
                                 <td width="120px">FECHA DE EMISIÓN</td>
                                 <td width="8px">:</td>
-                                <td width="220px">{{$document->date_of_issue->format('Y-m-d')}}</td>
+                                <td width="220px">{{$document->date_of_issue->format('d/m/Y')}}</td>
                                 @if($invoice)
                                     <td width="130px">FECHA DE VENCIMIENTO</td>
                                     <td width="8px">:</td>
-                                    <td>{{$invoice->date_of_due->format('Y-m-d')}}</td>
+                                    <td>{{$invoice->date_of_due->format('d/m/Y')}}</td>
                                 @else
                                     <td colspan="3"></td>
                                 @endif
@@ -108,7 +108,7 @@
                     <td>{{ $customer->name }}</td>
                 </tr>
                 <tr>
-                    <td>{{ $customer->identity_document_type->description }}</td>
+                    <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
                     <td>:</td>
                     <td>{{$customer->number}}</td>
                 </tr>
@@ -117,10 +117,7 @@
                     <td class="align-top">DIRECCIÓN</td>
                     <td class="align-top">:</td>
                     <td style="text-transform: uppercase;">
-                        {{ $customer->address }}
-                        {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                        {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                        {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                        {{ \App\Support\PdfFormat::address($customer) }}
                     </td>
                 </tr>
                 @endif
@@ -150,7 +147,7 @@
                         <tr>
                             <td>F. ENTREGA</td>
                             <td>:</td>
-                            <td>{{ $document->quotation->delivery_date->format('Y-m-d')}}</td>
+                            <td>{{ $document->quotation->delivery_date->format('d/m/Y')}}</td>
                         </tr>
                     @endisset
                 @endif
@@ -430,7 +427,7 @@
                             @endphp
                             @foreach($payments as $row)
                                 <tr>
-                                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ $row->payment + $row->change }}</td>
+                                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ number_format($row->payment + $row->change, 2) }}</td>
                                 </tr>
                                 @php
                                     $payment += (float) $row->payment;
@@ -570,7 +567,7 @@
 
                 <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-                <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <h6></h6>
 
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -597,11 +594,11 @@
                             <tr>
                                 <td width="120px">FECHA DE EMISIÓN</td>
                                 <td width="8px">:</td>
-                                <td width="220px">{{$document->date_of_issue->format('Y-m-d')}}</td>
+                                <td width="220px">{{$document->date_of_issue->format('d/m/Y')}}</td>
                                 @if($invoice)
                                     <td width="130px">FECHA DE VENCIMIENTO</td>
                                     <td width="8px">:</td>
-                                    <td>{{$invoice->date_of_due->format('Y-m-d')}}</td>
+                                    <td>{{$invoice->date_of_due->format('d/m/Y')}}</td>
                                 @else
                                     <td colspan="3"></td>
                                 @endif
@@ -615,7 +612,7 @@
                     <td>{{ $customer->name }}</td>
                 </tr>
                 <tr>
-                    <td>{{ $customer->identity_document_type->description }}</td>
+                    <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
                     <td>:</td>
                     <td>{{$customer->number}}</td>
                 </tr>
@@ -624,10 +621,7 @@
                     <td class="align-top">DIRECCIÓN</td>
                     <td class="align-top">:</td>
                     <td style="text-transform: uppercase;">
-                        {{ $customer->address }}
-                        {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                        {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                        {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                        {{ \App\Support\PdfFormat::address($customer) }}
                     </td>
                 </tr>
                 @endif
@@ -657,7 +651,7 @@
                         <tr>
                             <td>F. ENTREGA</td>
                             <td>:</td>
-                            <td>{{ $document->quotation->delivery_date->format('Y-m-d')}}</td>
+                            <td>{{ $document->quotation->delivery_date->format('d/m/Y')}}</td>
                         </tr>
                     @endisset
                 @endif
@@ -937,7 +931,7 @@
                             @endphp
                             @foreach($payments as $row)
                                 <tr>
-                                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ $row->payment + $row->change }}</td>
+                                    <td>&#8226; {{ $row->payment_method_type->description }} - {{ $row->reference ? $row->reference.' - ':'' }} {{ $document->currency_type->symbol }} {{ number_format($row->payment + $row->change, 2) }}</td>
                                 </tr>
                                 @php
                                     $payment += (float) $row->payment;

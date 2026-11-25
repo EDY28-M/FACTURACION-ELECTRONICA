@@ -71,8 +71,8 @@
     </thead>
     <tbody>
     <tr>
-        <td>Fecha Emisión: {{ $document->date_of_issue->format('Y-m-d') }}</td>
-        <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('Y-m-d') }}</td>
+        <td>Fecha Emisión: {{ $document->date_of_issue->format('d/m/Y') }}</td>
+        <td>Fecha Inicio de Traslado: {{ $document->date_of_shipping->format('d/m/Y') }}</td>
     </tr>
     <tr>
         <td>Motivo Traslado: {{ $document->transfer_reason_type->description }}</td>

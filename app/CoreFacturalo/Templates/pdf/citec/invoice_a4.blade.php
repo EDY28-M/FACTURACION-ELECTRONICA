@@ -30,7 +30,9 @@
 </head>
 <body>
 <div class="" style="position: absolute; text-align: center; z-index: 0; width:80%; top: 10px;">
+    @if(!empty($miimage) && is_file($miimage))
     <img src="data:{{mime_content_type($miimage)}};base64, {{base64_encode(file_get_contents($miimage))}}" alt="anulado" class="">
+    @endif
 </div>
 <div style="z-index: 1; position: absolute;width: 280px; left: 410px;">
         <div class="pb-4 pt-2 px-3 text-center" style="background-color: rgb(40,87,165);">
@@ -46,10 +48,10 @@
             <td width="15%" class="font-bold desc align-top">SEÑOR(ES):</td>
             <td width="55%" class="desc">{{ $customer->name }}</td>
             <td width="15%" class="font-bold desc align-top">FECHA:</td>
-            <td width="15%" class="desc">{{ $document->date_of_issue->format('Y-m-d') }}</td>
+            <td width="15%" class="desc">{{ $document->date_of_issue->format('d/m/Y') }}</td>
         </tr>
         <tr>
-            <td class="font-bold desc">{{ $customer->identity_document_type->description }}:</td>
+            <td class="font-bold desc">{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
             <td class="desc">{{ $customer->number }}</td>
             <td class="font-bold desc">MONEDA:</td>
             <td class="desc">{{ $document->currency_type->description }}</td>
@@ -58,10 +60,7 @@
         <tr>
             <td class="align-top desc font-bold">DIRECCIÓN:</td>
             <td class="desc">
-                {{ $customer->address }}
-                {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                {{ \App\Support\PdfFormat::address($customer) }}
             </td>
             @if ($document->guides)
                 <td class="font-bold align-top desc">GUIA:</td>

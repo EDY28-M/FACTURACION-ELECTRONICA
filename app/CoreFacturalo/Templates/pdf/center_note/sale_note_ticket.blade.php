@@ -36,14 +36,11 @@
     </tr>
     {{-- <tr>
         <td class="text-center" style="text-transform: uppercase;">
-            {{ ($establishment->address !== '-')? $establishment->address : '' }}
-            {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-            {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-            {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($establishment) }}
         </td>
     </tr>
     <tr>
-        <td class="text-center">{{ ($establishment->email !== '-')? $establishment->email : '' }}</td>
+        <td class="text-center"></td>
     </tr>
     <tr>
         <td class="text-center pb-3">{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</td>
@@ -80,7 +77,7 @@
         <td><p class="desc">{{ $customer->name }}</p></td>
     </tr>
     <tr>
-        <td><p class="desc">{{ $customer->identity_document_type->description }}:</p></td>
+        <td><p class="desc">{{ \App\Support\PdfFormat::identityLabel($customer) }}:</p></td>
         <td><p class="desc">{{ $customer->number }}</p></td>
     </tr>
     {{-- @if ($customer->address !== '')
@@ -88,10 +85,7 @@
             <td class="align-top"><p class="desc">Dirección:</p></td>
             <td>
                 <p class="desc">
-                    {{ strtoupper($customer->address) }}
-                    {{ ($customer->district_id !== '-')? ', '.strtoupper($customer->district->description) : '' }}
-                    {{ ($customer->province_id !== '-')? ', '.strtoupper($customer->province->description) : '' }}
-                    {{ ($customer->department_id !== '-')? '- '.strtoupper($customer->department->description) : '' }}
+                    {{ \App\Support\PdfFormat::address($customer) }}
                 </p>
             </td>
         </tr>
@@ -220,14 +214,11 @@
 <table class="full-width">
     <tr>
         <td class="text-center" style="text-transform: uppercase;">
-            {{ ($establishment->address !== '-')? $establishment->address : '' }}
-            {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-            {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-            {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($establishment) }}
         </td>
     </tr>
     <tr>
-        <td class="text-center">{{ ($establishment->email !== '-')? $establishment->email : '' }}</td>
+        <td class="text-center"></td>
     </tr>
     <tr>
         <td class="text-center">{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</td>

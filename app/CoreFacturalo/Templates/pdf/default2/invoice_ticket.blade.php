@@ -37,7 +37,7 @@
     </tr>
     {{--@endif--}}
     <tr>
-        <td class="text-center">{{ ($establishment->email !== '-')? $establishment->email : '' }}</td>
+        <td class="text-center"></td>
     </tr>
     <tr>
         <td class="text-center pb-3">{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</td>
@@ -54,7 +54,7 @@
     <tr>
         <td class="width-first-td">F. Emisión</td>
         <td>:</td>
-        <td>{{ $document->date_of_issue->format('Y-m-d') }}</td>
+        <td>{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
 
     @isset($invoice->date_of_due)
@@ -62,7 +62,7 @@
             <tr>
                 <td>F. Vencimiento:</td>
                 <td>:</td>
-                <td>{{ $invoice->date_of_due->format('Y-m-d') }}</td>
+                <td>{{ $invoice->date_of_due->format('d/m/Y') }}</td>
             </tr>
         @endif
     @endisset
@@ -73,7 +73,7 @@
         <td>{{ $customer->name }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
         <td>:</td>
         <td>{{ $customer->number }}</td>
     </tr>

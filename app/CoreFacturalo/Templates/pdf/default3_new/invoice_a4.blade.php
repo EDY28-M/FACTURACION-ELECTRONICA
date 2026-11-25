@@ -61,10 +61,7 @@
                 <h4 class="">{{ $company->name }}</h4>
                 <h5>{{ 'RUC '.$company->number }}</h5>
                 <h6 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h6>
 
                 @isset($establishment->trade_address)
@@ -73,7 +70,7 @@
 
                 <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-                <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <h6></h6>
 
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -107,7 +104,7 @@
                 </tr>
                 <tr>
                     <td class="font-sm" width="80px">
-                        <strong>{{$customer->identity_document_type->description}}</strong>
+                        <strong>{{ \App\Support\PdfFormat::identityLabel($customer) }}</strong>
                     </td>
                     <td class="font-sm" width="8px">:</td>
                     <td class="font-sm">
@@ -122,10 +119,7 @@
                     <td class="font-sm">
                         @if ($customer->address !== '')
                             <span style="text-transform: uppercase;">
-                                {{ $customer->address }}
-                                {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                                {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                                {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                                {{ \App\Support\PdfFormat::address($customer) }}
                             </span>
                         @endif
                     </td>
@@ -161,7 +155,7 @@
                     </td>
                     <td class="font-sm" width="8px">:</td>
                     <td class="font-sm">
-                        {{ $document->date_of_issue->format('Y-m-d') }}
+                        {{ $document->date_of_issue->format('d/m/Y') }}
                     </td>
                     <td class="font-sm" width="70px">
                         <strong>H. Emisión</strong>
@@ -179,7 +173,7 @@
                     </td>
                     <td class="font-sm" width="8px">:</td>
                     <td class="font-sm">
-                        {{$invoice->date_of_due->format('Y-m-d')}}
+                        {{$invoice->date_of_due->format('d/m/Y')}}
                     </td>
                     @endif
 

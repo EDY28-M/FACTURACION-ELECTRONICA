@@ -29,7 +29,7 @@
                 <h2 class="">{{ $company->name }}</h2>
                 <h4>{{ 'RUC '.$company->number }}</h4>
                 <h4>{{ ($establishment->address !== '-')? $establishment->address : '' }}</h4>
-                <h4>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h4>
+                <h4></h4>
                 <h4>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h4>
             </div>
         </td>
@@ -44,14 +44,14 @@
         <td width="15%">Cliente:</td>
         <td width="45%">{{ $customer->name }}</td>
         <td width="25%">Fecha de emisión:</td>
-        <td width="15%">{{ $document->date_of_issue->format('Y-m-d') }}</td>
+        <td width="15%">{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}:</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>
         <td>{{ $customer->number }}</td>
         @if($invoice)
         <td>Fecha de vencimiento:</td>
-        <td>{{ $invoice->date_of_due->format('Y-m-d') }}</td>
+        <td>{{ $invoice->date_of_due->format('d/m/Y') }}</td>
         @endif
     </tr>
     @if ($customer->address && $customer->address !== '' && $customer->address !== '-')

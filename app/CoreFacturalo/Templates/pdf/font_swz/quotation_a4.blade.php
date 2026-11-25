@@ -34,12 +34,9 @@
             <div class="text-left">
                 <p class="font-bold text-upp">{{ $company->name }}</p>
                 <p style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </p>
-                <p>{{ ($establishment->email !== '-')? $establishment->email : '' }}</p>
+                <p></p>
                 <p>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</p>
             </div>
         </td>
@@ -55,7 +52,7 @@
         <td width="65%">
             <table class="full-width">
                 <tr>
-                    <td>{{ $customer->identity_document_type->description }}:{{$customer->number}}</td>
+                    <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:{{$customer->number}}</td>
                 </tr>
                 <tr>
                     <td>{{ $customer->name }}</td>
@@ -64,10 +61,7 @@
                     <tr>
                         <td class="align-top">Dirección:</td>
                         <td colspan="3">
-                            {{ $customer->address }}
-                            {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                            {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                            {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                            {{ \App\Support\PdfFormat::address($customer) }}
                         </td>
                     </tr>
                 @endif
@@ -77,7 +71,7 @@
             <table class="full-width">
                 <tr>
                     <td>FECHA DE EMISIÓN:</td>
-                    <td>{{$document->date_of_issue->format('Y-m-d')}}</td>
+                    <td>{{$document->date_of_issue->format('d/m/Y')}}</td>
                 </tr>
                 @if ($document->purchase_order)
                     <tr>

@@ -33,7 +33,7 @@
                     <td class="cell-bold cell-top">:</td>
                     <td>{{ $document->date_of_issue->format('d/m/Y') }}</td></tr>
                 <tr>
-                    <td class="cell-bold">{{ $customer->identity_document_type->description }}</td>
+                    <td class="cell-bold">{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
                     <td>: </td>
                     <td>{{ $customer->number }}</td>
                 </tr>

@@ -29,12 +29,9 @@
             <div>
                 <h3 style="text-transform: uppercase;">{{ $company->name }}</h3>
                 <h5 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h5>
-                <h5>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h5>
+                <h5></h5>
                 <h5>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h5>
             </div>
         </td>

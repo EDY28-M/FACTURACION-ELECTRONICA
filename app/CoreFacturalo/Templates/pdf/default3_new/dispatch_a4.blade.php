@@ -35,12 +35,9 @@
                 <h3 class="">{{ $company->name }}</h3>
                 <h4>{{ 'RUC '.$company->number }}</h4>
                 <h5 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h5>
-                <h5>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h5>
+                <h5></h5>
                 <h5>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h5>
             </div>
         </td>
@@ -80,10 +77,7 @@
             @endif
         </tr>
         <tr>
-            <td colspan="2" class="pl-3"><strong>Dirección:</strong> {{ $customer->address }}
-                {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+            <td colspan="2" class="pl-3"><strong>Dirección:</strong> {{ \App\Support\PdfFormat::address($customer) }}
             </td>
         </tr>
     </tbody>

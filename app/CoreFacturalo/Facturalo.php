@@ -549,7 +549,7 @@ class Facturalo
 
         if (($format_pdf != 'ticket') AND ($format_pdf != 'ticket_58') AND ($format_pdf != 'ticket_50')) {
             // dd($base_pdf_template);// = config(['tenant.pdf_template'=> $configuration]);
-            if(config('tenant.pdf_template_footer')) {
+            if(config('tenant.pdf_template_footer') && $format_pdf !== 'a5') {
 
                 $html_footer = $template->pdfFooter($base_pdf_template, in_array($this->document->document_type_id, ['09']) ? null : $this->document);
                 $html_footer_legend = "";

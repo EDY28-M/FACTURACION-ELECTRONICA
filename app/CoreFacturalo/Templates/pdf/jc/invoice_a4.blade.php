@@ -54,10 +54,7 @@
                 <h4 class="">{{ $company->name }}</h4>
                 <h5>{{ 'RUC '.$company->number }}</h5>
                 <h6 style="text-transform: uppercase;">
-                    {{ ($establishment->address !== '-')? $establishment->address : '' }}
-                    {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-                    {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-                    {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($establishment) }}
                 </h6>
 
                 @isset($establishment->trade_address)
@@ -66,7 +63,7 @@
 
                 <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-                <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <h6></h6>
 
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -88,7 +85,7 @@
 
         <td width="120px">FECHA DE EMISIÓN</td>
         <td width="8px">:</td>
-        <td>{{$document->date_of_issue->format('Y-m-d')}}</td>
+        <td>{{$document->date_of_issue->format('d/m/Y')}}</td>
 
         @if ($document->detraction)
 
@@ -102,7 +99,7 @@
         <tr>
             <td>FECHA DE VENCIMIENTO</td>
             <td width="8px">:</td>
-            <td>{{$invoice->date_of_due->format('Y-m-d')}}</td>
+            <td>{{$invoice->date_of_due->format('d/m/Y')}}</td>
         </tr>
         @endif
     @endif
@@ -115,7 +112,7 @@
 
     @endif
     <tr>
-        <td>CLIENTE:</td>
+        <td>CLIENTE</td>
         <td>:</td>
         <td>{{ $customer->name }}</td>
 
@@ -127,7 +124,7 @@
 
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
         <td>:</td>
         <td>{{$customer->number}}</td>
 
@@ -140,13 +137,10 @@
     </tr>
     @if ($customer->address !== '')
     <tr>
-        <td class="align-top">DIRECCIÓN:</td>
+        <td class="align-top">DIRECCIÓN</td>
         <td>:</td>
         <td>
-            {{ $customer->address }}
-            {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-            {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-            {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($customer) }}
         </td>
 
         @if ($document->detraction)
@@ -205,7 +199,7 @@
 
 
 
-@if ($document->reference_guides)
+@if ($document->reference_guides && count($document->reference_guides))
 <br/>
 <strong>Guias de remisión</strong>
 <table>
@@ -535,7 +529,7 @@
             @endphp
             @foreach($payments as $row)
                 <tr>
-                    <td>&#8226; {{ $row->reference }} {{ $document->currency_type->symbol }} {{ $row->payment + $row->change }}</td>
+                    <td>&#8226; {{ $row->reference }} {{ $document->currency_type->symbol }} {{ number_format($row->payment + $row->change, 2) }}</td>
                 </tr>
             @endforeach
         </tr>

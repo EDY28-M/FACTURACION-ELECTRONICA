@@ -56,7 +56,7 @@
                     {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
                 </p>
                 <p>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
-                <p>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+                <p></h6>
                 @isset($establishment->web_address)
                     <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
                 @endisset
@@ -73,7 +73,7 @@
     <tr>
         <td width="120px">FECHA DE EMISIÓN</td>
         <td width="5px">:</td>
-        <td>{{ $document->date_of_issue->format('Y-m-d') }}</td>
+        <td>{{ $document->date_of_issue->format('d/m/Y') }}</td>
     </tr>
     <tr>
         <td>CLIENTE</td>
@@ -81,7 +81,7 @@
         <td>{{ $customer->name }}</td>
     </tr>
     <tr>
-        <td>{{ $customer->identity_document_type->description }}</td>
+        <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
         <td>:</td>
         <td>{{ $customer->number }}</td>
         {{--@isset($document->date_of_due)--}}
@@ -94,10 +94,7 @@
         <td class="align-top">DIRECCIÓN</td>
         <td>:</td>
         <td>
-            {{ $customer->address }}
-            {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-            {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-            {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($customer) }}
         </td>
     </tr>
     @endif
@@ -153,7 +150,7 @@
     <tbody>
     @foreach($document->items as $row)
         <tr>
-            <td class="text-left align-top">{{ $row->relation_item->internal_id }}</td>
+            <td class="text-left align-top">{{ optional($row->relation_item)->internal_id }}</td>
             <td class="text-center">
                 @if(((int)$row->quantity != $row->quantity))
                     {{ $row->quantity }}

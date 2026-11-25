@@ -510,7 +510,7 @@ class SaleNoteController extends Controller
                 'mode' => 'utf-8',
                 'format' => [
                     $width,
-                    40 +
+                    70 + // base ampliada: el formato "moderno" es más alto que el original
                     (($quantity_rows * 8) + $extra_by_item_description) +
                     ($discount_global * 3) +
                     $company_logo +

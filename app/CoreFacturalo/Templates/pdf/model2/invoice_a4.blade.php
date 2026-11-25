@@ -35,7 +35,7 @@
                 </h4>
                 @endif
                 @if($establishment->email !== '' && $establishment->email !== '-')
-                <h4>{{ ($establishment->email !== '-')? $establishment->email : '' }}</h4>
+                <h4></h4>
                 @endif
                 @if($establishment->telephone !== '' && $establishment->telephone !== '-')
                 <h4>{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</h4>
@@ -60,7 +60,7 @@
                     <td>{{ $customer->name }}</td>
                 </tr>
                 <tr>
-                    <td>{{ $customer->identity_document_type->description }}</td>
+                    <td>{{ \App\Support\PdfFormat::identityLabel($customer) }}</td>
                     <td>:</td>
                     <td>{{ $customer->number }}</td>
                 </tr>
@@ -96,14 +96,14 @@
                 <tr>
                     <td class="width-first-td">F. Emisión</td>
                     <td>:</td>
-                    <td>{{ $document->date_of_issue->format('Y-m-d') }}</td>
+                    <td>{{ $document->date_of_issue->format('d/m/Y') }}</td>
                 </tr>
                 @isset($invoice->date_of_due)
                 @if($document->date_of_issue->format('Y-m-d') !== $invoice->date_of_due->format('Y-m-d'))
                 <tr>
                     <td>F. Vencimiento:</td>
                     <td>:</td>
-                    <td>{{ $invoice->date_of_due->format('Y-m-d') }}</td>
+                    <td>{{ $invoice->date_of_due->format('d/m/Y') }}</td>
                 </tr>
                 @endif
                 @endisset
@@ -120,7 +120,7 @@
         {{--<td width="15%">{{ $document->date_of_issue->format('Y-m-d') }}</td>--}}
     {{--</tr>--}}
     {{--<tr>--}}
-        {{--<td>{{ $customer->identity_document_type->description }}:</td>--}}
+        {{--<td>{{ \App\Support\PdfFormat::identityLabel($customer) }}:</td>--}}
         {{--<td>{{ $customer->number }}</td>--}}
         {{--@if($invoice)--}}
         {{--<td>Fecha de vencimiento:</td>--}}

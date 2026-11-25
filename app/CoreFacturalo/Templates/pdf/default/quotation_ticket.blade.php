@@ -33,17 +33,14 @@
     </tr>
     <tr>
         <td class="text-center">
-            {{ ($establishment->address !== '-')? $establishment->address : '' }}
-            {{ ($establishment->district_id !== '-')? ', '.$establishment->district->description : '' }}
-            {{ ($establishment->province_id !== '-')? ', '.$establishment->province->description : '' }}
-            {{ ($establishment->department_id !== '-')? '- '.$establishment->department->description : '' }}
+            {{ \App\Support\PdfFormat::address($establishment) }}
 
             @isset($establishment->trade_address)
                 <h6>{{ ($establishment->trade_address !== '-')? 'D. Comercial: '.$establishment->trade_address : '' }}</h6>
             @endisset
             <h6>{{ ($establishment->telephone !== '-')? 'Central telefónica: '.$establishment->telephone : '' }}</h6>
 
-            <h6>{{ ($establishment->email !== '-')? 'Email: '.$establishment->email : '' }}</h6>
+            <h6></h6>
 
             @isset($establishment->web_address)
                 <h6>{{ ($establishment->web_address !== '-')? 'Web: '.$establishment->web_address : '' }}</h6>
@@ -55,7 +52,7 @@
         </td>
     </tr>
     <tr>
-        <td class="text-center">{{ ($establishment->email !== '-')? $establishment->email : '' }}</td>
+        <td class="text-center"></td>
     </tr>
     <tr>
         <td class="text-center pb-3">{{ ($establishment->telephone !== '-')? $establishment->telephone : '' }}</td>
@@ -70,7 +67,7 @@
 <table class="full-width">
     <tr>
         <td width="" class="pt-3"><p class="desc">F. Emisión:</p></td>
-        <td width="" class="pt-3"><p class="desc">{{ $document->date_of_issue->format('Y-m-d') }}</p></td>
+        <td width="" class="pt-3"><p class="desc">{{ $document->date_of_issue->format('d/m/Y') }}</p></td>
     </tr>
 
     @if($document->date_of_due)
@@ -92,7 +89,7 @@
         <td><p class="desc">{{ $customer->name }}</p></td>
     </tr>
     <tr>
-        <td><p class="desc">{{ $customer->identity_document_type->description }}:</p></td>
+        <td><p class="desc">{{ \App\Support\PdfFormat::identityLabel($customer) }}:</p></td>
         <td><p class="desc">{{ $customer->number }}</p></td>
     </tr>
     @if ($customer->address !== '')
@@ -100,10 +97,7 @@
             <td class="align-top"><p class="desc">Dirección:</p></td>
             <td>
                 <p class="desc">
-                    {{ $customer->address }}
-                    {{ ($customer->district_id !== '-')? ', '.$customer->district->description : '' }}
-                    {{ ($customer->province_id !== '-')? ', '.$customer->province->description : '' }}
-                    {{ ($customer->department_id !== '-')? '- '.$customer->department->description : '' }}
+                    {{ \App\Support\PdfFormat::address($customer) }}
                 </p>
             </td>
         </tr>
@@ -251,8 +245,8 @@
                         {{$item}}<br>
                     @endforeach
                 @endif
-                @if($row->item->extra_attr_value != '')
-                    <br/><span style="font-size: 9px">{{$row->item->extra_attr_name}}: {{ $row->item->extra_attr_value }}</span>
+                @if(($row->item->extra_attr_value ?? '') != '')
+                    <br/><span style="font-size: 9px">{{($row->item->extra_attr_name ?? '')}}: {{ ($row->item->extra_attr_value ?? '') }}</span>
                 @endif
             </td>
             <td class="text-right desc-9 align-top">{{ number_format($row->unit_price, 2) }}</td>
