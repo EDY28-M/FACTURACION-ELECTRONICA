@@ -2,7 +2,7 @@
     "/js/vendor.js": "/js/vendor.js?id=a5ab75686c7af2c90494",
     "/js/app.js": "/js/app.js?id=81d49b9d652f361ae4a1",
     "/css/auth.css": "/css/auth.css?id=348fd93b55ffc4bb2894",
-    "/js/manifest.js": "/js/manifest.js?id=6cd5aab8897c50389625",
+    "/js/manifest.js": "/js/manifest.js?id=d116ce6159987a12777c",
     "/js/chunk-tenant-payment-method-index.be5d8334f36b.js": "/js/chunk-tenant-payment-method-index.be5d8334f36b.js?id=85e770ac0dbc57207a87",
     "/js/chunk-tenant-payment-method-index.be5d8334f36b.js.map": "/js/chunk-tenant-payment-method-index.be5d8334f36b.js.map?id=726fcf10ea333a505adf",
     "/js/chunk-tenant-documents-invoice.12e76aca4461.js": "/js/chunk-tenant-documents-invoice.12e76aca4461.js?id=e0a619c68d12d165a18b",
@@ -375,7 +375,7 @@
     "/js/chunk-tenant-account-export.ad2195f0d50f.js.map": "/js/chunk-tenant-account-export.ad2195f0d50f.js.map?id=4cf38a07b3abb57fc860",
     "/js/app.js.map": "/js/app.js.map?id=b09dec4a43487f33111e",
     "/js/vendor.js.map": "/js/vendor.js.map?id=d652103537ea9f4f641c",
-    "/js/manifest.js.map": "/js/manifest.js.map?id=fcaf14fb59de718d0ea1",
+    "/js/manifest.js.map": "/js/manifest.js.map?id=4fd3a040f023df4a7e35",
     "/css/app.css": "/css/app.css?id=6c574b6c32c81119dd6c",
     "/css/pos.css": "/css/pos.css?id=9c105e2f69212bb2c983",
     "/js/chunk-tenant-documentary-files.bac39884fa37.js": "/js/chunk-tenant-documentary-files.bac39884fa37.js?id=93f715f0eec827178173",
@@ -1461,5 +1461,7 @@
     "/js/chunk-tenant-sale-opportunities-form.38d0cdd5224c.js": "/js/chunk-tenant-sale-opportunities-form.38d0cdd5224c.js?id=4473a4549bcd9d5b7971",
     "/js/chunk-tenant-sale-opportunities-form.38d0cdd5224c.js.map": "/js/chunk-tenant-sale-opportunities-form.38d0cdd5224c.js.map?id=731845ca67aa08922c52",
     "/js/chunk-tenant-pos-index.8f275020f70e.js": "/js/chunk-tenant-pos-index.8f275020f70e.js?id=0d1c71b53c7bcbd94710",
-    "/js/chunk-tenant-pos-index.8f275020f70e.js.map": "/js/chunk-tenant-pos-index.8f275020f70e.js.map?id=47e0ff2c0c94f06c46c7"
+    "/js/chunk-tenant-pos-index.8f275020f70e.js.map": "/js/chunk-tenant-pos-index.8f275020f70e.js.map?id=47e0ff2c0c94f06c46c7",
+    "/js/chunk-tenant-companies-form.e5f4990a6cc6.js": "/js/chunk-tenant-companies-form.e5f4990a6cc6.js?id=a5a5bc229da89b6ce210",
+    "/js/chunk-tenant-companies-form.e5f4990a6cc6.js.map": "/js/chunk-tenant-companies-form.e5f4990a6cc6.js.map?id=fb490ac76a6b97218a41"
 }

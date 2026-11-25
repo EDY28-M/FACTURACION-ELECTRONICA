@@ -100,7 +100,9 @@ class DocumentController extends Controller
         $identity_document_type_id = $this->getIdentityDocumentTypeId($request->document_type_id, $request->operation_type_id);
 //        $operation_type_id_id = $this->getIdentityDocumentTypeId($request->operation_type_id);
 
-        $customers = Person::where(function ($query) use ($request) {
+        $customers = Person::without(['country', 'department', 'province', 'district'])
+                            ->with('addresses')
+                            ->where(function ($query) use ($request) {
                                 $query->where('number', 'like', "%{$request->input}%")
                                       ->orWhere('name', 'like', "%{$request->input}%");
                             })
@@ -150,7 +152,17 @@ class DocumentController extends Controller
     {
         $customers = $this->table('customers');
         // $prepayment_documents = $this->table('prepayment_documents');
-        $establishments = Establishment::where('id', auth()->user()->establishment_id)->get();// Establishment::all();
+        $establishments = Establishment::without(['department', 'province'])
+            ->with([
+                'department' => function ($query) {
+                    $query->without(['provinces']);
+                },
+                'province' => function ($query) {
+                    $query->without(['districts']);
+                },
+            ])
+            ->where('id', auth()->user()->establishment_id)
+            ->get();
         $series = collect(Series::all())->transform(function($row) {
             return [
                 'id' => $row->id,
@@ -171,7 +183,7 @@ class DocumentController extends Controller
         $company = Company::active();
         $document_type_03_filter = config('tenant.document_type_03_filter');
         $user = auth()->user()->type;
-        $sellers = User::whereIn('type', ['seller'])->orWhere('id', auth()->user()->id)->get();
+        $sellers = User::without(['establishment'])->whereIn('type', ['seller'])->orWhere('id', auth()->user()->id)->get();
         $payment_method_types = $this->table('payment_method_types');
         $business_turns = BusinessTurn::where('active', true)->get();
         $enabled_discount_global = config('tenant.enabled_discount_global');
@@ -229,7 +241,14 @@ class DocumentController extends Controller
     public function table($table)
     {
         if ($table === 'customers') {
-            $customers = Person::with('addresses')->whereType('customers')->whereIsEnabled()->orderBy('name')->take(20)->get()->transform(function($row) {
+            $customers = Person::without(['country', 'department', 'province', 'district'])
+                ->with('addresses')
+                ->whereType('customers')
+                ->whereIsEnabled()
+                ->orderBy('name')
+                ->take(20)
+                ->get()
+                ->transform(function($row) {
                 return [
                     'id' => $row->id,
                     'description' => $row->number.' - '.$row->name,
@@ -283,8 +302,20 @@ class DocumentController extends Controller
             $warehouse = ModuleWarehouse::where('establishment_id', $establishment_id)->first();
 
             // $items_u = Item::whereWarehouse()->whereIsActive()->whereNotIsSet()->orderBy('description')->take(20)->get();
-            $items_u = Item::with(['brand', 'category'])->whereWarehouse()->whereIsActive()->orderBy('description')->take(20)->get();
-            $items_s = Item::with(['brand', 'category'])->where('unit_type_id','ZZ')->whereIsActive()->orderBy('description')->take(10)->get();
+            $items_u = Item::without(['item_type', 'unit_type', 'tags'])
+                ->with(['brand', 'category', 'warehouses.warehouse', 'lots_group'])
+                ->whereWarehouse()
+                ->whereIsActive()
+                ->orderBy('description')
+                ->take(20)
+                ->get();
+            $items_s = Item::without(['item_type', 'unit_type', 'tags'])
+                ->with(['brand', 'category', 'warehouses.warehouse', 'lots_group'])
+                ->where('unit_type_id','ZZ')
+                ->whereIsActive()
+                ->orderBy('description')
+                ->take(10)
+                ->get();
             $items = $items_u->merge($items_s);
 
             return collect($items)->transform(function($row) use($warehouse){
@@ -669,7 +700,9 @@ class DocumentController extends Controller
     public function searchCustomerById($id)
     {
 
-        $customers = Person::with('addresses')->whereType('customers')
+        $customers = Person::without(['country', 'department', 'province', 'district'])
+                    ->with('addresses')
+                    ->whereType('customers')
                     ->where('id',$id)
                     ->get()->transform(function($row) {
                         return [
@@ -885,7 +918,17 @@ class DocumentController extends Controller
         $state_types = StateType::get();
         $document_types = DocumentType::whereIn('id', ['01', '03','07', '08'])->get();
         $series = Series::whereIn('document_type_id', ['01', '03','07', '08'])->get();
-        $establishments = Establishment::where('id', auth()->user()->establishment_id)->get();// Establishment::all();
+        $establishments = Establishment::without(['department', 'province'])
+            ->with([
+                'department' => function ($query) {
+                    $query->without(['provinces']);
+                },
+                'province' => function ($query) {
+                    $query->without(['districts']);
+                },
+            ])
+            ->where('id', auth()->user()->establishment_id)
+            ->get();
 
         return compact( 'customers', 'document_types','series','establishments', 'state_types', 'items', 'categories');
 
@@ -894,12 +937,17 @@ class DocumentController extends Controller
 
     public function getItems(){
 
-        $items = Item::orderBy('description')->take(20)->get()->transform(function($row) {
-            return [
-                'id' => $row->id,
-                'description' => ($row->internal_id) ? "{$row->internal_id} - {$row->description}" :$row->description,
-            ];
-        });
+        $items = Item::without(['item_type', 'unit_type', 'currency_type', 'warehouses', 'item_unit_types', 'tags'])
+            ->select(['id', 'internal_id', 'description'])
+            ->orderBy('description')
+            ->take(20)
+            ->get()
+            ->transform(function($row) {
+                return [
+                    'id' => $row->id,
+                    'description' => ($row->internal_id) ? "{$row->internal_id} - {$row->description}" :$row->description,
+                ];
+            });
 
         return $items;
 
@@ -908,7 +956,9 @@ class DocumentController extends Controller
 
     public function getDataTableItem(Request $request) {
 
-        $items = Item::where('description','like', "%{$request->input}%")
+        $items = Item::without(['item_type', 'unit_type', 'currency_type', 'warehouses', 'item_unit_types', 'tags'])
+                        ->select(['id', 'internal_id', 'description'])
+                        ->where('description','like', "%{$request->input}%")
                         ->orWhere('internal_id','like', "%{$request->input}%")
                         ->orderBy('description')
                         ->get()->transform(function($row) {

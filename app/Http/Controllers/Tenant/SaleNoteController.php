@@ -156,8 +156,11 @@ class SaleNoteController extends Controller
     public function searchCustomers(Request $request)
     {
 
-        $customers = Person::where('number','like', "%{$request->input}%")
-                            ->orWhere('name','like', "%{$request->input}%")
+        $customers = Person::without(['country', 'department', 'province', 'district'])
+                            ->where(function ($query) use ($request) {
+                                $query->where('number','like', "%{$request->input}%")
+                                    ->orWhere('name','like', "%{$request->input}%");
+                            })
                             ->whereType('customers')->orderBy('name')
                             ->whereIsEnabled()
                             ->get()->transform(function($row) {
@@ -177,7 +180,17 @@ class SaleNoteController extends Controller
     public function tables()
     {
         $customers = $this->table('customers');
-        $establishments = Establishment::where('id', auth()->user()->establishment_id)->get();
+        $establishments = Establishment::without(['department', 'province'])
+            ->with([
+                'department' => function ($query) {
+                    $query->without(['provinces']);
+                },
+                'province' => function ($query) {
+                    $query->without(['districts']);
+                },
+            ])
+            ->where('id', auth()->user()->establishment_id)
+            ->get();
         $currency_types = CurrencyType::whereActive()->get();
         $discount_types = ChargeDiscountType::whereType('discount')->whereLevel('item')->get();
         $charge_types = ChargeDiscountType::whereType('charge')->whereLevel('item')->get();
@@ -691,7 +704,13 @@ class SaleNoteController extends Controller
         switch ($table) {
             case 'customers':
 
-                $customers = Person::whereType('customers')->whereIsEnabled()->orderBy('name')->take(20)->get()->transform(function($row) {
+                $customers = Person::without(['country', 'department', 'province', 'district'])
+                    ->whereType('customers')
+                    ->whereIsEnabled()
+                    ->orderBy('name')
+                    ->take(20)
+                    ->get()
+                    ->transform(function($row) {
                     return [
                         'id' => $row->id,
                         'description' => $row->number.' - '.$row->name,
@@ -711,9 +730,22 @@ class SaleNoteController extends Controller
                 $warehouse = Warehouse::where('establishment_id', $establishment_id)->first();
                 $warehouse_id = ($warehouse) ? $warehouse->id:null;
 
-                $items_u = Item::whereWarehouse()->whereIsActive()->whereNotIsSet()->orderBy('description')->take(20)->get();
+                $items_u = Item::without(['item_type', 'unit_type', 'tags'])
+                    ->with(['brand', 'category', 'warehouses.warehouse', 'lots_group'])
+                    ->whereWarehouse()
+                    ->whereIsActive()
+                    ->whereNotIsSet()
+                    ->orderBy('description')
+                    ->take(20)
+                    ->get();
 
-                $items_s = Item::where('unit_type_id','ZZ')->whereIsActive()->orderBy('description')->take(10)->get();
+                $items_s = Item::without(['item_type', 'unit_type', 'tags'])
+                    ->with(['brand', 'category', 'warehouses.warehouse', 'lots_group'])
+                    ->where('unit_type_id','ZZ')
+                    ->whereIsActive()
+                    ->orderBy('description')
+                    ->take(10)
+                    ->get();
 
                 $items = $items_u->merge($items_s);
 

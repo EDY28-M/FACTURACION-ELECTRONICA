@@ -29,19 +29,24 @@ class EstablishmentController extends Controller
     public function tables()
     {
         $countries = Country::whereActive()->orderByDescription()->get();
-        $departments = Department::whereActive()->orderByDescription()->get();
-        $provinces = Province::whereActive()->orderByDescription()->get();
+        $departments = Department::without(['provinces'])->whereActive()->orderByDescription()->get();
+        $provinces = Province::without(['districts'])->whereActive()->orderByDescription()->get();
         $districts = District::whereActive()->orderByDescription()->get();
 
-        $customers = Person::whereType('customers')->orderBy('name')->take(1)->get()->transform(function($row) {
-            return [
-                'id' => $row->id,
-                'description' => $row->number.' - '.$row->name,
-                'name' => $row->name,
-                'number' => $row->number,
-                'identity_document_type_id' => $row->identity_document_type_id,
-            ];
-        });
+        $customers = Person::without(['identity_document_type', 'country', 'department', 'province', 'district'])
+            ->whereType('customers')
+            ->orderBy('name')
+            ->take(1)
+            ->get()
+            ->transform(function($row) {
+                return [
+                    'id' => $row->id,
+                    'description' => $row->number.' - '.$row->name,
+                    'name' => $row->name,
+                    'number' => $row->number,
+                    'identity_document_type_id' => $row->identity_document_type_id,
+                ];
+            });
 
         return compact('countries', 'departments', 'provinces', 'districts', 'customers');
     }
@@ -88,7 +93,16 @@ class EstablishmentController extends Controller
 
     public function records()
     {
-        $records = Establishment::all();
+        $records = Establishment::without(['department', 'province'])
+            ->with([
+                'department' => function ($query) {
+                    $query->without(['provinces']);
+                },
+                'province' => function ($query) {
+                    $query->without(['districts']);
+                },
+            ])
+            ->get();
 
         return new EstablishmentCollection($records);
     }

@@ -114,21 +114,19 @@
         },
         async created() {
             await this.initForm()
-            await this.$http.get(`/${this.resource}/tables`)
-                .then(response => {
-                    this.countries = response.data.countries
-                    this.all_departments = response.data.departments
-                    this.all_provinces = response.data.provinces
-                    this.all_districts = response.data.districts
-                })
-            await this.$http.get(`/${this.resource}/record/1`)
-                .then(response => {
-                    if (response.data !== '') {
-                        this.form = response.data.data
-                        this.filterProvinces()
-                        this.filterDistricts()
-                    }
-                })
+            const [tablesResponse, recordResponse] = await Promise.all([
+                this.$http.get(`/${this.resource}/tables`),
+                this.$http.get(`/${this.resource}/record/1`),
+            ])
+            this.countries = tablesResponse.data.countries
+            this.all_departments = tablesResponse.data.departments
+            this.all_provinces = tablesResponse.data.provinces
+            this.all_districts = tablesResponse.data.districts
+            if (recordResponse.data !== '') {
+                this.form = recordResponse.data.data
+                this.filterProvinces()
+                this.filterDistricts()
+            }
         },
         methods: {
             initForm() {

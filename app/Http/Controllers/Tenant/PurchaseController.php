@@ -122,7 +122,17 @@ class PurchaseController extends Controller
     public function tables()
     {
         $suppliers = $this->table('suppliers');
-        $establishment = Establishment::where('id', auth()->user()->establishment_id)->first();
+        $establishment = Establishment::without(['department', 'province'])
+            ->with([
+                'department' => function ($query) {
+                    $query->without(['provinces']);
+                },
+                'province' => function ($query) {
+                    $query->without(['districts']);
+                },
+            ])
+            ->where('id', auth()->user()->establishment_id)
+            ->first();
         $currency_types = CurrencyType::whereActive()->get();
         $document_types_invoice = DocumentType::whereIn('id', ['01', '02', '03', 'GU75', 'NE76', '14'])->get();
         $discount_types = ChargeDiscountType::whereType('discount')->whereLevel('item')->get();
@@ -535,7 +545,11 @@ class PurchaseController extends Controller
         switch ($table) {
             case 'suppliers':
 
-                $suppliers = Person::whereType('suppliers')->orderBy('name')->get()->transform(function($row) {
+                $suppliers = Person::without(['country', 'department', 'province', 'district'])
+                    ->whereType('suppliers')
+                    ->orderBy('name')
+                    ->get()
+                    ->transform(function($row) {
                     return [
                         'id' => $row->id,
                         'description' => $row->number.' - '.$row->name,
@@ -552,7 +566,12 @@ class PurchaseController extends Controller
 
             case 'items':
 
-                $items = Item::whereNotIsSet()->whereIsActive()->orderBy('description')->take(20)->get(); //whereWarehouse()
+                $items = Item::without(['item_type', 'unit_type', 'warehouses', 'tags'])
+                    ->whereNotIsSet()
+                    ->whereIsActive()
+                    ->orderBy('description')
+                    ->take(20)
+                    ->get(); //whereWarehouse()
                 return collect($items)->transform(function($row) {
                     $full_description = ($row->internal_id)?$row->internal_id.' - '.$row->description:$row->description;
                     return [
@@ -890,7 +909,12 @@ class PurchaseController extends Controller
 
     public function getPersons($type){
 
-        $persons = Person::whereType($type)->orderBy('name')->take(20)->get()->transform(function($row) {
+        $persons = Person::without(['identity_document_type', 'country', 'department', 'province', 'district'])
+            ->whereType($type)
+            ->orderBy('name')
+            ->take(20)
+            ->get()
+            ->transform(function($row) {
             return [
                 'id' => $row->id,
                 'description' => $row->number.' - '.$row->name,

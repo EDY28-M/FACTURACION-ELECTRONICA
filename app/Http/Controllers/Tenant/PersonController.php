@@ -71,12 +71,12 @@ class PersonController extends Controller
     public function tables()
     {
         $countries = Country::whereActive()->orderByDescription()->get();
-        $departments = Department::whereActive()->orderByDescription()->get();
-        $provinces = Province::whereActive()->orderByDescription()->get();
+        $departments = Department::without(['provinces'])->whereActive()->orderByDescription()->get();
+        $provinces = Province::without(['districts'])->whereActive()->orderByDescription()->get();
         $districts = District::whereActive()->orderByDescription()->get();
         $identity_document_types = IdentityDocumentType::whereActive()->get();
         $person_types = PersonType::get();
-        $locations = $this->getLocationCascade();
+        $locations = $this->buildLocationCascade($departments, $provinces, $districts);
         $configuration = Configuration::first();
         $api_service_token = $configuration->token_apiruc == 'false' ? config('configuration.api_service_token') : $configuration->token_apiruc;
 
@@ -170,15 +170,26 @@ class PersonController extends Controller
 
     public function getLocationCascade()
     {
+        $departments = Department::without(['provinces'])->where('active', true)->get();
+        $provinces = Province::without(['districts'])->where('active', true)->get();
+        $districts = District::where('active', true)->get();
+
+        return $this->buildLocationCascade($departments, $provinces, $districts);
+    }
+
+    private function buildLocationCascade($departments, $provinces, $districts)
+    {
+        $provincesByDepartment = $provinces->groupBy('department_id');
+        $districtsByProvince = $districts->groupBy('province_id');
         $locations = [];
-        $departments = Department::where('active', true)->get();
+
         foreach ($departments as $department)
         {
             $children_provinces = [];
-            foreach ($department->provinces as $province)
+            foreach ($provincesByDepartment->get($department->id, []) as $province)
             {
                 $children_districts = [];
-                foreach ($province->districts as $district)
+                foreach ($districtsByProvince->get($province->id, []) as $district)
                 {
                     $children_districts[] = [
                         'value' => $district->id,

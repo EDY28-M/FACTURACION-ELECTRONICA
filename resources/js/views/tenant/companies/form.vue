@@ -201,20 +201,18 @@
         },
         async created() {
             await this.initForm()
-            await this.$http.get(`/${this.resource}/tables`)
-                .then(response => {
-                    this.soap_sends = response.data.soap_sends
-                    this.soap_types = response.data.soap_types
-                })
-            await this.$http.get(`/${this.resource}/record`)
-                .then(response => {
-                    if (response.data !== '') {
-                        this.form = response.data.data
-                        this.$set(this.form, 'gre_client_secret', null)
-                        this.$set(this.form, 'sire_client_secret', null)
-                        this.$set(this.form, 'cpe_client_secret', null)
-                    }
-                })
+            const [tablesResponse, recordResponse] = await Promise.all([
+                this.$http.get(`/${this.resource}/tables`),
+                this.$http.get(`/${this.resource}/record`),
+            ])
+            this.soap_sends = tablesResponse.data.soap_sends
+            this.soap_types = tablesResponse.data.soap_types
+            if (recordResponse.data !== '') {
+                this.form = recordResponse.data.data
+                this.$set(this.form, 'gre_client_secret', null)
+                this.$set(this.form, 'sire_client_secret', null)
+                this.$set(this.form, 'cpe_client_secret', null)
+            }
         },
         methods: {
             initForm() {

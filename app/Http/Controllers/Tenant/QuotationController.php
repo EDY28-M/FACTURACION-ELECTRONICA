@@ -37,6 +37,7 @@ use App\Http\Resources\Tenant\QuotationResource2;
 use App\Http\Resources\Tenant\QuotationCollection;
 use App\Models\Tenant\Catalogs\AffectationIgvType;
 use App\Models\Tenant\Catalogs\ChargeDiscountType;
+use App\CoreFacturalo\Helpers\Security\ColumnWhitelist;
 use App\CoreFacturalo\Helpers\Storage\StorageDocument;
 use App\CoreFacturalo\Requests\Inputs\Common\LegendInput;
 use App\CoreFacturalo\Requests\Inputs\Common\PersonInput;
@@ -99,33 +100,69 @@ class QuotationController extends Controller
 
     private function getRecords($request){
 
+        $records = Quotation::without(['user', 'soap_type', 'currency_type', 'items', 'payments'])
+            ->with([
+                'user' => function ($query) {
+                    $query->without(['establishment'])->select(['id', 'name']);
+                },
+                'documents' => function ($query) {
+                    $query->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+                        ->select(['id', 'quotation_id', 'series', 'number']);
+                },
+                'sale_notes' => function ($query) {
+                    $query->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
+                        ->select(['id', 'quotation_id', 'prefix', 'series', 'number']);
+                },
+                'contract' => function ($query) {
+                    $query->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
+                        ->select(['id', 'quotation_id', 'prefix', 'external_id']);
+                },
+                'sale_opportunity' => function ($query) {
+                    $query->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'files']);
+                },
+            ]);
+
         if($request->column == 'user_name'){
 
-            $records = Quotation::whereHas('user', function($query) use($request){
-                            $query->where('name', 'like', "%{$request->value}%");
-                        })
-                        ->whereTypeUser()
-                        ->latest();
+            $records->whereHas('user', function($query) use($request){
+                        $query->where('name', 'like', "%{$request->value}%");
+                    })
+                    ->whereTypeUser()
+                    ->latest();
 
         }else if($request->column == 'customer'){
 
-            $records = Quotation::whereHas('person', function($query) use($request){
-                            $query->where('name', 'like', "%{$request->value}%")
-                                ->orWhere('number', 'like', "%{$request->value}%");
-                        })
-                        ->whereTypeUser()
-                        ->latest();
+            $records->whereHas('person', function($query) use($request){
+                        $query->where('name', 'like', "%{$request->value}%")
+                            ->orWhere('number', 'like', "%{$request->value}%");
+                    })
+                    ->whereTypeUser()
+                    ->latest();
 
         }else if($request->column){
 
-            $records = Quotation::where($request->column, 'like', "%{$request->value}%")
-                                ->whereTypeUser()
-                                ->latest();
+            $column = ColumnWhitelist::resolve($request->column, [
+                'date_of_issue',
+                'delivery_date',
+                'prefix',
+                'id',
+                'referential_information',
+                'account_number',
+                'description',
+                'shipping_address',
+                'state_type_id',
+                'currency_type_id',
+                'soap_type_id',
+            ], 'date_of_issue');
+
+            $records->where($column, 'like', "%{$request->value}%")
+                    ->whereTypeUser()
+                    ->latest();
 
         }else{
 
-            $records = Quotation::whereTypeUser()
-                                ->latest();
+            $records->whereTypeUser()
+                    ->latest();
 
         }
 
@@ -141,8 +178,12 @@ class QuotationController extends Controller
     public function searchCustomers(Request $request)
     {
 
-        $customers = Person::where('number','like', "%{$request->input}%")
-                            ->orWhere('name','like', "%{$request->input}%")
+        $customers = Person::without(['country', 'department', 'province', 'district'])
+                            ->with('addresses')
+                            ->where(function ($query) use ($request) {
+                                $query->where('number','like', "%{$request->input}%")
+                                    ->orWhere('name','like', "%{$request->input}%");
+                            })
                             ->whereType('customers')->orderBy('name')
                             ->whereIsEnabled()
                             ->get()->transform(function($row) {
@@ -165,7 +206,17 @@ class QuotationController extends Controller
     public function tables() {
 
         $customers = $this->table('customers');
-        $establishments = Establishment::where('id', auth()->user()->establishment_id)->get();
+        $establishments = Establishment::without(['department', 'province'])
+            ->with([
+                'department' => function ($query) {
+                    $query->without(['provinces']);
+                },
+                'province' => function ($query) {
+                    $query->without(['districts']);
+                },
+            ])
+            ->where('id', auth()->user()->establishment_id)
+            ->get();
         $currency_types = CurrencyType::whereActive()->get();
         // $document_types_invoice = DocumentType::whereIn('id', ['01', '03'])->get();
         $discount_types = ChargeDiscountType::whereType('discount')->whereLevel('item')->get();
@@ -405,7 +456,14 @@ class QuotationController extends Controller
         switch ($table) {
             case 'customers':
 
-                $customers = Person::whereType('customers')->whereIsEnabled()->orderBy('name')->take(20)->get()->transform(function($row) {
+                $customers = Person::without(['country', 'department', 'province', 'district'])
+                    ->with('addresses')
+                    ->whereType('customers')
+                    ->whereIsEnabled()
+                    ->orderBy('name')
+                    ->take(20)
+                    ->get()
+                    ->transform(function($row) {
                     return [
                         'id' => $row->id,
                         'description' => $row->number.' - '.$row->name,
@@ -425,10 +483,10 @@ class QuotationController extends Controller
 
                 $warehouse = Warehouse::where('establishment_id', auth()->user()->establishment_id)->first();
 
-                $items = Item::orderBy('description')->whereIsActive()
-                    // ->with(['warehouses' => function($query) use($warehouse){
-                    //     return $query->where('warehouse_id', $warehouse->id);
-                    // }])
+                $items = Item::without(['item_type', 'unit_type', 'tags'])
+                    ->with(['brand', 'category', 'warehouses.warehouse'])
+                    ->orderBy('description')
+                    ->whereIsActive()
                     ->take(20)->get()->transform(function($row) {
                     $full_description = $this->getFullDescription($row);
                     // $full_description = ($row->internal_id)?$row->internal_id.' - '.$row->description:$row->description;
