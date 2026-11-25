@@ -168,19 +168,14 @@ class FinanceTraitCharacterizationTest extends TestCase
         $this->assertEqualsWithDelta(110.5, $this->subject->getTotalCreditNotes($document), 0.0001);
     }
 
-    public function test_get_sum_payment_throws_argument_count_error_when_given_support_or_eloquent_collection(): void
+    public function test_get_sum_payment_handles_support_and_eloquent_collections_without_error(): void
     {
-        // Characterization of current line 295 quirk:
-        // `$record->where('payment_type', $model)->get()` calls Collection::get($key) with 0 arguments.
-        foreach ([new Collection(), new EloquentCollection([new GlobalPayment()])] as $collection) {
-            $caught = null;
-            try {
-                $this->subject->getSumPayment($collection, DocumentPayment::class);
-            } catch (\ArgumentCountError $error) {
-                $caught = $error;
-            }
-            $this->assertInstanceOf(\ArgumentCountError::class, $caught);
-        }
+        $penDocument = $this->makeAssociatedRecord(77, 'PEN', 1.0);
+        $row = $this->makeGlobalPaymentRow(DocumentPayment::class, 'document', 45.5, $penDocument);
+
+        $this->assertEqualsWithDelta(0.0, $this->subject->getSumPayment(new Collection(), DocumentPayment::class), 0.0001);
+        $this->assertEqualsWithDelta(0.0, $this->subject->getSumPayment(new EloquentCollection([new GlobalPayment()]), DocumentPayment::class), 0.0001);
+        $this->assertEqualsWithDelta(45.5, $this->subject->getSumPayment(new Collection([$row]), DocumentPayment::class), 0.0001);
     }
 
     public function test_get_sum_payment_deduplicates_credit_notes_per_document_and_skips_orphans(): void
@@ -243,12 +238,12 @@ class FinanceTraitCharacterizationTest extends TestCase
         $this->assertEqualsWithDelta(110.5, $this->subject->getSumPayment($records, IncomePayment::class), 0.0001);
     }
 
-    public function test_get_balance_by_cash_throws_argument_count_error_on_eloquent_collection(): void
+    public function test_get_balance_by_cash_handles_eloquent_collection(): void
     {
-        // Freezes the current compatibility bug between BalanceController::getRecords()
-        // (which passes an Eloquent\Collection) and FinanceTrait::getSumPayment() line 295.
-        $this->expectException(\ArgumentCountError::class);
-        $this->subject->getBalanceByCash(new EloquentCollection());
+        $result = $this->subject->getBalanceByCash(new EloquentCollection());
+
+        $this->assertSame('cash', $result['id']);
+        $this->assertSame('0.00', $result['balance']);
     }
 
     public function test_get_balance_by_cash_combines_income_and_cash_transactions_and_formats_keys(): void
@@ -368,18 +363,20 @@ class FinanceTraitCharacterizationTest extends TestCase
         ], $balances);
     }
 
-    public function test_get_balance_by_bank_accounts_throws_argument_count_error_on_eloquent_collection_relation(): void
+    public function test_get_balance_by_bank_accounts_handles_eloquent_collection_relation(): void
     {
         $account = (object) [
             'id' => 3,
             'currency_type_id' => 'PEN',
             'description' => 'Test',
-            'initial_balance' => 0.0,
+            'initial_balance' => 150.0,
             'bank' => (object) ['description' => 'BCP'],
             'global_destination' => new EloquentCollection(),
         ];
 
-        $this->expectException(\ArgumentCountError::class);
-        $this->subject->getBalanceByBankAcounts(collect([$account]));
+        $balances = $this->subject->getBalanceByBankAcounts(collect([$account]))->values()->all();
+
+        $this->assertCount(1, $balances);
+        $this->assertSame('150.00', $balances[0]['balance']);
     }
 }

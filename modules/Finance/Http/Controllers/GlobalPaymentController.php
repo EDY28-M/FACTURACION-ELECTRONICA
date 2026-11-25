@@ -46,8 +46,8 @@ class GlobalPaymentController extends Controller
 
     public function getRecords($request, $model){
         $data_of_period = $this->getDatesOfPeriod($request);
-        $payment_type = $request['payment_type'];
-        $destination_type = $request['destination_type'];
+        $payment_type = $request['payment_type'] ?? null;
+        $destination_type = $request['destination_type'] ?? null;
 
         $params = (object)[
             'date_start' => $data_of_period['d_start'],

@@ -142,7 +142,10 @@ class TreasuryBalanceService
         $total = 0.0;
         $creditNotesByDocument = [];
 
-        foreach ($record->where('payment_type', $model)->get() as $row) {
+        $filtered = $record->where('payment_type', $model);
+        $rows = $filtered instanceof Collection ? $filtered : $filtered->get();
+
+        foreach ($rows as $row) {
             $payment = $row->payment;
             $associated = $payment ? $payment->associated_record_payment : null;
 

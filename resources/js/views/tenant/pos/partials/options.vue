@@ -13,8 +13,8 @@
                         <div class="col-md-6">
                             <h4 class="title">Venta exitosa : comprobante {{form.number}}</h4>
                         </div>
-                        <div class="col-md-6">
-                            <h4 class="title">Estado de comprobante: {{ (statusDocument.sent) ? 'Enviado a Sunat':'No enviado a Sunat'}}</h4>
+                        <div class="col-md-6" v-if="resource !== 'sale-notes'">
+                            <h4 class="title">Estado de comprobante: {{ (statusDocument && statusDocument.sent) ? 'Enviado a Sunat':'No enviado a Sunat'}}</h4>
                             <h4 class="title">Envio automático: {{ (configuration.send_auto) ? 'Activado':'Desactivado'}}</h4>
 
                         </div>
@@ -134,7 +134,7 @@
                 }
                 else if(this.resource == 'documents')
                 {
-                    window.open(`/downloads/Document/${type}/${external_id}/pdf`, '_blank');
+                    window.open(`/downloads/document/pdf/${external_id}/${format}`, '_blank');
                 }
 
             },
@@ -202,10 +202,13 @@
                         }
                     })
                     .catch(error => {
-                        if (error.response.status === 422) {
-                            this.errors = error.response.data.errors
+                        if (error.response && error.response.status === 422) {
+                            this.errors = error.response.data.errors || error.response.data
                         } else {
-                            this.$message.error(error.response.data.message)
+                            const msg = (error.response && error.response.data && error.response.data.message)
+                                ? error.response.data.message
+                                : 'No se pudo enviar el correo.'
+                            this.$message.error(msg)
                         }
                     })
                     .then(() => {

@@ -21,14 +21,14 @@ class DashboardUtility
     public function data($request)
     {
 
-        $establishment_id = $request['establishment_id'];
-        $period = $request['period'];
-        $date_start = $request['date_start'];
-        $date_end = $request['date_end'];
-        $month_start = $request['month_start'];
-        $month_end = $request['month_end'];
-        $enabled_expense = $request['enabled_expense'];
-        $item_id = $request['item_id'];
+        $establishment_id = $request['establishment_id'] ?? null;
+        $period = $request['period'] ?? null;
+        $date_start = $request['date_start'] ?? null;
+        $date_end = $request['date_end'] ?? null;
+        $month_start = $request['month_start'] ?? null;
+        $month_end = $request['month_end'] ?? null;
+        $enabled_expense = $request['enabled_expense'] ?? null;
+        $item_id = $request['item_id'] ?? null;
 
         $d_start = null;
         $d_end = null;

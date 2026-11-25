@@ -161,9 +161,11 @@ class Item extends ModelTenant
         $establishment_id = auth()->user()->establishment_id;
         $warehouse = Warehouse::where('establishment_id', $establishment_id)->first();
         if ($warehouse) {
-            return $query->whereHas('warehouses', function($query) use($warehouse) {
-                            $query->where('warehouse_id', $warehouse->id);
-                        })->orWhere('unit_type_id', 'ZZ');
+            return $query->where(function ($q) use ($warehouse) {
+                $q->whereHas('warehouses', function ($sub) use ($warehouse) {
+                    $sub->where('warehouse_id', $warehouse->id);
+                })->orWhere('unit_type_id', 'ZZ');
+            });
         }
         return $query;
      }

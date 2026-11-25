@@ -216,11 +216,11 @@ trait FinanceTrait
 
     public function getDatesOfPeriod($request){
 
-        $period = $request['period'];
-        $date_start = $request['date_start'];
-        $date_end = $request['date_end'];
-        $month_start = $request['month_start'];
-        $month_end = $request['month_end'];
+        $period = $request['period'] ?? null;
+        $date_start = $request['date_start'] ?? null;
+        $date_end = $request['date_end'] ?? null;
+        $month_start = $request['month_start'] ?? null;
+        $month_end = $request['month_end'] ?? null;
         
         $d_start = null;
         $d_end = null;

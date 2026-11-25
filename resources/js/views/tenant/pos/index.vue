@@ -115,7 +115,7 @@
                                 place == 'cat2' ||
                                 place == 'cat3'
                         "
-                        placeholder="Buscar productos"
+                        placeholder="Buscar por nombre, código, marca, categoría o código de barras"
                         size="medium"
                         v-model="input_item"
                         @input="searchItems"
@@ -123,6 +123,7 @@
                         @keyup.enter.native="keyupEnterAddItem"
                         class="m-bottom"
                         ref="ref_search_items"
+                        clearable
                     >
                         <el-button
                             slot="append"
@@ -187,6 +188,18 @@
                 </div>
 
                 <div v-if="place == 'prod' || place == 'cat2'" class="row">
+                    <div
+                        v-if="!loading && items.length === 0"
+                        class="col-12 text-center text-muted py-5"
+                    >
+                        <i class="fas fa-search mb-2" style="font-size: 24px; opacity: 0.5;"></i>
+                        <p class="mb-0" v-if="input_item && String(input_item).trim()">
+                            No se encontraron productos para «{{ String(input_item).trim() }}».
+                        </p>
+                        <p class="mb-0" v-else>
+                            No hay productos disponibles en esta categoría.
+                        </p>
+                    </div>
                     <template v-for="(item, index) in items">
                         <div v-bind:style="classObjectCol" :key="index">
                             <section class="card ">
@@ -922,6 +935,7 @@
 import Keypress from "vue-keypress";
 import {calculateRowItem} from "../../../helpers/functions";
 import {setPosDraftContext, readPosDraft, writePosDraft, removePosDraft} from "../../../helpers/pos_draft";
+import {defaultPosDocumentType, normalizePosDocumentType} from "../../../helpers/pos_environment";
 import {rowIgvFactor} from "../../../helpers/igv";
 import PaymentForm from "./partials/payment.vue";
 import ItemForm from "./partials/form.vue";
@@ -983,7 +997,9 @@ export default {
             colors: ["#1cb973", "#bf7ae6", "#fc6304", "#9b4db4", "#77c1f3"],
             pagination: {},
             category_selected: "",
-            focusClienteSelect: false
+            focusClienteSelect: false,
+            searchTimer: null,
+            searchRequestSeq: 0
         };
     },
     async created() {
@@ -1131,6 +1147,10 @@ export default {
             let form_pos = readPosDraft("form_pos");
             if (form_pos) {
                 this.form = form_pos;
+                this.form.document_type_id = normalizePosDocumentType(
+                    this.form.document_type_id,
+                    this.soapCompany
+                );
                 this.initDateTimeIssue();
                 // this.calculateTotal()
             }
@@ -1309,12 +1329,11 @@ export default {
             });
             this.customer = customer;
 
-            if (this.configuration.default_document_type_03) {
-                this.form.document_type_id = "03";
-            } else {
-                this.form.document_type_id =
-                    customer.identity_document_type_id == "6" ? "01" : "03";
-            }
+            this.form.document_type_id = defaultPosDocumentType(
+                this.soapCompany,
+                customer,
+                this.configuration.default_document_type_03
+            );
 
             this.setLocalStorageIndex("customer", this.customer);
             this.setFormPosLocalStorage();
@@ -1376,7 +1395,7 @@ export default {
         initForm() {
             this.form = {
                 establishment_id: null,
-                document_type_id: "03",
+                document_type_id: normalizePosDocumentType("03", this.soapCompany),
                 series_id: null,
                 prefix: null,
                 number: "#",
@@ -1467,10 +1486,7 @@ export default {
                 return this.$message.error("Seleccione un cliente");
             }
             this.form.establishment_id = this.establishment.id;
-            this.loading = true;
-            await this.sleep(800);
             this.is_payment = true;
-            this.loading = false;
         },
         sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -1794,64 +1810,77 @@ export default {
                 color: "#2C8DE3"
             });
         },
-        async searchItems() {
-            if (this.input_item.length > 0) {
-                this.loading = true;
-                let parameters = `input_item=${this.input_item}&cat=${
-                    this.category_selected
-                }`;
+        searchItems() {
+            if (this.searchTimer) {
+                clearTimeout(this.searchTimer);
+                this.searchTimer = null;
+            }
 
-                await this.$http
-                    .get(`/${this.resource}/search_items_cat?${parameters}`)
-                    .then(response => {
-                        if (response.data.data.length > 0) {
-                            this.all_items = response.data.data;
-                            this.filterItems();
-                            this.pagination = response.data.meta;
-                            this.pagination.per_page = parseInt(
-                                response.data.meta.per_page
-                            );
+            const term = String(this.input_item || "").trim();
 
-                            this.loading = false;
-                        } else {
-                            this.loading = false;
+            if (term.length > 0) {
+                const seq = ++this.searchRequestSeq;
+                this.searchTimer = setTimeout(() => {
+                    this.loading = true;
+                    const parameters = `input_item=${encodeURIComponent(term)}&cat=${encodeURIComponent(this.category_selected || "")}`;
+
+                    this.$http
+                        .get(`/${this.resource}/search_items_cat?${parameters}`)
+                        .then(response => {
+                            if (seq !== this.searchRequestSeq) {
+                                return;
+                            }
+                            this.all_items = response.data.data || [];
                             this.filterItems();
-                        }
-                    });
+                            this.pagination = response.data.meta || {};
+                            if (this.pagination.per_page) {
+                                this.pagination.per_page = parseInt(this.pagination.per_page);
+                            }
+                            this.pagination.total = this.pagination.total || 0;
+                        })
+                        .finally(() => {
+                            if (seq === this.searchRequestSeq) {
+                                this.loading = false;
+                            }
+                        });
+                }, 200);
             } else {
+                this.searchRequestSeq++;
                 this.getRecords();
-                this.filterItems();
             }
         },
         async searchItemsBarcode() {
-            // console.log(query)
-            // console.log("in:" + this.input_item)
-            if (this.input_item.length > 1) {
+            const term = String(this.input_item || "").trim();
+            if (term.length > 1) {
+                const seq = ++this.searchRequestSeq;
                 this.loading = true;
-                let parameters = `input_item=${this.input_item}`;
+                const parameters = `input_item=${encodeURIComponent(term)}`;
 
                 await this.$http
                     .get(`/${this.resource}/search_items?${parameters}`)
                     .then(response => {
-                        console.log("buah");
-                        this.items = response.data.items;
-                        console.log(this.items);
+                        if (seq !== this.searchRequestSeq) {
+                            return;
+                        }
+                        this.all_items = response.data.items || [];
+                        this.filterItems();
                         this.enabledSearchItemsBarcode();
-                        this.loading = false;
-                        if (this.items.length == 0) {
-                            this.filterItems();
+                    })
+                    .finally(() => {
+                        if (seq === this.searchRequestSeq) {
+                            this.loading = false;
                         }
                     });
             } else {
-                await this.filterItems();
+                this.searchRequestSeq++;
+                this.getRecords();
             }
         },
         enabledSearchItemsBarcode() {
             if (this.search_item_by_barcode) {
                 if (this.items.length == 1) {
-                    // console.log(this.items)
                     this.clickAddItem(this.items[0], 0);
-                    this.filterItems();
+                    this.getRecords();
                 }
 
                 this.cleanInput();
@@ -1859,19 +1888,22 @@ export default {
         },
         changeSearchItemBarcode() {
             this.cleanInput();
+            this.getRecords();
         },
         cleanInput() {
-            this.input_item = null;
+            this.input_item = "";
         },
         filterItems() {
             if (this.place === "cat3") {
-                this.items = this.all_items;
+                this.items = this.all_items.map(i => Object.assign({}, i));
             } else {
                 this.items = this.all_items.map(i => {
-                    if (i.brand) {
-                        i.description = `${i.description} - ${i.brand}`;
-                    }
-                    return i;
+                    const suffix = i.brand ? ` - ${i.brand}` : "";
+                    const desc = i.description || "";
+                    const alreadyHasBrand = suffix && desc.endsWith(suffix);
+                    return Object.assign({}, i, {
+                        description: i.brand && !alreadyHasBrand ? `${desc}${suffix}` : desc
+                    });
                 });
             }
         },

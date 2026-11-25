@@ -107,11 +107,20 @@ class XmlSigned
      */
     public function setCertificateFromFile($filename)
     {
-        if (!file_exists($filename)) {
-            throw new \InvalidArgumentException('Certificate File not found');
+        if (!is_string($filename) || trim($filename) === '' || !is_file($filename) || !is_readable($filename)) {
+            throw new \InvalidArgumentException(
+                'No se encontró un archivo de certificado digital válido. Configure el certificado en Configuración → Empresa → SUNAT y certificado.'
+            );
         }
 
-        $this->setCertificate(file_get_contents($filename));
+        $content = @file_get_contents($filename);
+        if ($content === false || trim($content) === '') {
+            throw new \InvalidArgumentException(
+                'No se pudo leer el certificado digital configurado. Vuelva a subirlo en Configuración → Empresa → SUNAT y certificado.'
+            );
+        }
+
+        $this->setCertificate($content);
     }
 
     /**

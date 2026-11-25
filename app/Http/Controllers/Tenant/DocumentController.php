@@ -580,6 +580,8 @@ class DocumentController extends Controller
             $facturalo = new Facturalo();
             $facturalo->setDocument($document);
             $facturalo->consultCdr();
+
+            return $facturalo;
         });
 
         $response = $fact->getResponse();

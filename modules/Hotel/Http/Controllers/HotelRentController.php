@@ -8,6 +8,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Modules\Hotel\Models\HotelRent;
 use Modules\Hotel\Models\HotelRoom;
+use App\Models\Tenant\Company;
 use App\Models\Tenant\Configuration;
 use App\Models\Tenant\Establishment;
 use Modules\Hotel\Models\HotelRentItem;
@@ -147,9 +148,13 @@ class HotelRentController extends Controller
 
         $payment_method_types = PaymentMethodType::all();
         $payment_destinations = $this->getPaymentDestinations();
+        $company = Company::active();
+        $allowedDocumentTypes = ($company && $company->soap_type_id === '03') ? ['80'] : ['01', '03', '80'];
         $establishment = Establishment::where('id', auth()->user()->establishment_id)->first();
-        $series = $establishment ? Series::where('establishment_id', $establishment->id)->get() : collect();
-        $document_types_invoice = DocumentType::whereIn('id', ['01', '03', '80'])->get();
+        $series = $establishment
+            ? Series::where('establishment_id', $establishment->id)->whereIn('document_type_id', $allowedDocumentTypes)->get()
+            : collect();
+        $document_types_invoice = DocumentType::whereIn('id', $allowedDocumentTypes)->get();
         $user = auth()->user();
         $warehouse_id = $user->establishment_id;
         $countries = Country::whereActive()->orderBy('description')->get(['id', 'description']);

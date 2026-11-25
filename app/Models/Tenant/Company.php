@@ -148,4 +148,33 @@ class Company extends ModelTenant
     {
         return Company::first();
     }
+
+    /**
+     * Data a company still needs before it can emit in production (SOAP type 02):
+     * SOL user and password, the signing certificate and, for an OSE, its URL.
+     * Empty when the company is not in production or everything is already loaded.
+     */
+    public static function missingForProduction(self $company): array
+    {
+        if ($company->soap_type_id !== '02') {
+            return [];
+        }
+
+        $missing = [];
+        if (!filled($company->soap_username)) {
+            $missing[] = 'usuario SOL';
+        }
+        if (!filled($company->soap_password)) {
+            $missing[] = 'clave SOL';
+        }
+        $certificate = $company->certificate;
+        if (!filled($certificate) || !is_file(storage_path('app'.DIRECTORY_SEPARATOR.'certificates'.DIRECTORY_SEPARATOR.basename($certificate)))) {
+            $missing[] = 'certificado digital';
+        }
+        if ($company->soap_send_id === '02' && !filled($company->soap_url)) {
+            $missing[] = 'URL del OSE';
+        }
+
+        return $missing;
+    }
 }

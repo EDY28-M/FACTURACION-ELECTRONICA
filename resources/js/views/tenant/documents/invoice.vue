@@ -879,6 +879,7 @@
     import {calculateRowItem} from '../../../helpers/functions'
     import {igvFromBase, needsRerate} from '../../../helpers/igv'
     import {boletaNeedsIdentification, BOLETA_IDENTIFICATION_MESSAGE} from '../../../helpers/boleta-identification'
+    import {extractApiErrorMessage} from '../../../helpers/pos_environment'
     import Logo from '../companies/logo.vue'
     import DocumentHotelForm from '../../../../../modules/BusinessTurn/Resources/assets/js/views/hotels/form.vue'
     import DocumentTransportForm from '../../../../../modules/BusinessTurn/Resources/assets/js/views/transports/form.vue'
@@ -2236,11 +2237,15 @@
                         this.$message.error(response.data.message);
                     }
                 }).catch(error => {
-                    if (error.response.status === 422) {
-                        this.errors = error.response.data;
+                    if (error.response && error.response.status === 422) {
+                        this.errors = error.response.data || {};
+                        const message = extractApiErrorMessage(error, '');
+                        if (message) {
+                            this.$message.error(message);
+                        }
                     }
                     else {
-                        this.$message.error(error.response.data.message);
+                        this.$message.error(extractApiErrorMessage(error));
                     }
                 }).finally(() => {
                     this.loading_submit = false;

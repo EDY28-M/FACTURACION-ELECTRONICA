@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use Illuminate\Http\Request;
+use App\CoreFacturalo\Helpers\Security\ColumnWhitelist;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Person;
 use App\Models\Tenant\Catalogs\CurrencyType;
@@ -101,20 +102,40 @@ class SaleNoteController extends Controller
 
     private function getRecords($request){
 
-        if($request->column == 'customer'){
+        $column = ColumnWhitelist::resolve($request->column, ['date_of_issue', 'number', 'series', 'customer'], 'date_of_issue');
+        $value = $request->value;
 
-            $records = SaleNote::whereHas('person', function($query) use($request){
-                                    $query->where('name', 'like', "%{$request->value}%")
-                                        ->orWhere('number', 'like', "%{$request->value}%");
+        $base = SaleNote::without(['items', 'soap_type', 'currency_type'])
+            ->with([
+                'documents' => function ($q) {
+                    $q->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+                      ->select('id', 'sale_note_id', 'series', 'number');
+                },
+                'quotation' => function ($q) {
+                    $q->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
+                      ->select('id', 'prefix', 'number', 'sale_opportunity_id')
+                      ->with(['sale_opportunity' => function ($sq) {
+                          $sq->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'files'])
+                             ->select('id', 'prefix', 'number');
+                      }]);
+                },
+            ]);
+
+        if($column == 'customer'){
+
+            $records = $base->whereHas('person', function($query) use($value){
+                                    $query->where('name', 'like', "%{$value}%")
+                                        ->orWhere('number', 'like', "%{$value}%");
                                 })
                                 ->whereTypeUser()
                                 ->latest();
 
         }else{
 
-            $records = SaleNote::where($request->column, 'like', "%{$request->value}%")
-                                ->whereTypeUser()
-                                ->latest('id');
+            $records = $base->whereTypeUser()->latest('id');
+            if ($value !== null && $value !== '') {
+                $records = $records->where($column, 'like', "%{$value}%");
+            }
 
         }
 
@@ -386,7 +407,11 @@ class SaleNoteController extends Controller
 
         }
 
-        $series = Series::find($inputs['series_id'])->number;
+        $seriesRecord = Series::find($inputs['series_id']);
+        if (!$seriesRecord) {
+            throw new Exception('La serie seleccionada no es válida para emitir la Nota de Venta.');
+        }
+        $series = $seriesRecord->number;
 
 
         $number = null;

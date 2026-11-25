@@ -98,8 +98,8 @@
         <div class="col-lg-8 col-md-6 pp-panel">
             <div class="pp-head">
                 <el-radio-group v-model="form.document_type_id" size="small" @change="filterSeries">
-                    <el-radio-button label="01">FACTURA</el-radio-button>
-                    <el-radio-button label="03">BOLETA</el-radio-button>
+                    <el-radio-button v-if="!isInternalMode" label="01">FACTURA</el-radio-button>
+                    <el-radio-button v-if="!isInternalMode" label="03">BOLETA</el-radio-button>
                     <el-radio-button label="80">N. VENTA</el-radio-button>
                 </el-radio-group>
                 <el-select v-model="form.series_id" size="small" class="pp-series">
@@ -109,6 +109,13 @@
             </div>
 
             <div class="pp-body">
+                <el-alert
+                    v-if="productionWarning"
+                    type="warning"
+                    :title="productionWarning"
+                    show-icon
+                    :closable="false">
+                </el-alert>
                 <section class="pp-card pp-charge">
                     <div class="pp-charge-total">
                         <span class="pp-label">Monto a cobrar</span>
@@ -167,7 +174,7 @@
 
             <div class="pp-actions">
                 <button type="button" class="pp-cancel" @click="clickCancel">Cancelar</button>
-                <button type="button" class="pp-pay" @click="clickPayment" :disabled="button_payment">
+                <button type="button" class="pp-pay" @click="clickPayment" :disabled="button_payment || loading_submit || locked_submit">
                     Pagar <span>{{currencyTypeActive.symbol}} {{ toAmount(form.total) }}</span>
                 </button>
             </div>
@@ -391,6 +398,13 @@
     import OptionsForm from './options.vue'
     import MultiplePaymentForm from './multiple_payment.vue'
     import {readPosDraft, writePosDraft, removePosDraft} from '../../../../helpers/pos_draft'
+    import {
+        isInternalSoapMode,
+        normalizePosDocumentType,
+        nextPosDocumentType,
+        productionMissingMessage,
+        extractApiErrorMessage
+    } from '../../../../helpers/pos_environment'
 
     export default {
         components: {OptionsForm, CardBrandsForm, SaleNotesOptions, MultiplePaymentForm, Keypress},
@@ -426,10 +440,25 @@
                 statusDocument:{},
                 payment_method_types:[],
                 payments:[],
+                errors: {},
+                effectiveSoapCompany: this.soapCompany,
+                missingForProduction: [],
                 locked_submit: false
             }
         },
+        computed: {
+            isInternalMode() {
+                return isInternalSoapMode(this.effectiveSoapCompany)
+            },
+            productionWarning() {
+                if (this.form.document_type_id === '80') {
+                    return null
+                }
+                return productionMissingMessage(this.effectiveSoapCompany, this.missingForProduction)
+            }
+        },
         async created() {
+            this.form.document_type_id = normalizePosDocumentType(this.form.document_type_id, this.effectiveSoapCompany)
 
             await this.initLStoPayment()
             await this.getTables()
@@ -460,19 +489,10 @@
                 return Number.isFinite(amount) ? amount.toFixed(2) : value;
             },
             handleFn113(){
-                const code = this.form.document_type_id
-                if(code == '01')
-                {
-                    this.form.document_type_id = '03'
-                }
-                else if(code == '03')
-                {
-                    this.form.document_type_id = '80'
-                }
-                else if(code == '80')
-                {
-                    this.form.document_type_id = '01'
-                }
+                this.form.document_type_id = nextPosDocumentType(
+                    this.form.document_type_id,
+                    this.effectiveSoapCompany
+                )
 
                 this.filterSeries()
             },
@@ -716,6 +736,9 @@
             setAmountCash(amount)
             {
                 let row = _.last(this.payments, { 'payment_method_type_id' : '01' })
+                if (!row) {
+                    return
+                }
                 row.payment = parseFloat(row.payment) + parseFloat(amount)
                 // console.log(row.payment)
 
@@ -732,11 +755,14 @@
             async enterAmount(){
 
                 let r_item = await _.last(this.payments, { 'payment_method_type_id' : '01' })
-                r_item.payment = await parseFloat(this.enter_amount)
-                // console.log(r_item.payment)
+                if (r_item) {
+                    r_item.payment = await parseFloat(this.enter_amount)
+                }
 
                 let ind = this.form.payments.length - 1
-                this.form.payments[ind].payment = parseFloat(this.enter_amount)
+                if (ind >= 0 && this.form.payments[ind]) {
+                    this.form.payments[ind].payment = parseFloat(this.enter_amount)
+                }
                 // this.setAmount(item.payment)
 
                 let acum_payment = 0
@@ -839,13 +865,8 @@
                 }
             },
             async clickCancel(){
-
-                this.loading_submit = true
-                await this.sleep(800);
-                this.loading_submit = false
                 this.cleanLocalStoragePayment()
                 this.$eventHub.$emit('cancelSale')
-
             },
             cleanLocalStoragePayment(){
 
@@ -877,6 +898,20 @@
                 }
             },
             async clickPayment(){
+                if (this.locked_submit || this.loading_submit) {
+                    return;
+                }
+
+                if (this.isInternalMode && this.form.document_type_id !== '80') {
+                    this.form.document_type_id = '80';
+                    this.filterSeries();
+                    return this.$message.warning('En modo SUNAT · Interno solo puede emitir Notas de Venta.');
+                }
+
+                if (this.productionWarning) {
+                    return this.$message.error(this.productionWarning);
+                }
+
                 // SUNAT: boletas above S/ 700.00 must identify the customer; keep the cart untouched
                 if (this.form.document_type_id === '03' && boletaNeedsIdentification(
                     this.form.total,
@@ -951,12 +986,10 @@
                         this.$message.error(response.data.message);
                     }
                 }).catch(error => {
-                    if (error.response.status === 422) {
-                        this.errors = error.response.data;
+                    if (error.response && error.response.status === 422) {
+                        this.errors = error.response.data || {};
                     }
-                    else {
-                        this.$message.error(error.response.data.message);
-                    }
+                    this.$message.error(extractApiErrorMessage(error));
                 }).then(() => {
                     this.loading_submit = false;
                     this.locked_submit = false
@@ -985,19 +1018,28 @@
                         }
                     })
                     .catch(error => {
-                        if (error.response.status === 422) {
-                            this.records[index].errors = error.response.data;
-                        } else {
-                            console.log(error);
+                        if (error.response && error.response.status === 422) {
+                            this.errors = error.response.data || {};
                         }
+                        this.$message.error(extractApiErrorMessage(error));
                     })
             },
             getTables(){
-                this.$http.get(`/${this.resource}/payment_tables`)
+                return this.$http.get(`/${this.resource}/payment_tables`)
                     .then(response => {
+                        if (response.data.soap_type_id) {
+                            this.effectiveSoapCompany = response.data.soap_type_id
+                        }
+                        this.missingForProduction = Array.isArray(response.data.missing_for_production)
+                            ? response.data.missing_for_production
+                            : []
                         this.all_series = response.data.series
                         this.payment_method_types = response.data.payment_method_types
                         this.cards_brand = response.data.cards_brand
+                        this.form.document_type_id = normalizePosDocumentType(
+                            this.form.document_type_id,
+                            this.effectiveSoapCompany
+                        )
                         this.filterSeries()
                     })
 

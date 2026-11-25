@@ -26,6 +26,7 @@ use App\CoreFacturalo\Helpers\Sunat\HospitalityExport;
 use App\CoreFacturalo\Helpers\Sunat\RucValidator;
 use App\CoreFacturalo\Helpers\Sunat\ProductCode;
 use App\CoreFacturalo\Helpers\Sunat\SendDeadline;
+use App\CoreFacturalo\Helpers\Sunat\SoapEnvironmentGuard;
 use App\CoreFacturalo\Helpers\Xml\XmlHash;
 use App\CoreFacturalo\WS\Signed\XmlSigned;
 use App\CoreFacturalo\Helpers\Xml\XmlFormat;
@@ -74,11 +75,13 @@ class Facturalo
     {
         $this->configuration = Configuration::first();
         $this->company = Company::active();
-        $this->isDemo = ($this->company->soap_type_id === '01')?true:false;
-        $this->isOse = ($this->company->soap_send_id === '02')?true:false;
+        $this->isDemo = ($this->company && $this->company->soap_type_id === '01');
+        $this->isOse = ($this->company && $this->company->soap_send_id === '02');
         $this->signer = new XmlSigned();
         $this->wsClient = new WsClient();
-        $this->setDataSoapType();
+        if ($this->company) {
+            $this->setDataSoapType();
+        }
     }
 
     public function setDocument($document)
@@ -116,10 +119,19 @@ class Facturalo
         $this->actions = array_key_exists('actions', $inputs)?$inputs['actions']:[];
         $this->type = $inputs['type'];
 
+        if ($company instanceof Company
+            && SoapEnvironmentGuard::isInternal($company)
+            && SoapEnvironmentGuard::isElectronicEmission((string) $this->type, $inputs['series'] ?? null)) {
+            throw new Exception(SoapEnvironmentGuard::INTERNAL_MODE_MESSAGE);
+        }
+
         // $skipSendDeadlineCheck is set only by trusted server-side flows (offline sync), never from request data.
-        // It skips every emission guard below: send deadline, boleta identification and customer RUC check digit.
+        // It skips every emission guard below: environment readiness, send deadline, boleta identification and customer RUC check digit.
         // It also skips the boleta identification check: the offline document was already validated at emission.
         if (!$skipSendDeadlineCheck) {
+            if ($company instanceof Company) {
+                SoapEnvironmentGuard::assertCanEmit($company, (string) $this->type, $inputs['series'] ?? null);
+            }
             $this->assertIssueDateWithinSendDeadline($inputs);
             $this->assertBoletaIdentification($inputs);
             $this->assertCustomerRuc($inputs);
@@ -226,6 +238,9 @@ class Facturalo
 
     public function signXmlUnsigned()
     {
+        if ($this->company instanceof Company) {
+            SoapEnvironmentGuard::assertCanSign($this->company);
+        }
         $this->setPathCertificate();
         $this->signer->setCertificateFromFile($this->pathCertificate);
         $this->xmlSigned = $this->signer->signXml($this->xmlUnsigned);
@@ -599,6 +614,9 @@ class Facturalo
 
     private function senderXmlSigned()
     {
+        if ($this->company instanceof Company) {
+            SoapEnvironmentGuard::assertCanSend($this->company);
+        }
         $this->setDataSoapType();
         $sender = in_array($this->type, ['summary', 'voided'])?new SummarySender():new BillSender();
         $sender->setClient($this->wsClient);
@@ -847,6 +865,9 @@ class Facturalo
 
     public function statusSummary($ticket)
     {
+        if ($this->company instanceof Company) {
+            SoapEnvironmentGuard::assertCanSend($this->company);
+        }
         $extService = new ExtService();
         $extService->setClient($this->wsClient);
         $extService->setCodeProvider(new XmlErrorCodeProvider());
@@ -914,6 +935,9 @@ class Facturalo
 
     public function consultCdr()
     {
+        if ($this->company instanceof Company) {
+            SoapEnvironmentGuard::assertCanSend($this->company);
+        }
         $consultCdrService = new ConsultCdrService();
         $consultCdrService->setClient($this->wsClient);
         $consultCdrService->setCodeProvider(new XmlErrorCodeProvider());
@@ -944,11 +968,18 @@ class Facturalo
     {
         $this->setSoapCredentials();
         $this->wsClient->setCredentials($this->soapUsername, $this->soapPassword);
-        $this->wsClient->setService($this->endpoint);
+        if (!empty($this->endpoint)) {
+            $this->wsClient->setService($this->endpoint);
+        }
     }
 
     private function setPathCertificate()
     {
+        if ($this->company instanceof Company) {
+            $this->pathCertificate = SoapEnvironmentGuard::certificatePath($this->company);
+            return;
+        }
+
         if($this->isOse) {
             $this->pathCertificate = storage_path('app'.DIRECTORY_SEPARATOR.
                 'certificates'.DIRECTORY_SEPARATOR.$this->company->certificate);

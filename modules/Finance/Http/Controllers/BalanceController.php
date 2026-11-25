@@ -2,13 +2,22 @@
 
 namespace Modules\Finance\Http\Controllers;
 
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use Modules\Finance\Models\GlobalPayment;
+use Modules\Finance\Models\IncomePayment;
+use Modules\Expense\Models\ExpensePayment;
+use Modules\Sale\Models\ContractPayment;
+use Modules\Sale\Models\QuotationPayment;
+use Modules\Sale\Models\TechnicalServicePayment;
 use App\Models\Tenant\Cash;
 use App\Models\Tenant\BankAccount;
 use App\Models\Tenant\Company;
+use App\Models\Tenant\DocumentPayment;
+use App\Models\Tenant\PurchasePayment;
+use App\Models\Tenant\SaleNotePayment;
 use Modules\Finance\Traits\FinanceTrait; 
 use Modules\Finance\Http\Resources\GlobalPaymentCollection;
 use Modules\Finance\Exports\BalanceExport;
@@ -55,13 +64,62 @@ class BalanceController extends Controller
             'date_end' => $data_of_period['d_end'],
         ];
         
-        $bank_accounts = BankAccount::with(['global_destination' => function($query) use($params){
-                                        $query->whereFilterPaymentType($params);
-                                    }])
-                                    ->get();
-                                    
+        $paymentEagerLoad = [
+            'payment' => function (MorphTo $morphTo) {
+                $morphTo->morphWith([
+                    DocumentPayment::class => [
+                        'associated_record_payment' => function ($q) {
+                            $q->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+                              ->select('id', 'currency_type_id', 'exchange_rate_sale')
+                              ->with(['affected_documents' => function ($nq) {
+                                  $nq->without(['affected_document', 'note_credit_type', 'note_debit_type'])
+                                     ->with(['document' => function ($dq) {
+                                         $dq->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'invoice', 'note', 'payments'])
+                                            ->select('id', 'state_type_id', 'currency_type_id', 'exchange_rate_sale', 'total');
+                                     }]);
+                              }]);
+                        },
+                    ],
+                    SaleNotePayment::class => [
+                        'associated_record_payment' => function ($q) {
+                            $q->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
+                              ->select('id', 'currency_type_id', 'exchange_rate_sale');
+                        },
+                    ],
+                    PurchasePayment::class => [
+                        'associated_record_payment' => function ($q) {
+                            $q->without(['user', 'soap_type', 'state_type', 'document_type', 'currency_type', 'group', 'items', 'purchase_payments'])
+                              ->select('id', 'currency_type_id', 'exchange_rate_sale');
+                        },
+                    ],
+                    QuotationPayment::class => [
+                        'associated_record_payment' => function ($q) {
+                            $q->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
+                              ->select('id', 'currency_type_id', 'exchange_rate_sale');
+                        },
+                    ],
+                    ContractPayment::class => [
+                        'associated_record_payment' => function ($q) {
+                            $q->without(['user', 'soap_type', 'state_type', 'currency_type', 'items', 'payments'])
+                              ->select('id', 'currency_type_id', 'exchange_rate_sale');
+                        },
+                    ],
+                    ExpensePayment::class => ['associated_record_payment'],
+                    IncomePayment::class => ['associated_record_payment'],
+                    TechnicalServicePayment::class => ['associated_record_payment'],
+                ]);
+            },
+        ];
+
+        $bank_accounts = BankAccount::with([
+            'bank',
+            'global_destination' => function ($query) use ($params, $paymentEagerLoad) {
+                $query->whereFilterPaymentType($params)->with($paymentEagerLoad);
+            },
+        ])->get();
+
         $all_cash = GlobalPayment::whereFilterPaymentType($params)
-                                    ->with(['payment'])
+                                    ->with($paymentEagerLoad)
                                     ->whereDestinationType(Cash::class)
                                     ->get();
 

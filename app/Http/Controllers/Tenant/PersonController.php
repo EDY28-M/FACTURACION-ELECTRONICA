@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\Tenant;
 
+use App\CoreFacturalo\Helpers\Security\ColumnWhitelist;
 use App\Http\Requests\Tenant\PersonRequest;
 use App\Http\Resources\Tenant\PersonCollection;
 use App\Http\Resources\Tenant\PersonResource;
@@ -48,10 +49,16 @@ class PersonController extends Controller
 
     public function records($type, Request $request)
     {
-      //  return 'sd';
-        $records = Person::where($request->column, 'like', "%{$request->value}%")
-                            ->where('type', $type)
-                            ->orderBy('name');
+        $column = ColumnWhitelist::resolve($request->column, ['name', 'number', 'internal_code', 'email'], 'name');
+        $value = $request->value;
+
+        $records = Person::without(['country', 'department', 'province', 'district'])
+            ->where('type', $type)
+            ->orderBy('name');
+
+        if ($value !== null && $value !== '') {
+            $records->where($column, 'like', "%{$value}%");
+        }
 
         return new PersonCollection($records->paginate(config('tenant.items_per_page')));
     }

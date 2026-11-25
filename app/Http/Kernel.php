@@ -37,12 +37,14 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \App\Http\Middleware\RequireCsrfForStateChangingGet::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\SanitizeFilterColumn::class,
             \App\Http\Middleware\LockedAdmin::class,
         ],
 
         'api' => [
             'throttle:60,1',
             'bindings',
+            \App\Http\Middleware\SanitizeFilterColumn::class,
             \Illuminate\Http\Middleware\HandleCors::class,
         ],
     ];

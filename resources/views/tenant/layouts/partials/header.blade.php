@@ -3,7 +3,10 @@
     if ($vc_company->soap_type_id == '01') {
         $tnEnv = ['key' => 'demo', 'label' => 'SUNAT · Demo', 'title' => 'SUNAT: entorno de demostración'];
     } elseif ($vc_company->soap_type_id == '02') {
-        $tnEnv = ['key' => 'prod', 'label' => 'SUNAT · Producción', 'title' => 'SUNAT: entorno de producción'];
+        $tnMissing = \App\Models\Tenant\Company::missingForProduction($vc_company);
+        $tnEnv = $tnMissing
+            ? ['key' => 'warn', 'label' => 'SUNAT · Producción incompleta', 'title' => 'Para emitir en producción falta: '.implode(', ', $tnMissing)]
+            : ['key' => 'prod', 'label' => 'SUNAT · Producción', 'title' => 'SUNAT: entorno de producción'];
     } else {
         $tnEnv = ['key' => 'int', 'label' => 'SUNAT · Interno', 'title' => 'Entorno interno'];
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Item;
 use App\Models\Tenant\Person;
@@ -24,6 +25,7 @@ use Modules\Finance\Traits\FinanceTrait;
 use App\Models\Tenant\Company;
 use Modules\BusinessTurn\Models\BusinessTurn;
 use App\Http\Resources\Tenant\PosCollection;
+use App\CoreFacturalo\Helpers\Pos\ItemSearch;
 
 
 class PosController extends Controller
@@ -57,23 +59,17 @@ class PosController extends Controller
 
     public function search_items(Request $request)
     {
-        $configuration =  Configuration::first();
+        $configuration = Configuration::first();
 
-        $items = Item::where('description','like', "%{$request->input_item}%")
-                            // ->orWhere('internal_id','like', "%{$request->input_item}%")
-                            ->orWhere(function ($query) use ($request) {
-                                $query->where('internal_id','like', "%{$request->input_item}%")
-                                    ->orWhere('barcode', "{$request->input_item}");
-                            })
-                            ->orWhereHas('category', function($query) use($request) {
-                                $query->where('name', 'like', '%' . $request->input_item . '%');
-                            })
-                            ->orWhereHas('brand', function($query) use($request) {
-                                $query->where('name', 'like', '%' . $request->input_item . '%');
-                            })
-                            ->whereWarehouse()
-                            ->whereIsActive()
-                            ->get()->transform(function($row) use($configuration){
+        $query = Item::with(['category:id,name', 'brand:id,name', 'sets.individual_item:id,description'])
+            ->whereWarehouse()
+            ->whereIsActive()
+            ->where('series_enabled', 0)
+            ->where('unit_type_id', '!=', 'ZZ');
+
+        ItemSearch::apply($query, $request->input_item, true);
+
+        $items = $query->orderBy('description')->limit(50)->get()->transform(function($row) use($configuration){
                                 $full_description = ($row->internal_id)?$row->internal_id.' - '.$row->description:$row->description;
                                 return [
                                     'id' => $row->id,
@@ -128,11 +124,12 @@ class PosController extends Controller
         $currency_types = CurrencyType::whereActive()->get();
 
         $customers = $this->table('customers');
-        $user = User::findOrFail(auth()->user()->id);
+        $user = User::without(['establishment'])->findOrFail(auth()->user()->id);
 
-        $items = $this->table('items');
+        // POS fetches paginated products via GET /pos/items in parallel; avoid 250+ wasted queries here.
+        $items = [];
 
-        $categories = Category::all();
+        $categories = Category::select('id', 'name')->get();
 
         return compact('items', 'customers','affectation_igv_types','establishment','user','currency_types', 'categories');
 
@@ -140,7 +137,12 @@ class PosController extends Controller
 
     public function payment_tables(){
 
-        $series = Series::whereIn('document_type_id',['01','03','80'])
+        $company = Company::active();
+        $soap_type_id = $company ? (string) $company->soap_type_id : '01';
+        $document_types = ($soap_type_id === '03') ? ['80'] : ['01','03','80'];
+        $missing_for_production = $company ? Company::missingForProduction($company) : [];
+
+        $series = Series::whereIn('document_type_id', $document_types)
                         ->where([['establishment_id', auth()->user()->establishment_id],['contingency',false]])
                         ->get();
 
@@ -149,24 +151,27 @@ class PosController extends Controller
         $payment_destinations = $this->getPaymentDestinations();
 
 
-        return compact('series','payment_method_types','cards_brand', 'payment_destinations');
+        return compact('series','payment_method_types','cards_brand', 'payment_destinations', 'soap_type_id', 'missing_for_production');
 
     }
 
     public function table($table)
     {
         if ($table === 'customers') {
-            $customers = Person::whereType('customers')->whereIsEnabled()->orderBy('name')->get()->transform(function($row) {
-                return [
-                    'id' => $row->id,
-                    'description' => $row->number.' - '.$row->name,
-                    'name' => $row->name,
-                    'number' => $row->number,
-                    'identity_document_type_id' => $row->identity_document_type_id,
-                    'identity_document_type_code' => $row->identity_document_type->code
-                ];
-            });
-            return $customers;
+            return DB::connection('tenant')
+                ->table('v_pos_customers_active')
+                ->orderBy('name')
+                ->get()
+                ->map(function ($row) {
+                    return [
+                        'id' => $row->id,
+                        'description' => $row->number.' - '.$row->name,
+                        'name' => $row->name,
+                        'number' => $row->number,
+                        'identity_document_type_id' => $row->identity_document_type_id,
+                        'identity_document_type_code' => null,
+                    ];
+                });
         }
 
         if ($table === 'items') {
@@ -318,29 +323,35 @@ class PosController extends Controller
 
     public function item(Request $request)
     {
-        if($request->cat) {
-            return new PosCollection(Item::whereWarehouse()->whereIsActive()->where('series_enabled', 0)->where([['unit_type_id', '!=', 'ZZ'], ['category_id', $request->cat]])->orderBy('description')->paginate(50));
-        } else {
-            return new PosCollection(Item::whereWarehouse()->whereIsActive()->where('series_enabled', 0)->where('unit_type_id', '!=', 'ZZ')->orderBy('description')->paginate(50));
+        $query = Item::with(['category:id,name', 'brand:id,name', 'sets.individual_item:id,description'])
+            ->whereWarehouse()
+            ->whereIsActive()
+            ->where('series_enabled', 0)
+            ->where('unit_type_id', '!=', 'ZZ')
+            ->orderBy('description');
+
+        if ($request->cat) {
+            $query->where('category_id', $request->cat);
         }
 
+        return new PosCollection($query->paginate(50));
     }
 
     public function search_items_cat(Request $request)
     {
-        return new PosCollection(Item::where('description','like', "%{$request->input_item}%")->where('series_enabled', 0)
-                            ->orWhere('internal_id','like', "%{$request->input_item}%")
-                            //->orwhere('category_id', $request->cat)
-                            ->orWhereHas('category', function($query) use($request) {
-                                $query->where('name', 'like', '%' . $request->input_item . '%');
-                            })
-                            ->orWhereHas('brand', function($query) use($request) {
-                                $query->where('name', 'like', '%' . $request->input_item . '%');
-                            })
-                            ->whereWarehouse()
-                            ->whereIsActive()
-                            ->paginate(config(50)));
+        $query = Item::with(['category:id,name', 'brand:id,name', 'sets.individual_item:id,description'])
+            ->whereWarehouse()
+            ->whereIsActive()
+            ->where('series_enabled', 0)
+            ->where('unit_type_id', '!=', 'ZZ');
 
+        if ($request->filled('cat')) {
+            $query->where('category_id', $request->cat);
+        }
+
+        ItemSearch::apply($query, $request->input_item, false);
+
+        return new PosCollection($query->orderBy('description')->paginate(50));
     }
 
 }

@@ -91,7 +91,13 @@ class GreDispatchService
      */
     public static function skipReason(Company $company, $soapTypeId = null)
     {
-        if (($soapTypeId ?: $company->soap_type_id) !== '01') {
+        $effectiveSoapType = (string) ($soapTypeId ?: $company->soap_type_id);
+
+        if ($effectiveSoapType === '03') {
+            return 'La empresa está en modo SUNAT · Interno; las guías de remisión electrónicas no se envían a SUNAT.';
+        }
+
+        if ($effectiveSoapType !== '01') {
             return null;
         }
 

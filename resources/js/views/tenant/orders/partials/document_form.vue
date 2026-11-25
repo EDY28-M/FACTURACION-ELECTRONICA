@@ -1,7 +1,7 @@
 <template>
     <el-dialog
         :title="title"
-        :visible="showDialog"
+        :visible.sync="showDialog"
         @open="create"
         @close="close"
         top="7vh"
@@ -187,6 +187,9 @@ export default {
                 await this.sendPreview(data.document)
                 return true
             } catch (error) {
+                // Error: only a message, never the dialog; the table reload restores the real status.
+                this.showDialog = false
+                this.form = null
                 this.$message.error(this.errorMessage(error, 'No se pudo preparar el comprobante del pedido'))
                 this.$eventHub.$emit('reloadData')
                 return false
@@ -196,12 +199,13 @@ export default {
         },
         async sendPreview(purchase)
         {
-            this.showDialog = true
             this.loader = true
 
+            // The dialog opens only once the comprobante is loaded, never empty.
             this.form = purchase
             const type = _.find(this.document_types, {'id': this.form.codigo_tipo_documento});
             this.title = `Generar ${type ? type.description : 'comprobante'}`
+            this.showDialog = true
             await this.setLotsItem()
 
             this.loader = false

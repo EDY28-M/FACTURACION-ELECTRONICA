@@ -16,7 +16,7 @@ class BankAccountController extends Controller
 {
     public function index()
     {
-        return view('tenant.bank_accounts.index');
+        return view('tenant.settings.list_account_banks');
     }
 
     public function records()
@@ -28,7 +28,7 @@ class BankAccountController extends Controller
 
     public function create()
     {
-        return view('tenant.bank_accounts.index');
+        return view('tenant.settings.list_account_banks');
     }
 
     public function tables()

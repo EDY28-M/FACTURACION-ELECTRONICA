@@ -1,16 +1,32 @@
 <?php
 
 namespace Modules\Document\Http\ViewComposers;
+
+use App\Models\Tenant\Company;
 use App\Models\Tenant\Document;
+use Illuminate\Support\Facades\DB;
 
 class DocumentViewComposer
 {
     public function compose($view)
     {
-        // Same filters as the not-sent list it links to: sellers only count their own documents.
-        $view->vc_document = auth()->check() ? Document::whereNotSent()->whereTypeUser()->count() : 0;
+        $company = Company::select('soap_type_id')->first();
+        if ($company && $company->soap_type_id === '03') {
+            $view->vc_document = 0;
+            $view->vc_document_regularize_shipping = 0;
+            return;
+        }
 
-        $view->vc_document_regularize_shipping = Document::whereRegularizeShipping()->count();
+        $notSent = 0;
+        if (auth()->check()) {
+            $notSent = Document::whereNotSent()->whereTypeUser()->count();
+        }
 
+        $view->vc_document = $notSent;
+        $view->vc_document_regularize_shipping = DB::connection('tenant')
+            ->table('documents')
+            ->where('state_type_id', '01')
+            ->where('regularize_shipping', true)
+            ->count();
     }
 }

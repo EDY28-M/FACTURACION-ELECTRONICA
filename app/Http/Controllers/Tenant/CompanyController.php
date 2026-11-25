@@ -51,8 +51,13 @@ class CompanyController extends Controller
      */
     public function environment()
     {
+        $company = Company::active();
+
         return response()
-            ->json(['soap_type_id' => optional(Company::active())->soap_type_id])
+            ->json([
+                'soap_type_id' => optional($company)->soap_type_id,
+                'missing' => $company ? Company::missingForProduction($company) : [],
+            ])
             ->header('Cache-Control', 'no-store');
     }
 

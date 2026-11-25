@@ -15,13 +15,17 @@
     };
     var busy = false;
 
-    function apply(type) {
+    function apply(type, missing) {
         var env = ENVS[type] || ENVS["03"];
+        if (type === "02" && missing && missing.length) {
+            env = { key: "warn", label: "SUNAT · Producción incompleta", title: "Para emitir en producción falta: " + missing.join(", ") };
+        }
         var pill = document.querySelector(".header .tn-env");
-        if (!pill || pill.getAttribute("data-env") === env.key) return;
+        var stamp = env.key + "|" + env.title;
+        if (!pill || pill.getAttribute("data-env") === stamp) return;
         var clickable = pill.tagName === "A";
         pill.className = "tn-env tn-env--" + env.key;
-        pill.setAttribute("data-env", env.key);
+        pill.setAttribute("data-env", stamp);
         pill.textContent = env.label;
         pill.title = env.title + (clickable ? ", pulse para ir a configuración" : "");
     }
@@ -31,7 +35,7 @@
         busy = true;
         fetch(url, { credentials: "same-origin", headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" } })
             .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (d) { if (d && d.soap_type_id) apply(d.soap_type_id); })
+            .then(function (d) { if (d && d.soap_type_id) apply(d.soap_type_id, d.missing); })
             .catch(function () {})
             .then(function () { busy = false; });
     }
@@ -40,7 +44,7 @@
     var first = document.querySelector(".header .tn-env");
     if (first) {
         var m = /tn-env--(\w+)/.exec(first.className);
-        if (m) first.setAttribute("data-env", m[1]);
+        if (m) first.setAttribute("data-env", m[1] + "|" + first.getAttribute("title").replace(/, pulse para ir a configuración$/, ""));
     }
 
     setInterval(refresh, 30000);

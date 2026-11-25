@@ -19,6 +19,7 @@ use Hyn\Tenancy\Models\Website;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\System\Configuration;
+use App\Models\Tenant\Company as TenantCompany;
 use App\CoreFacturalo\Helpers\Certificate\GenerateCertificate;
 use App\Support\Files\SafeTempFile;
 use App\Support\Access\TenantPlan;
@@ -286,14 +287,34 @@ class ClientController extends Controller
                             'limit_documents' =>  $plan->limit_documents
                         ]);
 
+            $soapUsername = $request->soap_username;
+            $soapPassword = $request->soap_password;
+
+            // Moving a client to production: whatever the client lacks is completed with the
+            // shared admin data (SOL user, password and certificate) when the admin has it loaded.
+            if ($request->soap_type_id === '02') {
+                $adminConfig = Configuration::first();
+                if (!filled($soapUsername)) {
+                    $soapUsername = $adminConfig->soap_username;
+                }
+                if (!filled($soapPassword)) {
+                    $soapPassword = $adminConfig->soap_password;
+                }
+                if (!filled($name_certificate) && filled($adminConfig->certificate)) {
+                    $name_certificate = $adminConfig->certificate;
+                }
+            }
+
             DB::connection('tenant')->table('companies')->where('id', 1)->update([
                 'soap_type_id' => $request->soap_type_id,
                 'soap_send_id'=> $request->soap_send_id,
-                'soap_username'=> $request->soap_username,
-                'soap_password'=> $request->soap_password,
+                'soap_username'=> $soapUsername,
+                'soap_password'=> $soapPassword,
                 'soap_url'=> $request->soap_url,
                 'certificate' => $name_certificate
             ]);
+
+            $missing = TenantCompany::missingForProduction(TenantCompany::first());
 
 
             //modules
@@ -324,6 +345,7 @@ class ClientController extends Controller
             return [
                 'success' => true,
                 'message' => 'Cliente Actualizado satisfactoriamente'
+                    .($missing ? '. En producción aún le falta: '.implode(', ', $missing).' (lo verá marcado en su panel)' : '')
             ];
 
         }catch(Exception $e)
