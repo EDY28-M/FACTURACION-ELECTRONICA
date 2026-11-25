@@ -197,4 +197,5 @@
         </div>
     </div>
 </header>
+<script defer src="{{ asset('js/tenant-env-sync.js') }}?v={{ @filemtime(public_path('js/tenant-env-sync.js')) }}" data-url="{{ url('companies/environment') }}"></script>
 <script defer src="{{ asset('js/tenant-module-search.js') }}?v={{ @filemtime(public_path('js/tenant-module-search.js')) }}"></script>

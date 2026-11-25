@@ -219,6 +219,7 @@ return [
         ['path' => 'list-vouchers-type', 'module' => 'configuration'],
         ['path' => 'companies', 'module' => 'configuration', 'ajax' => true],
         ['path' => 'companies/record', 'module' => null],
+        ['path' => 'companies/environment', 'module' => null],
         ['path' => 'companies/uploads', 'module' => 'configuration', 'ajax' => true],
         ['path' => 'catalogs', 'module' => 'configuration'],
         ['path' => 'advanced', 'module' => 'configuration'],

@@ -45,6 +45,17 @@ class CompanyController extends Controller
         return $record;
     }
 
+    /**
+     * Current SUNAT environment of the company; polled by the header pill so a change made by the
+     * system admin (or by the company itself in another tab) shows without a manual reload.
+     */
+    public function environment()
+    {
+        return response()
+            ->json(['soap_type_id' => optional(Company::active())->soap_type_id])
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function store(CompanyRequest $request)
     {
         $id = $request->input('id');

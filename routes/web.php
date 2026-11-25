@@ -66,6 +66,7 @@ if ($hostname) {
 			Route::get('companies/create', 'Tenant\CompanyController@create')->name('tenant.companies.create');
 			Route::get('companies/tables', 'Tenant\CompanyController@tables');
 			Route::get('companies/record', 'Tenant\CompanyController@record');
+			Route::get('companies/environment', 'Tenant\CompanyController@environment');
 			Route::post('companies', 'Tenant\CompanyController@store');
 			Route::post('companies/uploads', 'Tenant\CompanyController@uploadFile');
 
